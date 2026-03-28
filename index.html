@@ -3,108 +3,99 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Kho Dao Pro - Cloud Sync</title>
+    <title>Kho Dao Bế Pro - Hộp Nguyên</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
     <style>
-        :root { --primary: #007aff; --warning: #ff9500; --danger: #ff3b30; --success: #34c759; --bg: #f2f2f7; --card: #ffffff; }
+        :root { --primary: #007aff; --danger: #ff3b30; --success: #34c759; --bg: #f2f2f7; --card: #ffffff; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: #1c1c1e; line-height: 1.4; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: #1c1c1e; }
         
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        h1 { font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
+        /* Dashboard */
+        .dash { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .dash-item { background: var(--card); padding: 15px; border-radius: 15px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .dash-num { font-size: 24px; font-weight: 800; display: block; }
+        .dash-label { font-size: 12px; color: #8e8e93; font-weight: 600; }
         
-        button { border: none; border-radius: 12px; padding: 12px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: opacity 0.2s; }
-        button:active { opacity: 0.7; }
-        .btn-main { background: var(--primary); color: white; width: 100%; margin-bottom: 10px; font-size: 16px; padding: 15px; }
-        .btn-sub { background: var(--card); color: var(--primary); border: 1px solid var(--primary); }
-        .btn-pdf { background: #5856d6; color: white; }
+        /* Buttons */
+        .btn { border: none; border-radius: 12px; padding: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; transition: 0.2s; }
+        .btn-primary { background: var(--primary); color: white; margin-bottom: 15px; font-size: 16px; }
+        .btn-action { background: #e5e5ea; color: #1c1c1e; font-size: 13px; flex: 1; }
 
         .search-box { position: relative; margin-bottom: 15px; }
         .search-box input { width: 100%; padding: 12px 40px; border-radius: 12px; border: none; background: var(--card); font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
         .search-box i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #8e8e93; }
 
+        /* Product Cards */
         .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-        .product-card { background: var(--card); border-radius: 16px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: relative; border-left: 5px solid var(--primary); }
-        .product-card .category { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #8e8e93; margin-bottom: 4px; }
-        .product-card .title { font-size: 18px; font-weight: 700; margin-bottom: 8px; display: block; padding-right: 60px; }
-        .product-card .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-        .tag { background: #f2f2f7; padding: 4px 8px; border-radius: 6px; font-size: 12px; color: #48484a; }
+        .card { background: var(--card); border-radius: 18px; padding: 16px; position: relative; box-shadow: 0 2px 10px rgba(0,0,0,0.05); border-left: 6px solid #d1d1d6; }
+        .card.alert { border-left-color: var(--danger); background: #fff8f8; }
+        .card .name { font-size: 18px; font-weight: 700; display: block; margin-bottom: 5px; padding-right: 60px; }
+        .card .specs { display: flex; flex-wrap: wrap; gap: 6px; }
+        .tag { background: #f2f2f7; padding: 4px 10px; border-radius: 6px; font-size: 12px; color: #48484a; font-weight: 600; }
         
-        .stock-badge { position: absolute; top: 16px; right: 16px; text-align: right; }
-        .stock-qty { font-size: 24px; font-weight: 800; }
-        .stock-unit { font-size: 11px; color: #8e8e93; font-weight: 600; text-transform: uppercase; }
-        .low-stock { color: var(--danger); }
-        .ok-stock { color: var(--success); }
+        .stock { position: absolute; top: 16px; right: 16px; text-align: right; }
+        .stock-val { font-size: 28px; font-weight: 900; line-height: 1; }
+        .stock-unit { font-size: 10px; color: #8e8e93; text-transform: uppercase; font-weight: 700; }
 
-        .card-actions { display: flex; gap: 8px; border-top: 1px solid #f2f2f7; padding-top: 12px; }
-        .card-actions button { flex: 1; padding: 10px; font-size: 13px; background: #f2f2f7; color: #1c1c1e; }
+        .actions { display: flex; gap: 8px; margin-top: 15px; border-top: 1px solid #f2f2f7; padding-top: 12px; }
 
-        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
-        .modal-content { background: var(--card); width: 90%; max-width: 400px; border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-        .form-group { margin-bottom: 12px; }
-        .form-group label { display: block; font-size: 12px; font-weight: 600; color: #8e8e93; margin-bottom: 4px; }
-        .form-group input, .form-group select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #e5e5ea; font-size: 16px; }
+        /* Modal */
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(5px); }
+        .modal-box { background: var(--card); width: 92%; max-width: 400px; border-radius: 20px; padding: 20px; }
+        .field { margin-bottom: 15px; }
+        .field label { display: block; font-size: 12px; font-weight: 700; color: #8e8e93; margin-bottom: 5px; }
+        .field input, .field select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #e5e5ea; font-size: 16px; }
 
         @media (min-width: 768px) { .grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); } }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>Kho Dao Pro</h1>
-        <button class="btn-sub" onclick="exportFullStockPDF()"><i class="fa fa-file-pdf"></i> Tồn kho</button>
+    <div class="dash">
+        <div class="dash-item">
+            <span id="totalTypes" class="dash-num">0</span>
+            <span class="dash-label">MÃ DAO</span>
+        </div>
+        <div class="dash-item" onclick="render(true)" style="cursor:pointer; border: 1px solid var(--danger)">
+            <span id="lowStockCount" class="dash-num" style="color: var(--danger)">0</span>
+            <span class="dash-label" style="color: var(--danger)">SẮP HẾT</span>
+        </div>
     </div>
 
-    <button class="btn-main" onclick="toggleForm()"><i class="fa fa-plus-circle"></i> THÊM DAO MỚI</button>
+    <button class="btn btn-primary" onclick="toggleModal('formModal')"><i class="fa fa-plus-circle"></i> THÊM LOẠI DAO MỚI</button>
 
     <div class="search-box">
         <i class="fa fa-search"></i>
-        <input type="text" id="searchInput" placeholder="Tìm tên, size, hoặc xuất xứ..." onkeyup="render()">
+        <input type="text" id="search" placeholder="Tìm tên, độ dày, hãng..." onkeyup="render()">
     </div>
 
-    <div id="inventoryGrid" class="grid"></div>
+    <div id="grid" class="grid"></div>
 
     <div id="formModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-box">
             <h3 style="margin-top:0">Thiết lập sản phẩm</h3>
-            <div class="form-group"><label>Tên sản phẩm</label><input id="name" placeholder="VD: Dao cắt Nhật"></div>
-            <div class="form-group">
-                <label>Đơn vị tính</label>
-                <select id="unit"><option value="mét">Mét (m)</option><option value="hộp">Hộp</option></select>
+            <div class="field"><label>Tên sản phẩm</label><input id="name" placeholder="VD: Dao cắt Bohler Nhật"></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+                <div class="field"><label>Độ dày (mm)</label><select id="thick"><option>0.7</option><option>1.05</option><option>1.42</option></select></div>
+                <div class="field"><label>Chiều cao (mm)</label><input id="height" type="number" step="0.01" value="23.8"></div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div class="form-group"><label>Loại</label><select id="category"><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select></div>
-                <div class="form-group"><label>Size</label><select id="size"><option>0.7</option><option>1.05</option><option>1.42</option></select></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
+                <div class="field"><label>Xuất xứ</label><select id="origin"><option>Nhật Bản</option><option>Đức</option><option>Trung Quốc</option></select></div>
+                <div class="field"><label>Báo động khi dưới</label><input id="alertLimit" type="number" value="2"></div>
             </div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div class="form-group"><label>Xuất xứ</label><select id="origin"><option>Nhật</option><option>Trung Quốc</option></select></div>
-                <div class="form-group"><label>Số lượng đầu</label><input id="qty" type="number" value="0"></div>
-            </div>
-            <button class="btn-main" onclick="addProduct()">LƯU LÊN CLOUD</button>
-            <button style="width:100%; background:none; color:var(--danger); font-weight:600" onclick="toggleForm()">HỦY BỎ</button>
+            <div class="field"><label>Số hộp tồn ban đầu</label><input id="qty" type="number" value="0"></div>
+            <button class="btn btn-primary" onclick="saveProduct()">LƯU DỮ LIỆU</button>
+            <button style="width:100%; border:none; background:none; color:var(--danger); font-weight:600" onclick="toggleModal('formModal')">HỦY BỎ</button>
         </div>
     </div>
 
     <div id="ioModal" class="modal">
-        <div class="modal-content">
+        <div class="modal-box">
             <h3 id="ioTitle" style="margin-top:0">Nhập kho</h3>
-            <div class="form-group">
-                <label id="ioLabel">Số lượng</label>
-                <input id="ioQty" type="number" step="0.01" placeholder="0.0">
-            </div>
-            <button class="btn-main" onclick="submitIO()">XÁC NHẬN</button>
-            <button style="width:100%; background:none; color:var(--danger)" onclick="closeIO()">ĐÓNG</button>
-        </div>
-    </div>
-
-    <div id="historyModal" class="modal">
-        <div class="modal-content" style="max-height: 80vh; overflow-y: auto;">
-            <h3 style="margin-top:0">Lịch sử biến động</h3>
-            <ul id="historyList" style="list-style: none; padding: 0;"></ul>
-            <button class="btn-main" onclick="document.getElementById('historyModal').style.display='none'">ĐÓNG</button>
+            <div class="field"><label>Số lượng hộp</label><input id="ioQty" type="number" placeholder="0"></div>
+            <button class="btn btn-primary" onclick="submitIO()">XÁC NHẬN</button>
+            <button style="width:100%; border:none; background:none; color:var(--danger)" onclick="toggleModal('ioModal')">ĐÓNG</button>
         </div>
     </div>
 
@@ -112,106 +103,80 @@
         const URL = "https://awxkvzkigfxoidnvmxew.supabase.co";
         const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A";
         const sb = supabase.createClient(URL, KEY);
-        let products = [], currentId = null, ioType = "";
+        let products = [], curId = null, ioType = "";
 
-        function toggleForm() {
-            const m = document.getElementById('formModal');
-            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        function toggleModal(id) {
+            const m = document.getElementById(id);
+            m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
         }
 
-        async function render() {
+        async function render(onlyAlert = false) {
             const { data } = await sb.from('products').select('*').order('name');
             products = data || [];
-            const grid = document.getElementById('inventoryGrid');
-            const search = document.getElementById('searchInput').value.toLowerCase();
+            const grid = document.getElementById('grid');
+            const kw = document.getElementById('search').value.toLowerCase();
             grid.innerHTML = "";
 
+            let alertCount = 0;
             products.forEach(p => {
-                const matchSearch = p.name.toLowerCase().includes(search) || p.origin.toLowerCase().includes(search);
-                if (matchSearch) {
-                    const isLow = p.quantity <= 5;
-                    grid.innerHTML += `
-                        <div class="product-card">
-                            <div class="category">${p.category} | ${p.origin}</div>
-                            <span class="title">${p.name}</span>
-                            <div class="stock-badge">
-                                <div class="stock-qty ${isLow ? 'low-stock' : 'ok-stock'}">${p.quantity}</div>
-                                <div class="stock-unit">${p.unit || 'mét'} tồn</div>
-                            </div>
-                            <div class="tags">
-                                <span class="tag">Size: ${p.size}</span>
-                                <span class="tag">${p.leg || 'không chân'}</span>
-                            </div>
-                            <div class="card-actions">
-                                <button onclick="openIO('${p.id}', 'nhap')"><i class="fa fa-plus"></i> Nhập</button>
-                                <button onclick="openIO('${p.id}', 'xuat')"><i class="fa fa-minus"></i> Xuất</button>
-                                <button onclick="viewHistory('${p.id}')"><i class="fa fa-history"></i> Sử</button>
-                                <button onclick="deleteProduct('${p.id}')" style="color:var(--danger); flex:0.5"><i class="fa fa-trash"></i></button>
-                            </div>
+                const isAlert = p.quantity <= (p.alertLimit || 2);
+                if(isAlert) alertCount++;
+                if(onlyAlert && !isAlert) return;
+                if(kw && !p.name.toLowerCase().includes(kw) && !p.origin.toLowerCase().includes(kw)) return;
+
+                grid.innerHTML += `
+                    <div class="card ${isAlert ? 'alert' : ''}">
+                        <span class="name">${p.name}</span>
+                        <div class="stock">
+                            <div class="stock-val" style="color: ${isAlert ? 'var(--danger)' : 'var(--success)'}">${p.quantity}</div>
+                            <div class="stock-unit">HỘP</div>
                         </div>
-                    `;
-                }
+                        <div class="specs">
+                            <span class="tag">${p.size}mm</span>
+                            <span class="tag">Cao ${p.height}</span>
+                            <span class="tag">${p.origin}</span>
+                        </div>
+                        <div class="actions">
+                            <button class="btn btn-action" onclick="openIO('${p.id}', 'nhap')"><i class="fa fa-plus"></i> Nhập</button>
+                            <button class="btn btn-action" onclick="openIO('${p.id}', 'xuat')"><i class="fa fa-minus"></i> Xuất</button>
+                            <button class="btn btn-action" style="flex:0.25" onclick="deleteItem('${p.id}')"><i class="fa fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
             });
+            document.getElementById('totalTypes').innerText = products.length;
+            document.getElementById('lowStockCount').innerText = alertCount;
         }
 
-        async function addProduct() {
+        async function saveProduct() {
             await sb.from('products').insert([{
-                name: name.value, category: category.value, size: size.value,
-                origin: origin.value, quantity: +qty.value, 
-                unit: unit.value, history: []
+                name: name.value, size: thick.value, height: height.value,
+                origin: origin.value, quantity: +qty.value, alertLimit: +alertLimit.value
             }]);
-            toggleForm(); render();
+            toggleModal('formModal'); render();
         }
 
         function openIO(id, type) {
-            currentId = id; ioType = type;
-            const p = products.find(x => x.id === id);
-            document.getElementById('ioTitle').innerText = type === 'nhap' ? 'Nhập thêm' : 'Xuất kho';
-            document.getElementById('ioLabel').innerText = `Số lượng (${p.unit || 'mét'})`;
-            document.getElementById('ioModal').style.display = 'flex';
+            curId = id; ioType = type;
+            document.getElementById('ioTitle').innerText = type === 'nhap' ? 'Nhập thêm hộp' : 'Xuất kho hộp';
+            toggleModal('ioModal');
         }
-
-        function closeIO() { document.getElementById('ioModal').style.display = 'none'; }
 
         async function submitIO() {
-            const p = products.find(x => x.id === currentId);
-            const val = parseFloat(document.getElementById('ioQty').value);
-            if (!val || val <= 0) return;
-
-            const newQty = ioType === 'nhap' ? p.quantity + val : p.quantity - val;
-            if (newQty < 0) return alert("Không đủ hàng để xuất!");
-
-            const newHistory = [...(p.history || []), { type: ioType, qty: val, unit: p.unit, date: new Date().toISOString() }];
-            await sb.from('products').update({ quantity: newQty, history: newHistory }).eq('id', currentId);
-            closeIO(); render();
+            const p = products.find(x => x.id === curId);
+            const val = parseInt(document.getElementById('ioQty').value);
+            if(!val || val <= 0) return;
+            const nextQty = ioType === 'nhap' ? p.quantity + val : p.quantity - val;
+            if(nextQty < 0) return alert("Không đủ hộp để xuất!");
+            await sb.from('products').update({ quantity: nextQty }).eq('id', curId);
+            toggleModal('ioModal'); render();
         }
 
-        async function deleteProduct(id) {
-            if (confirm("Xóa sản phẩm này?")) {
+        async function deleteItem(id) {
+            if(confirm("Xóa mã dao này?")) {
                 await sb.from('products').delete().eq('id', id);
                 render();
             }
-        }
-
-        function viewHistory(id) {
-            const p = products.find(x => x.id === id);
-            const list = document.getElementById('historyList');
-            list.innerHTML = p.history?.length 
-                ? p.history.map(h => `
-                    <li style="padding:12px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center">
-                        <span>${h.type === 'nhap' ? '🟢' : '🔴'} <b>${h.qty} ${h.unit || 'mét'}</b></span>
-                        <small style="color:#8e8e93">${new Date(h.date).toLocaleDateString()}</small>
-                    </li>`).reverse().join("")
-                : "<li style='padding:20px; text-align:center; color:#8e8e93'>Chưa có lịch sử</li>";
-            document.getElementById('historyModal').style.display = 'flex';
-        }
-
-        function exportFullStockPDF(){
-            const {jsPDF} = window.jspdf; const doc = new jsPDF();
-            const rows = products.map(p => [p.name, p.category, p.size, `${p.quantity} ${p.unit || 'mét'}`]);
-            doc.text("BAO CAO TON KHO", 14, 15);
-            doc.autoTable({startY:22, head:[["Ten","Loai","Size","Ton Kho"]], body:rows});
-            doc.save("ton_kho.pdf");
         }
 
         render();
