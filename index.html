@@ -1,215 +1,220 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kho Dao - Supabase Sync</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kho Dao Pro - Cloud Sync</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        :root { --primary: #007aff; --warning: #ff9500; --danger: #ff3b30; --success: #34c759; --bg: #f2f2f7; --card: #ffffff; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 15px; color: #1c1c1e; line-height: 1.4; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
+        
+        button { border: none; border-radius: 12px; padding: 12px; font-weight: 600; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: opacity 0.2s; }
+        button:active { opacity: 0.7; }
+        .btn-main { background: var(--primary); color: white; width: 100%; margin-bottom: 10px; font-size: 16px; padding: 15px; }
+        .btn-sub { background: var(--card); color: var(--primary); border: 1px solid var(--primary); }
+        .btn-pdf { background: #5856d6; color: white; }
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+        .search-box { position: relative; margin-bottom: 15px; }
+        .search-box input { width: 100%; padding: 12px 40px; border-radius: 12px; border: none; background: var(--card); font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .search-box i { position: absolute; left: 15px; top: 50%; transform: translateY(-50%); color: #8e8e93; }
 
-<style>
-:root{--blue:#1976d2;--orange:#ff9800;--red:#d32f2f;--bg:#f4f6f8;}
-body{font-family:Segoe UI,Arial;background:var(--bg);margin:20px}
-h1{margin-bottom:10px}
-button{padding:8px 14px;border:0;border-radius:6px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
-.primary{background:var(--blue);color:#fff}
-.warn{background:var(--orange);color:#fff}
-.small{padding:6px 10px;font-size:13px}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
-th,td{padding:9px;border-bottom:1px solid #eee;font-size:14px}
-th{background:var(--blue);color:#fff}
-.low{color:var(--red);font-weight:700}
-.actions{display:flex;gap:5px}
-.toolbar,.filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-input,select{padding:7px;border-radius:6px;border:1px solid #ccc}
-.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:1000}
-.box{background:#fff;padding:20px;border-radius:12px;width:420px}
-ul{padding-left:18px}
+        .grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+        .product-card { background: var(--card); border-radius: 16px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: relative; border-left: 5px solid var(--primary); }
+        .product-card .category { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #8e8e93; margin-bottom: 4px; }
+        .product-card .title { font-size: 18px; font-weight: 700; margin-bottom: 8px; display: block; padding-right: 60px; }
+        .product-card .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .tag { background: #f2f2f7; padding: 4px 8px; border-radius: 6px; font-size: 12px; color: #48484a; }
+        
+        .stock-badge { position: absolute; top: 16px; right: 16px; text-align: right; }
+        .stock-qty { font-size: 24px; font-weight: 800; }
+        .stock-unit { font-size: 11px; color: #8e8e93; font-weight: 600; text-transform: uppercase; }
+        .low-stock { color: var(--danger); }
+        .ok-stock { color: var(--success); }
 
-@media (max-width:768px){
-body{margin:10px}
-h1{font-size:20px}
-table,thead,tbody,th,td,tr{display:block}
-thead{display:none}
-tr{background:#fff;border-radius:10px;margin-bottom:10px;padding:10px}
-td{border:none;padding:4px 0;font-size:13px}
-td::before{content:attr(data-label);font-weight:600;color:#555;margin-right:10px}
-.actions{flex-wrap:wrap}
-.modal .box{width:95%;max-height:85vh;overflow:auto}
-input,select{width:100%}
-}
-</style>
+        .card-actions { display: flex; gap: 8px; border-top: 1px solid #f2f2f7; padding-top: 12px; }
+        .card-actions button { flex: 1; padding: 10px; font-size: 13px; background: #f2f2f7; color: #1c1c1e; }
+
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+        .modal-content { background: var(--card); width: 90%; max-width: 400px; border-radius: 20px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; font-weight: 600; color: #8e8e93; margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #e5e5ea; font-size: 16px; }
+
+        @media (min-width: 768px) { .grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); } }
+    </style>
 </head>
-
 <body>
 
-<h1><i class="fa-solid fa-warehouse"></i> Kho Dao (Cloud Sync)</h1>
+    <div class="header">
+        <h1>Kho Dao Pro</h1>
+        <button class="btn-sub" onclick="exportFullStockPDF()"><i class="fa fa-file-pdf"></i> Tồn kho</button>
+    </div>
 
-<div class="toolbar">
-<button class="primary" onclick="openPass()"><i class="fa fa-lock"></i> Đăng nhập</button>
-<button class="primary" onclick="toggleForm()"><i class="fa fa-plus"></i> Thêm sản phẩm</button>
-<button onclick="exportJSON()"><i class="fa fa-download"></i> Xuất JSON</button>
-<select id="pdfMonth"></select>
-<select id="pdfYear"></select>
-<button class="warn" onclick="exportPDF()"><i class="fa fa-file-pdf"></i> PDF nhập/xuất</button>
-<button class="warn" onclick="exportFullStockPDF()"><i class="fa fa-file-pdf"></i> PDF toàn kho</button>
-</div>
+    <button class="btn-main" onclick="toggleForm()"><i class="fa fa-plus-circle"></i> THÊM DAO MỚI</button>
 
-<div class="filter">
-<select id="f_category" onchange="render()"><option value="">Loại</option><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select>
-<select id="f_size" onchange="render()"><option value="">Size</option><option>0.7</option><option>1.05</option><option>1.42</option></select>
-<select id="f_origin" onchange="render()"><option value="">Xuất xứ</option><option>Nhật</option><option>Trung Quốc</option></select>
-</div>
+    <div class="search-box">
+        <i class="fa fa-search"></i>
+        <input type="text" id="searchInput" placeholder="Tìm tên, size, hoặc xuất xứ..." onkeyup="render()">
+    </div>
 
-<div id="form" style="display:none;background:#fff;padding:15px;border-radius:12px;margin-bottom:10px">
-<input id="name" placeholder="Tên sản phẩm">
-<select id="category"><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select>
-<select id="size"><option>0.7</option><option>1.05</option><option>1.42</option></select>
-<select id="leg"><option>có chân</option><option>không chân</option></select>
-<select id="blade"><option>lưỡi tròn</option><option>lưỡi bằng</option><option>lưỡi bầu</option><option>lưỡi nhọn</option></select>
-<select id="origin"><option>Nhật</option><option>Trung Quốc</option></select>
-<input id="qty" type="number" placeholder="Số lượng">
-<button class="primary" onclick="addProduct()">Lưu lên Cloud</button>
-</div>
+    <div id="inventoryGrid" class="grid"></div>
 
-<table>
-<thead>
-<tr><th>Tên</th><th>Loại</th><th>Size</th><th>Chân</th><th>Đầu</th><th>Xuất xứ</th><th>SL</th><th>Hành động</th></tr>
-</thead>
-<tbody id="tbody"></tbody>
-</table>
+    <div id="formModal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-top:0">Thiết lập sản phẩm</h3>
+            <div class="form-group"><label>Tên sản phẩm</label><input id="name" placeholder="VD: Dao cắt Nhật"></div>
+            <div class="form-group">
+                <label>Đơn vị tính</label>
+                <select id="unit"><option value="mét">Mét (m)</option><option value="hộp">Hộp</option></select>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group"><label>Loại</label><select id="category"><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select></div>
+                <div class="form-group"><label>Size</label><select id="size"><option>0.7</option><option>1.05</option><option>1.42</option></select></div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div class="form-group"><label>Xuất xứ</label><select id="origin"><option>Nhật</option><option>Trung Quốc</option></select></div>
+                <div class="form-group"><label>Số lượng đầu</label><input id="qty" type="number" value="0"></div>
+            </div>
+            <button class="btn-main" onclick="addProduct()">LƯU LÊN CLOUD</button>
+            <button style="width:100%; background:none; color:var(--danger); font-weight:600" onclick="toggleForm()">HỦY BỎ</button>
+        </div>
+    </div>
 
-<div class="modal" id="passModal"><div class="box"><input type="password" id="pass" placeholder="Mật khẩu"><button class="primary" onclick="login()">Xác nhận</button></div></div>
-<div class="modal" id="ioModal"><div class="box"><h3 id="ioTitle"></h3><input id="ioQty" type="number" placeholder="Số lượng"><button class="warn" onclick="submitIO()">Xác nhận</button></div></div>
-<div class="modal" id="editModal"><div class="box">
-<input id="e_name"><select id="e_category"><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select>
-<select id="e_size"><option>0.7</option><option>1.05</option><option>1.42</option></select>
-<select id="e_leg"><option>có chân</option><option>không chân</option></select>
-<select id="e_blade"><option>lưỡi tròn</option><option>lưỡi bằng</option><option>lưỡi bầu</option><option>lưỡi nhọn</option></select>
-<select id="e_origin"><option>Nhật</option><option>Trung Quốc</option></select>
-<input id="e_qty" type="number">
-<div class="actions"><button class="primary" onclick="saveEdit()">Lưu</button><button class="warn" onclick="deleteProduct()">Xóa</button></div>
-</div></div>
-<div class="modal" id="historyModal"><div class="box"><h3>Lịch sử</h3><ul id="historyList"></ul><button class="warn small" onclick="historyModal.style.display='none'">Đóng</button></div></div>
+    <div id="ioModal" class="modal">
+        <div class="modal-content">
+            <h3 id="ioTitle" style="margin-top:0">Nhập kho</h3>
+            <div class="form-group">
+                <label id="ioLabel">Số lượng</label>
+                <input id="ioQty" type="number" step="0.01" placeholder="0.0">
+            </div>
+            <button class="btn-main" onclick="submitIO()">XÁC NHẬN</button>
+            <button style="width:100%; background:none; color:var(--danger)" onclick="closeIO()">ĐÓNG</button>
+        </div>
+    </div>
 
-<script>
-// --- KẾT NỐI SUPABASE ---
-const URL = "https://awxkvzkigfxoidnvmxew.supabase.co";
-const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A";
-const sb = supabase.createClient(URL, KEY);
+    <div id="historyModal" class="modal">
+        <div class="modal-content" style="max-height: 80vh; overflow-y: auto;">
+            <h3 style="margin-top:0">Lịch sử biến động</h3>
+            <ul id="historyList" style="list-style: none; padding: 0;"></ul>
+            <button class="btn-main" onclick="document.getElementById('historyModal').style.display='none'">ĐÓNG</button>
+        </div>
+    </div>
 
-const PASSWORD="kgget1234", LOW_STOCK=5;
-let hasAccess=false, products=[], editId=null, ioId=null, ioType="";
+    <script>
+        const URL = "https://awxkvzkigfxoidnvmxew.supabase.co";
+        const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A";
+        const sb = supabase.createClient(URL, KEY);
+        let products = [], currentId = null, ioType = "";
 
-// Khởi tạo PDF Month/Year
-const now=new Date();
-for(let m=0;m<12;m++) pdfMonth.innerHTML+=`<option value="${m}">${m+1}</option>`;
-for(let y=now.getFullYear()-2;y<=now.getFullYear();y++) pdfYear.innerHTML+=`<option>${y}</option>`;
-pdfMonth.value=now.getMonth(); pdfYear.value=now.getFullYear();
+        function toggleForm() {
+            const m = document.getElementById('formModal');
+            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        }
 
-function openPass(){passModal.style.display="flex"}
-function login(){if(pass.value===PASSWORD){hasAccess=true;passModal.style.display="none";alert("Đăng nhập thành công")}else alert("Sai mật khẩu")}
-function toggleForm(){if(!hasAccess)return alert("Vui lòng đăng nhập");form.style.display=form.style.display?"":"block"}
+        async function render() {
+            const { data } = await sb.from('products').select('*').order('name');
+            products = data || [];
+            const grid = document.getElementById('inventoryGrid');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            grid.innerHTML = "";
 
-// --- THAO TÁC DỮ LIỆU ---
-async function render(){
-    const { data } = await sb.from('products').select('*').order('name');
-    products = data || [];
-    tbody.innerHTML="";
-    products.forEach((p) => {
-        if(f_category.value && p.category !== f_category.value) return;
-        if(f_size.value && p.size !== f_size.value) return;
-        if(f_origin.value && p.origin !== f_origin.value) return;
+            products.forEach(p => {
+                const matchSearch = p.name.toLowerCase().includes(search) || p.origin.toLowerCase().includes(search);
+                if (matchSearch) {
+                    const isLow = p.quantity <= 5;
+                    grid.innerHTML += `
+                        <div class="product-card">
+                            <div class="category">${p.category} | ${p.origin}</div>
+                            <span class="title">${p.name}</span>
+                            <div class="stock-badge">
+                                <div class="stock-qty ${isLow ? 'low-stock' : 'ok-stock'}">${p.quantity}</div>
+                                <div class="stock-unit">${p.unit || 'mét'} tồn</div>
+                            </div>
+                            <div class="tags">
+                                <span class="tag">Size: ${p.size}</span>
+                                <span class="tag">${p.leg || 'không chân'}</span>
+                            </div>
+                            <div class="card-actions">
+                                <button onclick="openIO('${p.id}', 'nhap')"><i class="fa fa-plus"></i> Nhập</button>
+                                <button onclick="openIO('${p.id}', 'xuat')"><i class="fa fa-minus"></i> Xuất</button>
+                                <button onclick="viewHistory('${p.id}')"><i class="fa fa-history"></i> Sử</button>
+                                <button onclick="deleteProduct('${p.id}')" style="color:var(--danger); flex:0.5"><i class="fa fa-trash"></i></button>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+        }
 
-        tbody.innerHTML+=`<tr>
-            <td data-label="Tên">${p.name}</td><td data-label="Loại">${p.category}</td>
-            <td data-label="Size">${p.size}</td><td data-label="Chân">${p.leg}</td>
-            <td data-label="Đầu">${p.blade}</td><td data-label="Xuất xứ">${p.origin}</td>
-            <td data-label="SL" class="${p.quantity<LOW_STOCK?'low':''}">${p.quantity}</td>
-            <td class="actions">
-                <button class="small primary" onclick="openIO('${p.id}','nhap')">+</button>
-                <button class="small warn" onclick="openIO('${p.id}','xuat')">-</button>
-                <button class="small" onclick="openEdit('${p.id}')">Sửa</button>
-                <button class="small" onclick="viewHistory('${p.id}')">Sử</button>
-            </td></tr>`;
-    });
-}
+        async function addProduct() {
+            await sb.from('products').insert([{
+                name: name.value, category: category.value, size: size.value,
+                origin: origin.value, quantity: +qty.value, 
+                unit: unit.value, history: []
+            }]);
+            toggleForm(); render();
+        }
 
-async function addProduct(){
-    await sb.from('products').insert([{
-        name:name.value, category:category.value, size:size.value,
-        leg:leg.value, blade:blade.value, origin:origin.value,
-        quantity:+qty.value, history:[]
-    }]);
-    form.style.display="none"; render();
-}
+        function openIO(id, type) {
+            currentId = id; ioType = type;
+            const p = products.find(x => x.id === id);
+            document.getElementById('ioTitle').innerText = type === 'nhap' ? 'Nhập thêm' : 'Xuất kho';
+            document.getElementById('ioLabel').innerText = `Số lượng (${p.unit || 'mét'})`;
+            document.getElementById('ioModal').style.display = 'flex';
+        }
 
-function openIO(id, t){ if(!hasAccess)return; ioId=id; ioType=t; ioTitle.innerText=t==="nhap"?"Nhập kho":"Xuất kho"; ioModal.style.display="flex"; }
+        function closeIO() { document.getElementById('ioModal').style.display = 'none'; }
 
-async function submitIO(){
-    const p = products.find(x => x.id === ioId);
-    const q = +ioQty.value;
-    if(q<=0) return;
-    const newQty = ioType==="nhap" ? p.quantity+q : p.quantity-q;
-    if(newQty < 0) return alert("Không đủ hàng");
-    
-    const newHistory = [...p.history, {type:ioType, qty:q, date:new Date().toISOString()}];
-    await sb.from('products').update({ quantity: newQty, history: newHistory }).eq('id', ioId);
-    ioModal.style.display="none"; render();
-}
+        async function submitIO() {
+            const p = products.find(x => x.id === currentId);
+            const val = parseFloat(document.getElementById('ioQty').value);
+            if (!val || val <= 0) return;
 
-function openEdit(id){
-    if(!hasAccess)return; editId=id; const p=products.find(x=>x.id===id);
-    e_name.value=p.name; e_category.value=p.category; e_size.value=p.size;
-    e_leg.value=p.leg; e_blade.value=p.blade; e_origin.value=p.origin; e_qty.value=p.quantity;
-    editModal.style.display="flex";
-}
+            const newQty = ioType === 'nhap' ? p.quantity + val : p.quantity - val;
+            if (newQty < 0) return alert("Không đủ hàng để xuất!");
 
-async function saveEdit(){
-    await sb.from('products').update({
-        name:e_name.value, category:e_category.value, size:e_size.value,
-        leg:e_leg.value, blade:e_blade.value, origin:e_origin.value, quantity:+e_qty.value
-    }).eq('id', editId);
-    editModal.style.display="none"; render();
-}
+            const newHistory = [...(p.history || []), { type: ioType, qty: val, unit: p.unit, date: new Date().toISOString() }];
+            await sb.from('products').update({ quantity: newQty, history: newHistory }).eq('id', currentId);
+            closeIO(); render();
+        }
 
-async function deleteProduct(){
-    if(confirm("Xóa sản phẩm?")){ await sb.from('products').delete().eq('id', editId); editModal.style.display="none"; render(); }
-}
+        async function deleteProduct(id) {
+            if (confirm("Xóa sản phẩm này?")) {
+                await sb.from('products').delete().eq('id', id);
+                render();
+            }
+        }
 
-function viewHistory(id){
-    const p = products.find(x=>x.id===id);
-    historyList.innerHTML = p.history.map(h => `<li>${h.type==='nhap'?'➕':'➖'} ${h.qty} | ${new Date(h.date).toLocaleString()}</li>`).join("");
-    historyModal.style.display="flex";
-}
+        function viewHistory(id) {
+            const p = products.find(x => x.id === id);
+            const list = document.getElementById('historyList');
+            list.innerHTML = p.history?.length 
+                ? p.history.map(h => `
+                    <li style="padding:12px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center">
+                        <span>${h.type === 'nhap' ? '🟢' : '🔴'} <b>${h.qty} ${h.unit || 'mét'}</b></span>
+                        <small style="color:#8e8e93">${new Date(h.date).toLocaleDateString()}</small>
+                    </li>`).reverse().join("")
+                : "<li style='padding:20px; text-align:center; color:#8e8e93'>Chưa có lịch sử</li>";
+            document.getElementById('historyModal').style.display = 'flex';
+        }
 
-// --- XUẤT FILE (GIỮ NGUYÊN LOGIC CỦA BẠN) ---
-function removeVN(s){ return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D") }
+        function exportFullStockPDF(){
+            const {jsPDF} = window.jspdf; const doc = new jsPDF();
+            const rows = products.map(p => [p.name, p.category, p.size, `${p.quantity} ${p.unit || 'mét'}`]);
+            doc.text("BAO CAO TON KHO", 14, 15);
+            doc.autoTable({startY:22, head:[["Ten","Loai","Size","Ton Kho"]], body:rows});
+            doc.save("ton_kho.pdf");
+        }
 
-function exportPDF(){
-    const m=+pdfMonth.value, y=+pdfYear.value, rows=[];
-    products.forEach(p=>p.history.forEach(h=>{
-        const d=new Date(h.date);
-        if(d.getMonth()===m && d.getFullYear()===y)
-            rows.push([removeVN(p.name), h.type==="nhap"?"Nhap":"Xuat", h.qty, d.toLocaleString()]);
-    }));
-    const {jsPDF}=window.jspdf; const doc=new jsPDF();
-    doc.text(`BAO CAO ${m+1}/${y}`,14,15);
-    doc.autoTable({startY:22, head:[["Ten","Loai","SL","Time"]], body:rows});
-    doc.save("bao_cao.pdf");
-}
-
-function exportFullStockPDF(){
-    const rows=products.map(p=>[removeVN(p.name), removeVN(p.category), p.size, p.quantity]);
-    const {jsPDF}=window.jspdf; const doc=new jsPDF();
-    doc.autoTable({head:[["Ten","Loai","Size","SL"]], body:rows});
-    doc.save("full_kho.pdf");
-}
-
-render();
-</script>
+        render();
+    </script>
 </body>
 </html>
