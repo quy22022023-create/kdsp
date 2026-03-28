@@ -2,132 +2,213 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Kho Dao Bế - Supabase</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kho Dao - Supabase Sync</title>
+
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
 <style>
-:root{--blue:#007aff;--orange:#ff9500;--red:#ff3b30;--bg:#f2f2f7;}
-body{font-family:-apple-system,Arial;background:var(--bg);margin:15px;color:#1c1c1e;}
-.card{background:#fff;padding:20px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);margin-bottom:15px;}
-input,select{width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid #d1d1d6;box-sizing:border-box;font-size:16px;}
-button{padding:12px;border:0;border-radius:10px;cursor:pointer;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;transition:0.2s;}
-.primary{background:var(--blue);color:#fff;width:100%;margin-top:15px;}
-.warn{background:var(--orange);color:#fff;}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;margin-top:15px;overflow:hidden;}
-th,td{padding:12px;border-bottom:1px solid #eee;text-align:left;font-size:14px;}
-th{background:#f8f8f8;color:#8e8e93;font-weight:600;}
-.tag{background:#e5e5ea;padding:3px 6px;border-radius:5px;font-size:11px;margin-right:4px;display:inline-block;}
-.qty{font-weight:bold;color:var(--red);font-size:16px;}
+:root{--blue:#1976d2;--orange:#ff9800;--red:#d32f2f;--bg:#f4f6f8;}
+body{font-family:Segoe UI,Arial;background:var(--bg);margin:20px}
+h1{margin-bottom:10px}
+button{padding:8px 14px;border:0;border-radius:6px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.primary{background:var(--blue);color:#fff}
+.warn{background:var(--orange);color:#fff}
+.small{padding:6px 10px;font-size:13px}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
+th,td{padding:9px;border-bottom:1px solid #eee;font-size:14px}
+th{background:var(--blue);color:#fff}
+.low{color:var(--red);font-weight:700}
+.actions{display:flex;gap:5px}
+.toolbar,.filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+input,select{padding:7px;border-radius:6px;border:1px solid #ccc}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:1000}
+.box{background:#fff;padding:20px;border-radius:12px;width:420px}
+ul{padding-left:18px}
+
 @media (max-width:768px){
-    table,thead,tbody,th,td,tr{display:block;}
-    thead{display:none;}
-    tr{margin-bottom:10px;border:1px solid #eee;border-radius:10px;padding:10px;background:#fff;}
-    td{border:none;padding:5px 0;}
-    td::before{content:attr(data-label);font-weight:600;margin-right:10px;color:#8e8e93;}
+body{margin:10px}
+h1{font-size:20px}
+table,thead,tbody,th,td,tr{display:block}
+thead{display:none}
+tr{background:#fff;border-radius:10px;margin-bottom:10px;padding:10px}
+td{border:none;padding:4px 0;font-size:13px}
+td::before{content:attr(data-label);font-weight:600;color:#555;margin-right:10px}
+.actions{flex-wrap:wrap}
+.modal .box{width:95%;max-height:85vh;overflow:auto}
+input,select{width:100%}
 }
 </style>
 </head>
+
 <body>
 
-<div class="card">
-    <h3><i class="fa-solid fa-plus"></i> Nhập Kho Mới</h3>
-    <input id="name" placeholder="Tên sản phẩm (VD: Dao Nhật)">
-    
-    <select id="category" onchange="updateFields()">
-        <option value="">-- Chọn loại dao --</option>
-        <option value="Dao Cắt">Dao Cắt</option>
-        <option value="Dao Cấn">Dao Cấn</option>
-        <option value="Dao Răng">Dao Răng</option>
-    </select>
+<h1><i class="fa-solid fa-warehouse"></i> Kho Dao (Cloud Sync)</h1>
 
-    <div id="dynamicFields"></div>
+<div class="toolbar">
+<button class="primary" onclick="openPass()"><i class="fa fa-lock"></i> Đăng nhập</button>
+<button class="primary" onclick="toggleForm()"><i class="fa fa-plus"></i> Thêm sản phẩm</button>
+<button onclick="exportJSON()"><i class="fa fa-download"></i> Xuất JSON</button>
+<select id="pdfMonth"></select>
+<select id="pdfYear"></select>
+<button class="warn" onclick="exportPDF()"><i class="fa fa-file-pdf"></i> PDF nhập/xuất</button>
+<button class="warn" onclick="exportFullStockPDF()"><i class="fa fa-file-pdf"></i> PDF toàn kho</button>
+</div>
 
-    <input id="qty" type="number" placeholder="Số lượng (Mét)">
-    <button class="primary" id="btnSave" onclick="addProduct()"><i class="fa fa-save"></i> Lưu vào Supabase</button>
+<div class="filter">
+<select id="f_category" onchange="render()"><option value="">Loại</option><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select>
+<select id="f_size" onchange="render()"><option value="">Size</option><option>0.7</option><option>1.05</option><option>1.42</option></select>
+<select id="f_origin" onchange="render()"><option value="">Xuất xứ</option><option>Nhật</option><option>Trung Quốc</option></select>
+</div>
+
+<div id="form" style="display:none;background:#fff;padding:15px;border-radius:12px;margin-bottom:10px">
+<input id="name" placeholder="Tên sản phẩm">
+<select id="category"><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select>
+<select id="size"><option>0.7</option><option>1.05</option><option>1.42</option></select>
+<select id="leg"><option>có chân</option><option>không chân</option></select>
+<select id="blade"><option>lưỡi tròn</option><option>lưỡi bằng</option><option>lưỡi bầu</option><option>lưỡi nhọn</option></select>
+<select id="origin"><option>Nhật</option><option>Trung Quốc</option></select>
+<input id="qty" type="number" placeholder="Số lượng">
+<button class="primary" onclick="addProduct()">Lưu lên Cloud</button>
 </div>
 
 <table>
-    <thead>
-        <tr><th>Sản phẩm</th><th>Loại</th><th>Đặc tính</th><th>Tồn</th><th>Hành động</th></tr>
-    </thead>
-    <tbody id="tbody"></tbody>
+<thead>
+<tr><th>Tên</th><th>Loại</th><th>Size</th><th>Chân</th><th>Đầu</th><th>Xuất xứ</th><th>SL</th><th>Hành động</th></tr>
+</thead>
+<tbody id="tbody"></tbody>
 </table>
 
+<div class="modal" id="passModal"><div class="box"><input type="password" id="pass" placeholder="Mật khẩu"><button class="primary" onclick="login()">Xác nhận</button></div></div>
+<div class="modal" id="ioModal"><div class="box"><h3 id="ioTitle"></h3><input id="ioQty" type="number" placeholder="Số lượng"><button class="warn" onclick="submitIO()">Xác nhận</button></div></div>
+<div class="modal" id="editModal"><div class="box">
+<input id="e_name"><select id="e_category"><option>dao cắt</option><option>dao răng</option><option>dao cấn</option></select>
+<select id="e_size"><option>0.7</option><option>1.05</option><option>1.42</option></select>
+<select id="e_leg"><option>có chân</option><option>không chân</option></select>
+<select id="e_blade"><option>lưỡi tròn</option><option>lưỡi bằng</option><option>lưỡi bầu</option><option>lưỡi nhọn</option></select>
+<select id="e_origin"><option>Nhật</option><option>Trung Quốc</option></select>
+<input id="e_qty" type="number">
+<div class="actions"><button class="primary" onclick="saveEdit()">Lưu</button><button class="warn" onclick="deleteProduct()">Xóa</button></div>
+</div></div>
+<div class="modal" id="historyModal"><div class="box"><h3>Lịch sử</h3><ul id="historyList"></ul><button class="warn small" onclick="historyModal.style.display='none'">Đóng</button></div></div>
+
 <script>
+// --- KẾT NỐI SUPABASE ---
 const URL = "https://awxkvzkigfxoidnvmxew.supabase.co";
 const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A";
 const sb = supabase.createClient(URL, KEY);
 
-// 1. Tự động thay đổi ô nhập liệu dựa trên loại dao
-function updateFields() {
-    const cat = document.getElementById('category').value;
-    const div = document.getElementById('dynamicFields');
-    div.innerHTML = "";
-    
-    let fields = [];
-    if(cat === "Dao Cắt") fields = ["Độ dày", "Chiều cao", "Kiểu lưỡi", "Chân dao (Có/Không)"];
-    if(cat === "Dao Cấn") fields = ["Độ dày chân", "Độ dày đầu", "Chiều cao", "Kiểu đầu"];
-    if(cat === "Dao Răng") fields = ["Độ dày", "Bước răng"];
+const PASSWORD="kgget1234", LOW_STOCK=5;
+let hasAccess=false, products=[], editId=null, ioId=null, ioType="";
 
-    fields.forEach(f => {
-        div.innerHTML += `<input class="attr-input" data-key="${f}" placeholder="${f}">`;
+// Khởi tạo PDF Month/Year
+const now=new Date();
+for(let m=0;m<12;m++) pdfMonth.innerHTML+=`<option value="${m}">${m+1}</option>`;
+for(let y=now.getFullYear()-2;y<=now.getFullYear();y++) pdfYear.innerHTML+=`<option>${y}</option>`;
+pdfMonth.value=now.getMonth(); pdfYear.value=now.getFullYear();
+
+function openPass(){passModal.style.display="flex"}
+function login(){if(pass.value===PASSWORD){hasAccess=true;passModal.style.display="none";alert("Đăng nhập thành công")}else alert("Sai mật khẩu")}
+function toggleForm(){if(!hasAccess)return alert("Vui lòng đăng nhập");form.style.display=form.style.display?"":"block"}
+
+// --- THAO TÁC DỮ LIỆU ---
+async function render(){
+    const { data } = await sb.from('products').select('*').order('name');
+    products = data || [];
+    tbody.innerHTML="";
+    products.forEach((p) => {
+        if(f_category.value && p.category !== f_category.value) return;
+        if(f_size.value && p.size !== f_size.value) return;
+        if(f_origin.value && p.origin !== f_origin.value) return;
+
+        tbody.innerHTML+=`<tr>
+            <td data-label="Tên">${p.name}</td><td data-label="Loại">${p.category}</td>
+            <td data-label="Size">${p.size}</td><td data-label="Chân">${p.leg}</td>
+            <td data-label="Đầu">${p.blade}</td><td data-label="Xuất xứ">${p.origin}</td>
+            <td data-label="SL" class="${p.quantity<LOW_STOCK?'low':''}">${p.quantity}</td>
+            <td class="actions">
+                <button class="small primary" onclick="openIO('${p.id}','nhap')">+</button>
+                <button class="small warn" onclick="openIO('${p.id}','xuat')">-</button>
+                <button class="small" onclick="openEdit('${p.id}')">Sửa</button>
+                <button class="small" onclick="viewHistory('${p.id}')">Sử</button>
+            </td></tr>`;
     });
 }
 
-// 2. Thêm sản phẩm
-async function addProduct() {
-    const btn = document.getElementById('btnSave');
-    const name = document.getElementById('name').value;
-    const cat = document.getElementById('category').value;
-    const qty = parseFloat(document.getElementById('qty').value);
-
-    if(!name || !cat) return alert("Thiếu thông tin!");
-    btn.disabled = true;
-
-    const dactinh = {};
-    document.querySelectorAll('.attr-input').forEach(el => {
-        if(el.value) dactinh[el.getAttribute('data-key')] = el.value;
-    });
-
-    const { error } = await sb.from('kho_dao').insert([{ 
-        ten_dao: name, loai_dao: cat, dac_tinh: dactinh, so_luong: qty 
+async function addProduct(){
+    await sb.from('products').insert([{
+        name:name.value, category:category.value, size:size.value,
+        leg:leg.value, blade:blade.value, origin:origin.value,
+        quantity:+qty.value, history:[]
     }]);
-
-    if(error) alert(error.message); else location.reload();
+    form.style.display="none"; render();
 }
 
-// 3. Xuất kho (Trừ số lượng)
-async function xuat(id, cur) {
-    const v = prompt("Số lượng xuất:");
-    if(!v || isNaN(v)) return;
-    const next = cur - parseFloat(v);
-    if(next < 0) return alert("Không đủ kho!");
-    await sb.from('kho_dao').update({ so_luong: next }).eq('id', id);
-    render();
+function openIO(id, t){ if(!hasAccess)return; ioId=id; ioType=t; ioTitle.innerText=t==="nhap"?"Nhập kho":"Xuất kho"; ioModal.style.display="flex"; }
+
+async function submitIO(){
+    const p = products.find(x => x.id === ioId);
+    const q = +ioQty.value;
+    if(q<=0) return;
+    const newQty = ioType==="nhap" ? p.quantity+q : p.quantity-q;
+    if(newQty < 0) return alert("Không đủ hàng");
+    
+    const newHistory = [...p.history, {type:ioType, qty:q, date:new Date().toISOString()}];
+    await sb.from('products').update({ quantity: newQty, history: newHistory }).eq('id', ioId);
+    ioModal.style.display="none"; render();
 }
 
-// 4. Hiển thị danh sách
-async function render() {
-    const { data } = await sb.from('kho_dao').select('*').order('ngay_tao', { ascending: false });
-    const body = document.getElementById('tbody');
-    body.innerHTML = "";
-    data?.forEach(p => {
-        let tags = "";
-        for(let k in p.dac_tinh) tags += `<span class="tag">${k}: ${p.dac_tinh[k]}</span>`;
-        
-        body.innerHTML += `
-            <tr>
-                <td data-label="Sản phẩm"><b>${p.ten_dao}</b></td>
-                <td data-label="Loại">${p.loai_dao}</td>
-                <td data-label="Đặc tính">${tags}</td>
-                <td data-label="Tồn" class="qty">${p.so_luong}</td>
-                <td>
-                    <button class="warn" onclick="xuat('${p.id}', ${p.so_luong})">- Xuất</button>
-                </td>
-            </tr>`;
-    });
+function openEdit(id){
+    if(!hasAccess)return; editId=id; const p=products.find(x=>x.id===id);
+    e_name.value=p.name; e_category.value=p.category; e_size.value=p.size;
+    e_leg.value=p.leg; e_blade.value=p.blade; e_origin.value=p.origin; e_qty.value=p.quantity;
+    editModal.style.display="flex";
 }
+
+async function saveEdit(){
+    await sb.from('products').update({
+        name:e_name.value, category:e_category.value, size:e_size.value,
+        leg:e_leg.value, blade:e_blade.value, origin:e_origin.value, quantity:+e_qty.value
+    }).eq('id', editId);
+    editModal.style.display="none"; render();
+}
+
+async function deleteProduct(){
+    if(confirm("Xóa sản phẩm?")){ await sb.from('products').delete().eq('id', editId); editModal.style.display="none"; render(); }
+}
+
+function viewHistory(id){
+    const p = products.find(x=>x.id===id);
+    historyList.innerHTML = p.history.map(h => `<li>${h.type==='nhap'?'➕':'➖'} ${h.qty} | ${new Date(h.date).toLocaleString()}</li>`).join("");
+    historyModal.style.display="flex";
+}
+
+// --- XUẤT FILE (GIỮ NGUYÊN LOGIC CỦA BẠN) ---
+function removeVN(s){ return s.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/Đ/g,"D") }
+
+function exportPDF(){
+    const m=+pdfMonth.value, y=+pdfYear.value, rows=[];
+    products.forEach(p=>p.history.forEach(h=>{
+        const d=new Date(h.date);
+        if(d.getMonth()===m && d.getFullYear()===y)
+            rows.push([removeVN(p.name), h.type==="nhap"?"Nhap":"Xuat", h.qty, d.toLocaleString()]);
+    }));
+    const {jsPDF}=window.jspdf; const doc=new jsPDF();
+    doc.text(`BAO CAO ${m+1}/${y}`,14,15);
+    doc.autoTable({startY:22, head:[["Ten","Loai","SL","Time"]], body:rows});
+    doc.save("bao_cao.pdf");
+}
+
+function exportFullStockPDF(){
+    const rows=products.map(p=>[removeVN(p.name), removeVN(p.category), p.size, p.quantity]);
+    const {jsPDF}=window.jspdf; const doc=new jsPDF();
+    doc.autoTable({head:[["Ten","Loai","Size","SL"]], body:rows});
+    doc.save("full_kho.pdf");
+}
+
 render();
 </script>
 </body>
