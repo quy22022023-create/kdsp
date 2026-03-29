@@ -3,241 +3,172 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>ST-STOCK PRO v2.0</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <title>Quản lý Đặt Phòng</title>
     <style>
-        :root { --primary: #007aff; --danger: #ff3b30; --success: #34c759; --border: #e5e5ea; --bg: #f2f2f7; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); margin: 0; padding: 10px; color: #1c1c1e; }
+        :root {
+            --bg-gray: #f4f4f4;
+            --empty: #2ecc71; /* Xanh lá */
+            --occupied: #e74c3c; /* Đỏ */
+            --cleaning: #f1c40f; /* Vàng */
+            --waiting: #3498db; /* Xanh dương */
+            --unpaid: #9b59b6; /* Tím */
+            --blank: #bdc3c7; /* Xám */
+        }
 
-        /* Header & Dash */
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 5px; }
-        .header h1 { font-size: 22px; margin: 0; font-weight: 800; color: #000; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background: var(--bg-gray); overflow-x: hidden; }
         
-        .smart-dash { display: flex; gap: 10px; margin-bottom: 15px; }
-        .stat-card { flex: 1; background: #fff; padding: 12px; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid var(--border); }
-        .stat-val { font-size: 20px; font-weight: 800; display: block; }
-        .stat-label { font-size: 10px; color: #8e8e93; font-weight: 700; text-transform: uppercase; }
+        /* Header */
+        header { background: #2d5a27; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100; }
+        .add-room-btn { background: #fff; color: #2d5a27; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; }
 
-        /* Filter System */
-        .filter-panel { background: #fff; padding: 12px; border-radius: 14px; margin-bottom: 15px; border: 1px solid var(--border); }
-        .search-box { position: relative; margin-bottom: 10px; }
-        .search-box input { width: 100%; padding: 12px 12px 12px 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); font-size: 15px; }
-        .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #8e8e93; }
-        .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        select { padding: 10px; border-radius: 10px; border: 1px solid var(--border); font-size: 14px; background: #fff; appearance: none; }
-
-        /* Excel Table */
-        .table-wrapper { background: #fff; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        table { width: 100%; border-collapse: collapse; }
-        th { background: #f9f9fb; padding: 12px 10px; text-align: left; color: #8e8e93; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-        td { padding: 14px 10px; border-bottom: 1px solid #f2f2f7; font-size: 14px; }
+        /* Main Layout */
+        .app-container { display: flex; margin-top: 10px; background: white; }
         
-        tr.low-stock { background-color: #fff1f0; }
-        .name-cell { font-weight: 700; display: block; }
-        .sub-cell { font-size: 11px; color: #8e8e93; }
-        .qty-cell { font-size: 18px; font-weight: 800; text-align: center; }
+        /* Cột Phòng (Cố định bên trái) */
+        .room-column { width: 120px; flex-shrink: 0; border-right: 2px solid #ddd; background: #fff; position: sticky; left: 0; z-index: 10; }
+        .room-header { height: 50px; background: #eee; display: flex; align-items: center; justify-content: center; font-weight: bold; border-bottom: 1px solid #ddd; }
+        .room-item { height: 70px; padding: 10px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; justify-content: center; cursor: pointer; }
+        .room-name { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-        /* Actions */
-        .btn-group { display: flex; gap: 6px; justify-content: flex-end; }
-        .btn-icon { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        /* Lịch cuộn ngang (Bên phải) */
+        .calendar-scroll { flex-grow: 1; overflow-x: auto; display: flex; flex-direction: column; }
+        .days-row { display: flex; height: 50px; background: #eee; border-bottom: 1px solid #ddd; }
+        .day-cell { min-width: 60px; text-align: center; border-right: 1px solid #ddd; display: flex; flex-direction: column; justify-content: center; font-size: 12px; }
+        .booking-row { display: flex; height: 70px; border-bottom: 1px solid #eee; }
+        .booking-cell { min-width: 60px; border-right: 1px solid #eee; background: var(--blank); position: relative; }
+
+        /* Màu sắc ô lịch */
+        .cell-occupied { background: var(--occupied) !important; color: white; }
+        .cell-paid { background: var(--waiting) !important; color: white; }
+        .cell-unpaid { background: var(--unpaid) !important; color: white; }
+
+        /* Modal / Popup */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; width: 90%; max-width: 400px; border-radius: 10px; padding: 20px; position: relative; }
+        .close-btn { position: absolute; top: 10px; right: 15px; font-size: 24px; cursor: pointer; }
         
-        /* Floating Button */
-        .fab { position: fixed; bottom: 25px; right: 25px; width: 60px; height: 60px; background: var(--primary); color: white; border-radius: 30px; border: none; font-size: 24px; box-shadow: 0 5px 20px rgba(0,122,255,0.4); z-index: 9; }
+        /* Grid lịch trong Modal */
+        .mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 15px; }
+        .mini-cell { aspect-ratio: 1; border: 1px solid #eee; display: flex; align-items: center; justify-content: center; font-size: 12px; border-radius: 4px; }
 
-        /* Modal */
-        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(5px); }
-        .modal-box { background: #fff; width: 92%; max-width: 400px; border-radius: 20px; padding: 20px; box-shadow: 0 15px 30px rgba(0,0,0,0.2); }
-        .field { margin-bottom: 14px; }
-        .field label { display: block; font-size: 11px; font-weight: 700; color: #8e8e93; margin-bottom: 5px; text-transform: uppercase; }
-        .field input, .field select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border); font-size: 16px; outline: none; }
-        .btn-save { width: 100%; padding: 15px; border-radius: 12px; border: none; background: var(--primary); color: white; font-weight: 700; font-size: 16px; margin-top: 10px; }
-
-        @media (max-width: 400px) { .hide-xs { display: none; } }
+        .legend { margin-top: 15px; font-size: 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>Kho Dao Pro</h1>
-        <div style="font-size: 12px; color: var(--primary); font-weight: 700;">CLOUD SYNC</div>
-    </div>
+<header>
+    <span>QUẢN LÝ PHÒNG</span>
+    <button class="add-room-btn" onclick="alert('Mở form thêm phòng mới...')">+ Thêm phòng</button>
+</header>
 
-    <div class="smart-dash">
-        <div class="stat-card">
-            <span class="stat-label">Tổng loại</span>
-            <span id="statTotal" class="stat-val">0</span>
+<div class="app-container">
+    <div class="room-column">
+        <div class="room-header">Phòng</div>
+        <div class="room-item" onclick="openModal('P102')">
+            <div class="room-name">P102</div>
+            <div class="status-dot" style="background: var(--occupied);"></div>
         </div>
-        <div class="stat-card" style="border-bottom: 3px solid var(--danger);">
-            <span class="stat-label" style="color: var(--danger)">Cần nhập thêm</span>
-            <span id="statLow" class="stat-val" style="color: var(--danger)">0</span>
+        <div class="room-item" onclick="openModal('P201')">
+            <div class="room-name">P201</div>
+            <div class="status-dot" style="background: var(--empty);"></div>
         </div>
-    </div>
-
-    <div class="filter-panel">
-        <div class="search-box">
-            <i class="fa fa-search"></i>
-            <input type="text" id="searchInput" placeholder="Tìm tên dao hoặc hãng..." onkeyup="render()">
-        </div>
-        <div class="filter-grid">
-            <select id="filterThick" onchange="render()"><option value="">Tất cả dày</option><option>0.7</option><option>1.05</option><option>1.42</option></select>
-            <select id="filterOrigin" onchange="render()"><option value="">Tất cả xuất xứ</option><option>Nhật Bản</option><option>Đức</option><option>Trung Quốc</option></select>
+        <div class="room-item" onclick="openModal('P305')">
+            <div class="room-name">P305</div>
+            <div class="status-dot" style="background: var(--waiting);"></div>
         </div>
     </div>
 
-    <div class="table-wrapper">
-        <table>
-            <thead>
-                <tr>
-                    <th>Sản phẩm</th>
-                    <th style="text-align: center;">Tồn</th>
-                    <th style="text-align: right;">Hành động</th>
-                </tr>
-            </thead>
-            <tbody id="inventoryBody"></tbody>
-        </table>
-    </div>
-
-    <button class="fab" onclick="toggleModal('formModal')"><i class="fa fa-plus"></i></button>
-
-    <div id="formModal" class="modal">
-        <div class="modal-box">
-            <h3 style="margin-top:0">Thêm mã dao mới</h3>
-            <div class="field"><label>Tên dao</label><input type="text" id="in_name" placeholder="VD: Bohler Nhật"></div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div class="field"><label>Độ dày (mm)</label><select id="in_thick"><option>0.7</option><option>1.05</option><option>1.42</option></select></div>
-                <div class="field"><label>Chiều cao (mm)</label><input type="number" id="in_height" step="0.01" value="23.8"></div>
+    <div class="calendar-scroll">
+        <div class="days-row" id="daysRow">
             </div>
-            <div class="field"><label>Xuất xứ</label><select id="in_origin"><option>Nhật Bản</option><option>Đức</option><option>Trung Quốc</option></select></div>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div class="field"><label>Số hộp tồn</label><input type="number" id="in_qty" value="0"></div>
-                <div class="field"><label>Báo động dưới</label><input type="number" id="in_alert" value="2"></div>
+        <div id="bookingRows">
             </div>
-            <button class="btn-save" onclick="saveToCloud()">LƯU VÀO KHO</button>
-            <button onclick="toggleModal('formModal')" style="width:100%; border:none; background:none; color:var(--danger); margin-top:10px; font-weight:600">HỦY BỎ</button>
+    </div>
+</div>
+
+<div class="modal" id="roomModal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h3 id="modalTitle">Chi tiết lịch phòng</h3>
+        <p>Tháng 04/2026</p>
+        
+        <div class="mini-grid" id="miniGrid">
+            </div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="status-dot" style="background: var(--occupied);"></div> Đang ở</div>
+            <div class="legend-item"><div class="status-dot" style="background: var(--waiting);"></div> Đã cọc đủ</div>
+            <div class="legend-item"><div class="status-dot" style="background: var(--unpaid);"></div> Cọc chưa đủ</div>
+            <div class="legend-item"><div class="status-dot" style="background: var(--blank);"></div> Trống</div>
         </div>
     </div>
+</div>
 
-    <div id="ioModal" class="modal">
-        <div class="modal-box">
-            <h3 id="ioTitle" style="margin-top:0">Cập nhật kho</h3>
-            <div class="field"><label>Số lượng hộp</label><input type="number" id="ioQty" placeholder="0"></div>
-            <button id="ioBtn" onclick="updateStock()" class="btn-save"></button>
-            <button onclick="toggleModal('ioModal')" style="width:100%; border:none; background:none; color:var(--danger); margin-top:10px">ĐÓNG</button>
-        </div>
-    </div>
+<script>
+    // Tạo dữ liệu ngày demo
+    const daysRow = document.getElementById('daysRow');
+    for (let i = 1; i <= 30; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'day-cell';
+        cell.innerHTML = `<span>T${(i%7)+2}</span><b>${i < 10 ? '0'+i : i}/04</b>`;
+        daysRow.appendChild(cell);
+    }
 
-    <script>
-        const URL = "https://awxkvzkigfxoidnvmxew.supabase.co";
-        const KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A";
-        const sb = supabase.createClient(URL, KEY);
-        let products = [], currentId = null, currentType = "";
+    // Tạo hàng booking demo
+    const bookingRows = document.getElementById('bookingRows');
+    const demoData = [
+        { name: 'P102', pattern: [0, 1, 1, 1, 0, 0, 3, 3, 0] }, // 1: Đỏ (ở), 3: Tím (chưa cọc)
+        { name: 'P201', pattern: [0, 0, 0, 2, 2, 0, 0, 0, 0] }, // 2: Xanh dương (cọc đủ)
+        { name: 'P305', pattern: [0, 0, 1, 1, 0, 0, 0, 0, 0] }
+    ];
 
-        function toggleModal(id) {
-            const m = document.getElementById(id);
-            m.style.display = (m.style.display === 'flex') ? 'none' : 'flex';
+    demoData.forEach(room => {
+        const row = document.createElement('div');
+        row.className = 'booking-row';
+        for (let i = 0; i < 30; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'booking-cell';
+            const val = room.pattern[i] || 0;
+            if (val === 1) cell.classList.add('cell-occupied');
+            if (val === 2) cell.classList.add('cell-paid');
+            if (val === 3) cell.classList.add('cell-unpaid');
+            row.appendChild(cell);
         }
+        bookingRows.appendChild(row);
+    });
 
-        async function render() {
-            const { data } = await sb.from('products').select('*').order('name');
-            products = data || [];
-            const body = document.getElementById('inventoryBody');
-            const kw = document.getElementById('searchInput').value.toLowerCase();
-            const fThick = document.getElementById('filterThick').value;
-            const fOrigin = document.getElementById('filterOrigin').value;
-
-            body.innerHTML = "";
-            let lowCount = 0;
-
-            products.forEach(p => {
-                const isLow = p.quantity <= (p.alertLimit || 2);
-                if (isLow) lowCount++;
-
-                const matchKw = !kw || p.name.toLowerCase().includes(kw);
-                const matchThick = !fThick || p.size.toString() === fThick;
-                const matchOrigin = !fOrigin || p.origin === fOrigin;
-
-                if (matchKw && matchThick && matchOrigin) {
-                    body.innerHTML += `
-                        <tr class="${isLow ? 'low-stock' : ''}">
-                            <td>
-                                <span class="name-cell">${p.name}</span>
-                                <span class="sub-cell">${p.size}mm | ${p.origin}</span>
-                            </td>
-                            <td class="qty-cell" style="color: ${isLow ? 'var(--danger)' : 'var(--success)'}">
-                                ${p.quantity}
-                            </td>
-                            <td>
-                                <div class="btn-group">
-                                    <button class="btn-icon" style="color:var(--primary)" onclick="openIO('${p.id}', 'nhap')"><i class="fa fa-plus"></i></button>
-                                    <button class="btn-icon" style="color:var(--danger)" onclick="openIO('${p.id}', 'xuat')"><i class="fa fa-minus"></i></button>
-                                    <button class="btn-icon" onclick="deleteProduct('${p.id}')"><i class="fa fa-trash"></i></button>
-                                </div>
-                            </td>
-                        </tr>
-                    `;
-                }
-            });
-            document.getElementById('statTotal').innerText = products.length;
-            document.getElementById('statLow').innerText = lowCount;
+    // Modal Logic
+    function openModal(roomName) {
+        document.getElementById('modalTitle').innerText = "Chi tiết lịch phòng " + roomName;
+        const grid = document.getElementById('miniGrid');
+        grid.innerHTML = '';
+        
+        // Tạo 30 ô ngày trong modal
+        for (let i = 1; i <= 30; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'mini-cell';
+            cell.innerText = i;
+            
+            // Demo tô màu ngẫu nhiên trong modal
+            if (i >= 1 && i <= 3) cell.style.background = 'var(--occupied)';
+            else if (i >= 10 && i <= 11) cell.style.background = 'var(--waiting)';
+            else if (i >= 15 && i <= 17) cell.style.background = 'var(--unpaid)';
+            else cell.style.background = 'var(--blank)';
+            
+            if (cell.style.background !== 'var(--blank)') cell.style.color = 'white';
+            
+            grid.appendChild(cell);
         }
+        
+        document.getElementById('roomModal').style.display = 'flex';
+    }
 
-        async function saveToCloud() {
-            const name = document.getElementById('in_name').value;
-            if(!name) return alert("Vui lòng nhập tên dao!");
+    function closeModal() {
+        document.getElementById('roomModal').style.display = 'none';
+    }
+</script>
 
-            const newProduct = {
-                name: name,
-                size: document.getElementById('in_thick').value,
-                height: document.getElementById('in_height').value,
-                origin: document.getElementById('in_origin').value,
-                quantity: parseInt(document.getElementById('in_qty').value) || 0,
-                alertLimit: parseInt(document.getElementById('in_alert').value) || 2
-            };
-
-            const { error } = await sb.from('products').insert([newProduct]);
-            if(error) {
-                alert("Lỗi: " + error.message);
-            } else {
-                toggleModal('formModal');
-                document.getElementById('in_name').value = ""; // Reset
-                render();
-            }
-        }
-
-        function openIO(id, type) {
-            currentId = id; currentType = type;
-            const btn = document.getElementById('ioBtn');
-            document.getElementById('ioTitle').innerText = type === 'nhap' ? 'Nhập thêm hộp' : 'Xuất kho hộp';
-            btn.innerText = type === 'nhap' ? 'XÁC NHẬN NHẬP' : 'XÁC NHẬN XUẤT';
-            btn.style.background = type === 'nhap' ? 'var(--success)' : 'var(--danger)';
-            toggleModal('ioModal');
-        }
-
-        async function updateStock() {
-            const p = products.find(x => x.id === currentId);
-            const val = parseInt(document.getElementById('ioQty').value);
-            if(!val || val <= 0) return alert("Nhập số lượng hợp lệ!");
-
-            const nextQty = currentType === 'nhap' ? p.quantity + val : p.quantity - val;
-            if(nextQty < 0) return alert("Không đủ hàng trong kho!");
-
-            await sb.from('products').update({ quantity: nextQty }).eq('id', currentId);
-            document.getElementById('ioQty').value = "";
-            toggleModal('ioModal');
-            render();
-        }
-
-        async function deleteProduct(id) {
-            if(confirm("Bạn có chắc chắn muốn xóa mã dao này?")) {
-                await sb.from('products').delete().eq('id', id);
-                render();
-            }
-        }
-
-        // Khởi chạy lần đầu
-        render();
-    </script>
 </body>
 </html>
