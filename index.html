@@ -44,7 +44,7 @@
         /* --- LAYOUT GRID --- */
         .pms-wrapper { display: grid; grid-template-columns: var(--sidebar-w) 1fr; flex: 1; overflow: hidden; }
 
-        /* Sidebar PhÃ²ng */
+        /* Sidebar Phòng */
         .rooms-aside { background: #fff; border-right: 1px solid var(--border); overflow-y: auto; scroll-behavior: smooth; }
         .room-head { height: 50px; background: #fafafa; border-bottom: 1px solid var(--border); position: sticky; top:0; z-index: 10; }
         
@@ -147,20 +147,20 @@
     <div class="header-tools">
         
         <div class="month-nav">
-            <button onclick="changeMonth(-1)">â</button>
+            <button onclick="changeMonth(-1)">◀</button>
             <input type="month" id="monthPicker" onchange="selectMonth()">
-            <button onclick="changeMonth(1)">â¶</button>
+            <button onclick="changeMonth(1)">▶</button>
         </div>
 
         <select id="roomFilter" class="btn" style="background:#f4f7f6; color:#333; padding: 10px; border: 1px solid var(--border);" onchange="applyFilter()">
-            <option value="all">Hiá»n thá»: Táº¥t cáº£</option>
-            <option value="clean">PhÃ²ng sáº¡ch</option>
-            <option value="dirty">PhÃ²ng chá» dá»n</option>
+            <option value="all">Hiển thị: Tất cả</option>
+            <option value="clean">Phòng sạch</option>
+            <option value="dirty">Phòng chờ dọn</option>
         </select>
         
-        <button class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">ð TÃM PHÃNG</button>
-        <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">ð¥ CSV</button>
-        <button class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÃNG</button>
+        <button class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
+        <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 CSV</button>
+        <button class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
     </div>
 </header>
 
@@ -175,15 +175,15 @@
 <div class="modal" id="pmsModal">
     <div class="modal-box">
         <div class="modal-header">
-            <span id="mTitle">ThÃ´ng tin phÃ²ng</span>
-            <span onclick="closeModal()" style="cursor:pointer; font-size: 18px;">â</span>
+            <span id="mTitle">Thông tin phòng</span>
+            <span onclick="closeModal()" style="cursor:pointer; font-size: 18px;">✕</span>
         </div>
         <div class="modal-content" id="mContent"></div>
     </div>
 </div>
 
 <script>
-    // --- HÃM Há» TRá»¢ NGÃY GIá» CHUáº¨N ---
+    // --- HÀM HỖ TRỢ NGÀY GIỜ CHUẨN ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - offset).toISOString().split('T')[0];
@@ -206,7 +206,7 @@
         render();
     }
 
-    // --- HÃM ÄIá»U HÆ¯á»NG THÃNG ---
+    // --- HÀM ĐIỀU HƯỚNG THÁNG ---
     function changeMonth(delta) {
         currentViewDate.setMonth(currentViewDate.getMonth() + delta);
         render();
@@ -249,8 +249,8 @@
         }, 0);
 
         document.getElementById('topStats').innerHTML = `
-            <div class="stat-card"><small>ÄANG á»</small><b>${active}</b></div>
-            <div class="stat-card"><small>Tá»NG DOANH THU</small><b>${(totalRev/1000).toLocaleString()}k</b></div>
+            <div class="stat-card"><small>ĐANG Ở</small><b>${active}</b></div>
+            <div class="stat-card"><small>TỔNG DOANH THU</small><b>${(totalRev/1000).toLocaleString()}k</b></div>
         `;
     }
 
@@ -272,24 +272,24 @@
             let isDirty = r.status === 'dirty';
             
             let badgeColor = 'var(--s-green)'; 
-            let sttText = 'Sáº¡ch - Sáºµn sÃ ng';
+            let sttText = 'Sạch - Sẵn sàng';
             
             if (activeBooking) {
                 badgeColor = 'var(--p-red)'; 
-                sttText = 'Äang cÃ³ khÃ¡ch lÆ°u trÃº';
+                sttText = 'Đang có khách lưu trú';
             } else if (isDirty) {
                 badgeColor = 'var(--p-gold)'; 
-                sttText = 'KhÃ¡ch ÄÃ£ out - Chá» dá»n dáº¹p';
+                sttText = 'Khách đã out - Chờ dọn dẹp';
             }
 
             sb.innerHTML += `
-                <div class="room-item" onclick="openRoomSettings('${r.id}')" title="Nháº¥n Äá» má» CÃ i Äáº·t phÃ²ng">
+                <div class="room-item" onclick="openRoomSettings('${r.id}')" title="Nhấn để mở Cài đặt phòng">
                     <b>${r.id}</b>
-                    <span class="lb-code">${r.lockbox ? 'LB: ' + r.lockbox : 'ChÆ°a cÃ³ LB'}</span>
-                    <span class="r-price">${(r.price/1000).toLocaleString()}k/Ä</span>
+                    <span class="lb-code">${r.lockbox ? 'LB: ' + r.lockbox : 'Chưa có LB'}</span>
+                    <span class="r-price">${(r.price/1000).toLocaleString()}k/đ</span>
                     <span class="r-notes">${r.notes || '---'}</span>
                     
-                    <div class="badge-status" style="background:${badgeColor}" onclick="toggleDirty('${r.id}', event)" title="TÃ¬nh tráº¡ng: ${sttText}. Nháº¥n Äá» Äá»i tráº¡ng thÃ¡i"></div>
+                    <div class="badge-status" style="background:${badgeColor}" onclick="toggleDirty('${r.id}', event)" title="Tình trạng: ${sttText}. Nhấn để đổi trạng thái"></div>
                 </div>`;
         });
     }
@@ -350,15 +350,15 @@
                     
                     const width = (durationToRender * (window.innerWidth <= 768 ? 70 : 100)) - 10;
                     const totalNights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
-                    const label = b.type === 'grey' ? '(ÄÃ£ xong)' : '';
-                    const depositText = (b.deposit && b.deposit > 0) ? ` - Cá»c: ${(b.deposit/1000)}k` : '';
+                    const label = b.type === 'grey' ? '(Đã xong)' : '';
+                    const depositText = (b.deposit && b.deposit > 0) ? ` - Cọc: ${(b.deposit/1000)}k` : '';
 
                     const isCrossMonth = b.start < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
 
                     cell.innerHTML = `
                         <div class="booking-tag tag-${b.type}" style="width: ${width}px; ${isCrossMonth}" onclick="openDetail('${b.id}')">
                             <div style="white-space:nowrap; overflow:hidden">${b.guest} ${label}</div>
-                            <small>${totalNights} ÄÃªm${depositText}</small>
+                            <small>${totalNights} đêm${depositText}</small>
                         </div>`;
                 } else {
                     cell.onclick = () => openBooking(r.id, date);
@@ -369,21 +369,21 @@
         });
     }
 
-    // --- TÃNH NÄNG TÃM PHÃNG TRá»NG THEO NGÃY ---
+    // --- TÍNH NĂNG TÌM PHÒNG TRỐNG THEO NGÀY ---
     function openSearchModal() {
-        document.getElementById('mTitle').innerText = `Bá» lá»c TÃ¬m phÃ²ng trá»ng`;
+        document.getElementById('mTitle').innerText = `Bộ lọc Tìm phòng trống`;
         let tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
         const defaultOut = getLocalISODate(tmr);
 
         document.getElementById('mContent').innerHTML = `
             <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px; font-size:13px; color:#333;">
-                Nháº­p khoáº£ng thá»i gian khÃ¡ch muá»n á». Há» thá»ng sáº½ lá»c vÃ  chá» hiá»n thá» nhá»¯ng phÃ²ng <b>chÆ°a cÃ³ ai Äáº·t</b> trong thá»i gian nÃ y.
+                Nhập khoảng thời gian khách muốn ở. Hệ thống sẽ lọc và chỉ hiển thị những phòng <b>chưa có ai đặt</b> trong thời gian này.
             </div>
-            <div class="f-group"><label>NgÃ y khÃ¡ch muá»n Check-in</label><input id="sStart" type="date" value="${realTodayStr}"></div>
-            <div class="f-group"><label>NgÃ y khÃ¡ch Check-out</label><input id="sEnd" type="date" value="${defaultOut}"></div>
+            <div class="f-group"><label>Ngày khách muốn Check-in</label><input id="sStart" type="date" value="${realTodayStr}"></div>
+            <div class="f-group"><label>Ngày khách Check-out</label><input id="sEnd" type="date" value="${defaultOut}"></div>
             <div class="btn-row" style="margin-top: 25px;">
-                <button class="btn btn-p" onclick="executeSearch()">TÃM PHÃNG TRá»NG</button>
-                <button class="btn btn-cancel" onclick="closeModal()">Há»¦Y Bá»</button>
+                <button class="btn btn-p" onclick="executeSearch()">TÌM PHÒNG TRỐNG</button>
+                <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
             </div>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
@@ -392,7 +392,7 @@
     function executeSearch() {
         const sStart = document.getElementById('sStart').value;
         const sEnd = document.getElementById('sEnd').value;
-        if (!sStart || !sEnd || sStart >= sEnd) return alert("NgÃ y Äi pháº£i lá»n hÆ¡n ngÃ y Äáº¿n!");
+        if (!sStart || !sEnd || sStart >= sEnd) return alert("Ngày đi phải lớn hơn ngày đến!");
 
         searchCriteria = { start: sStart, end: sEnd };
 
@@ -403,7 +403,7 @@
             opt.value = 'search';
             document.getElementById('roomFilter').appendChild(opt);
         }
-        opt.text = `Äang lá»c: ${sStart.split('-').reverse().join('/')} â ${sEnd.split('-').reverse().join('/')}`;
+        opt.text = `Đang lọc: ${sStart.split('-').reverse().join('/')} ➔ ${sEnd.split('-').reverse().join('/')}`;
         opt.style.display = 'block';
         
         document.getElementById('roomFilter').value = 'search';
@@ -412,21 +412,21 @@
         closeModal(); render();
     }
 
-    // --- TÃNH NÄNG QUáº¢N LÃ PHÃNG ---
+    // --- TÍNH NĂNG QUẢN LÝ PHÒNG ---
     function openRoomSettings(rid) {
         const r = rooms.find(x => x.id === rid);
-        document.getElementById('mTitle').innerText = `CÃ i Äáº·t phÃ²ng`;
+        document.getElementById('mTitle').innerText = `Cài đặt phòng`;
         document.getElementById('mContent').innerHTML = `
-            <div class="f-group"><label>TÃªn / Sá» phÃ²ng</label><input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, P201 (P1)"></div>
+            <div class="f-group"><label>Tên / Số phòng</label><input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, P201 (P1)"></div>
             <div style="display:flex; gap:10px;">
-                <div class="f-group" style="flex:1;"><label>MÃ£ Lockbox</label><input id="fRoomLockbox" type="text" value="${r.lockbox || ''}" placeholder="VD: 9138"></div>
-                <div class="f-group" style="flex:1;"><label>GiÃ¡ gá» gốc / ÄÃªm</label><input id="fRoomPrice" type="number" value="${r.price}"></div>
+                <div class="f-group" style="flex:1;"><label>Mã Lockbox</label><input id="fRoomLockbox" type="text" value="${r.lockbox || ''}" placeholder="VD: 9138"></div>
+                <div class="f-group" style="flex:1;"><label>Giá gốc / đêm</label><input id="fRoomPrice" type="number" value="${r.price}"></div>
             </div>
-            <div class="f-group"><label>Ghi chÃº / TÃ­nh cháº¥t phÃ²ng</label><input id="fRoomNotes" type="text" value="${r.notes || ''}" placeholder="VD: Quáº¡t tráº§n, ban cÃ´ng, 2 giÆ°á»ng..."></div>
+            <div class="f-group"><label>Ghi chú / Tính chất phòng</label><input id="fRoomNotes" type="text" value="${r.notes || ''}" placeholder="VD: Quạt trần, ban công, 2 giường..."></div>
             <div class="btn-row" style="margin-top: 25px;">
-                <button class="btn btn-p" onclick="saveRoomSettings('${rid}')">LÆ¯U THAY Äá»I</button>
-                <button class="btn btn-d" onclick="deleteRoom('${rid}')">XÃA PHÃNG</button>
-                <button class="btn btn-cancel" onclick="closeModal()">Há»¦Y Bá»</button>
+                <button class="btn btn-p" onclick="saveRoomSettings('${rid}')">LƯU THAY ĐỔI</button>
+                <button class="btn btn-d" onclick="deleteRoom('${rid}')">XÓA PHÒNG</button>
+                <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
             </div>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
@@ -438,8 +438,8 @@
         const newLockbox = document.getElementById('fRoomLockbox').value.trim();
         const newNotes = document.getElementById('fRoomNotes').value.trim();
 
-        if(!newId) return alert("TÃªn phÃ²ng khÃ´ng ÄÆ°á»£c Äá» trá»ng!");
-        if(newId !== oldRid && rooms.some(x => x.id === newId)) return alert("TÃªn phÃ²ng nÃ y ÄÃ£ tá»n táº¡i trong há» thá»ng! Vui lÃ²ng chá»n tÃªn khÃ¡c.");
+        if(!newId) return alert("Tên phòng không được để trống!");
+        if(newId !== oldRid && rooms.some(x => x.id === newId)) return alert("Tên phòng này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.");
 
         const r = rooms.find(x => x.id === oldRid);
         r.id = newId; r.price = newPrice; r.lockbox = newLockbox; r.notes = newNotes;
@@ -452,8 +452,8 @@
 
     function deleteRoom(rid) {
         const hasBookings = bookings.some(b => b.roomId === rid);
-        let msg = `Báº¡n cÃ³ cháº¯c cháº¯n muá»n xÃ³a phÃ²ng ${rid} khá»i há» thá»ng khÃ´ng?`;
-        if (hasBookings) msg = `Cáº¢NH BÃO NGUY HIá»M:\PhÃ²ng ${rid} Äang cÃ³ lá»ch sá»­ khÃ¡ch hÃ ng!\nBáº¡n váº«n muá»n tiáº¿p tá»¥c xÃ³a?`;
+        let msg = `Bạn có chắc chắn muốn xóa phòng ${rid} khỏi hệ thống không?`;
+        if (hasBookings) msg = `CẢNH BÁO NGUY HIỂM:\nPhòng ${rid} đang có lịch sử khách hàng!\nBạn vẫn muốn tiếp tục xóa?`;
 
         if(confirm(msg)) {
             rooms = rooms.filter(x => x.id !== rid);
@@ -466,14 +466,14 @@
         if(event) event.stopPropagation(); 
         const r = rooms.find(x => x.id === rid);
         if(r.status === 'dirty') {
-            if(confirm("XÃ¡c nháº­n phÃ²ng " + rid + " ÄÃ£ ÄÆ°á»£c dá»n sáº¡ch?")) { r.status = 'clean'; save(); }
+            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { r.status = 'clean'; save(); }
         } else {
-            if(confirm("ÄÃ¡nh dáº¥u phÃ²ng " + rid + " cáº§n dá»n dáº¹p?")) { r.status = 'dirty'; save(); }
+            if(confirm("Đánh dấu phòng " + rid + " cần dọn dẹp?")) { r.status = 'dirty'; save(); }
         }
     }
 
 
-    // --- CÃC CHá»¨C NÄNG NGHIá»P Vá»¤ Äáº¶T PHÃNG Tá»I Æ¯U HÃA ---
+    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG TỐI ƯU HÓA ---
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
@@ -486,32 +486,32 @@
         let nextDay = new Date(date); nextDay.setDate(nextDay.getDate() + 1);
         const nextDayStr = getLocalISODate(nextDay);
 
-        document.getElementById('mTitle').innerText = `Äáº·t phÃ²ng ${roomId}`;
+        document.getElementById('mTitle').innerText = `Đặt phòng ${roomId}`;
         document.getElementById('mContent').innerHTML = `
-            <div class="f-group"><label>TÃªn khÃ¡ch hÃ ng</label><input id="fName" type="text" placeholder="VD: Anh Minh"></div>
+            <div class="f-group"><label>Tên khách hàng</label><input id="fName" type="text" placeholder="VD: Anh Minh"></div>
             
             <div class="f-group">
-                <label>Sá» Äiá»n thoáº¡i (DÃ¡n tá»± Äá»ng lá»c chá»¯)</label>
-                <input id="fPhone" type="tel" placeholder="DÃ¡n thÃ´ng tin chá»©a SÄT vÃ o ÄÃ¢y..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
+                <label>Số điện thoại (Dán tự động lọc chữ)</label>
+                <input id="fPhone" type="tel" placeholder="Dán thông tin chứa SĐT vào đây..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
             </div>
 
             <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1"><label>Tá»« ngÃ y</label><input id="fStart" type="date" value="${date}"></div>
-                <div class="f-group" style="flex:1"><label>Äáº¿n ngÃ y</label><input id="fEnd" type="date" value="${nextDayStr}"></div>
+                <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="fStart" type="date" value="${date}"></div>
+                <div class="f-group" style="flex:1"><label>Đến ngày</label><input id="fEnd" type="date" value="${nextDayStr}"></div>
             </div>
             <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1"><label>GiÃ¡ thá»a thuáº­n / ÄÃªm</label><input id="fPrice" type="number" value="${r.price}"></div>
-                <div class="f-group" style="flex:1"><label>Tiá»n ÄÃ£ cá»c (VNÄ)</label><input id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0"></div>
+                <div class="f-group" style="flex:1"><label>Giá thỏa thuận / Đêm</label><input id="fPrice" type="number" value="${r.price}"></div>
+                <div class="f-group" style="flex:1"><label>Tiền đã cọc (VNĐ)</label><input id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0"></div>
             </div>
             <div class="f-group">
-                <label>Tráº¡ng thÃ¡i ban Äáº§u</label>
+                <label>Trạng thái ban đầu</label>
                 <select id="fType">
-                    <option value="blue">ChÆ°a cá»c (Xanh)</option>
-                    <option value="purple">ÄÃ£ Äáº·t cá»c (TÃ­m)</option>
-                    <option value="red">Check-in luÃ´n (Äá»)</option>
+                    <option value="blue">Chưa cọc (Xanh)</option>
+                    <option value="purple">Đã đặt cọc (Tím)</option>
+                    <option value="red">Check-in luôn (Đỏ)</option>
                 </select>
             </div>
-            <button class="btn btn-p" style="width:100%; margin-top: 10px;" onclick="confirmBooking('${roomId}')">XÃC NHáº¬N Äáº¶T PHÃNG</button>
+            <button class="btn btn-p" style="width:100%; margin-top: 10px;" onclick="confirmBooking('${roomId}')">XÁC NHẬN ĐẶT PHÒNG</button>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
     }
@@ -524,10 +524,10 @@
         const price = parseInt(document.getElementById('fPrice').value) || 0;
         const deposit = parseInt(document.getElementById('fDeposit').value) || 0;
 
-        if(!guest || start >= end) return alert("Vui lÃ²ng kiá»m tra láº¡i thÃ´ng tin ngÃ y thÃ¡ng hoáº·c tÃªn khÃ¡ch!");
+        if(!guest || start >= end) return alert("Vui lòng kiểm tra lại thông tin ngày tháng hoặc tên khách!");
 
         const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
-        if(overlap) return alert("PhÃ²ng nÃ y ÄÃ£ cÃ³ khÃ¡ch lÆ°u trÃº trong thá»i gian báº¡n chá»n!");
+        if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
 
         bookings.push({ 
             id: 'BK'+Date.now(), roomId, guest, phone, start, end, 
@@ -547,66 +547,66 @@
         const remaining = totalCost - deposit;
         const isCompleted = b.type === 'grey';
 
-        document.getElementById('mTitle').innerText = isCompleted ? "Lá»ch sá»­ lÆ°u trÃº" : "Chi tiáº¿t & Gia háº¡n phÃ²ng";
+        document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Chi tiết & Gia hạn phòng";
         
         let actionButtons = '';
         if (isCompleted) {
             actionButtons = `
-                <button class="btn btn-d" style="grid-column: span 2" onclick="delBK('${bid}')">XÃA Háº²N Lá»CH Sá»¬ NÃY</button>
-                <button class="btn btn-cancel" onclick="closeModal()">ÄÃNG</button>
+                <button class="btn btn-d" style="grid-column: span 2" onclick="delBK('${bid}')">XÓA HẲN LỊCH SỬ NÀY</button>
+                <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
             `;
-            // Giao diá»n chá» Äá»c cho lá»ch sá»­
+            // Giao diện chỉ đọc cho lịch sử
             document.getElementById('mContent').innerHTML = `
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
-                    <h2 style="margin:0">${b.guest} <span style="color:#7f8c8d; font-size:14px">(ÄÃ£ tráº£ phÃ²ng)</span></h2>
-                    <p style="margin: 4px 0; color: #555;">SÄT: <b>${b.phone || 'KhÃ´ng cÃ³'}</b></p>
-                    <p style="margin: 4px 0; color: #555;">PhÃ²ng: <b>${b.roomId}</b> | NgÃ y: ${b.start.split('-').reverse().join('/')} â ${b.end.split('-').reverse().join('/')}</p>
+                    <h2 style="margin:0">${b.guest} <span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span></h2>
+                    <p style="margin: 4px 0; color: #555;">SĐT: <b>${b.phone || 'Không có'}</b></p>
+                    <p style="margin: 4px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
                 </div>
                 <div class="bill-box">
-                    <div class="bill-row"><span>ÄÆ¡n giÃ¡ (${nights} ÄÃªm):</span><span>${appliedPrice.toLocaleString()}Ä / ÄÃªm</span></div>
-                    <div class="bill-row"><span>ThÃ nh tiá»n:</span><span>${totalCost.toLocaleString()}Ä</span></div>
-                    <div class="bill-row" style="color: var(--s-green);"><span>ÄÃ£ Äáº·t cá»c:</span><span>- ${deposit.toLocaleString()}Ä</span></div>
-                    <div class="bill-row total"><span>CÃN Láº I Cáº¦N THU:</span><span>${remaining.toLocaleString()}Ä</span></div>
+                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
+                    <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
+                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
+                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
                 </div>
                 <div class="btn-row">${actionButtons}</div>
             `;
         } else {
             actionButtons = `
                 ${b.type !== 'red' ? `<button class="btn btn-s" onclick="updateBK('${bid}','red')">CHECK-IN</button>` : ''}
-                <button class="btn btn-p" style="background:var(--p-gold); color:#000" onclick="checkOut('${bid}')">CHECK-OUT & THU TIá»N</button>
-                <button class="btn btn-d" onclick="delBK('${bid}')">Há»¦Y PHÃNG</button>
-                <button class="btn btn-cancel" onclick="closeModal()">ÄÃNG</button>
+                <button class="btn btn-p" style="background:var(--p-gold); color:#000" onclick="checkOut('${bid}')">CHECK-OUT & THU TIỀN</button>
+                <button class="btn btn-d" onclick="delBK('${bid}')">HỦY PHÒNG</button>
+                <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
             `;
             
             const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
 
-            // Giao diá»n cÃ³ thá» Chá»nh sá»­a/Gia háº¡n trá»±c tiáº¿p
+            // Giao diện có thể Chỉnh sửa/Gia hạn trực tiếp
             document.getElementById('mContent').innerHTML = `
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
-                        <span style="font-weight:bold; color:var(--p-blue)">PhÃ²ng ${b.roomId}</span>
+                        <span style="font-weight:bold; color:var(--p-blue)">Phòng ${b.roomId}</span>
                         ${lbDisplay}
                     </div>
                     <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>TÃªn khÃ¡ch</label><input id="dName" type="text" value="${b.guest}"></div>
-                        <div class="f-group" style="flex:1"><label>SÄT (DÃ¡n SÄT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
+                        <div class="f-group" style="flex:1"><label>Tên khách</label><input id="dName" type="text" value="${b.guest}"></div>
+                        <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
                     </div>
                     <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>Tá»« ngÃ y</label><input id="dStart" type="date" value="${b.start}"></div>
-                        <div class="f-group" style="flex:1"><label>Äáº¿n ngÃ y (Gia háº¡n)</label><input id="dEnd" type="date" value="${b.end}"></div>
+                        <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="dStart" type="date" value="${b.start}"></div>
+                        <div class="f-group" style="flex:1"><label>Đến ngày (Gia hạn)</label><input id="dEnd" type="date" value="${b.end}"></div>
                     </div>
                     <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>GiÃ¡ thá»a thuáº­n</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
-                        <div class="f-group" style="flex:1"><label>Tiá»n cá»c</label><input id="dDeposit" type="number" value="${deposit}"></div>
+                        <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
+                        <div class="f-group" style="flex:1"><label>Tiền cọc</label><input id="dDeposit" type="number" value="${deposit}"></div>
                     </div>
-                    <button class="btn btn-p" style="width:100%; padding: 10px; font-size: 13px; margin-top:5px;" onclick="saveBookingChanges('${bid}')">ð¾ LÆ¯U THÃNG TIN / GIA Háº N</button>
+                    <button class="btn btn-p" style="width:100%; padding: 10px; font-size: 13px; margin-top:5px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / GIA HẠN</button>
                 </div>
 
                 <div class="bill-box">
-                    <div class="bill-row"><span>ÄÆ¡n giÃ¡ (${nights} ÄÃªm):</span><span>${appliedPrice.toLocaleString()}Ä / ÄÃªm</span></div>
-                    <div class="bill-row"><span>ThÃ nh tiá»n:</span><span>${totalCost.toLocaleString()}Ä</span></div>
-                    <div class="bill-row" style="color: var(--s-green);"><span>ÄÃ£ Äáº·t cá»c:</span><span>- ${deposit.toLocaleString()}Ä</span></div>
-                    <div class="bill-row total"><span>CÃN Láº I Cáº¦N THU:</span><span>${remaining.toLocaleString()}Ä</span></div>
+                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
+                    <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
+                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
+                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
                 </div>
                 <div class="btn-row">${actionButtons}</div>
             `;
@@ -614,7 +614,7 @@
         document.getElementById('pmsModal').style.display = 'flex';
     }
 
-    // HÃ m LÆ¯U thay Äá»i / GIA Háº N ngÃ y trá»±c tiáº¿p
+    // Hàm LƯU thay đổi / GIA HẠN ngày trực tiếp
     function saveBookingChanges(bid) {
         const b = bookings.find(x => x.id === bid);
         const newName = document.getElementById('dName').value;
@@ -624,11 +624,11 @@
         const newPrice = parseInt(document.getElementById('dPrice').value) || 0;
         const newDeposit = parseInt(document.getElementById('dDeposit').value) || 0;
 
-        if(!newName || newStart >= newEnd) return alert("Vui lÃ²ng kiá»m tra láº¡i thÃ´ng tin ngÃ y thÃ¡ng!");
+        if(!newName || newStart >= newEnd) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
 
-        // Kiá»m tra trÃ¹ng lá»ch (loáº¡i trá»« chÃ­nh booking Äang sá»­a)
+        // Kiểm tra trùng lịch (loại trừ chính booking đang sửa)
         const overlap = bookings.some(x => x.id !== bid && x.roomId === b.roomId && (newStart < x.end && newEnd > x.start));
-        if(overlap) return alert("Lá»i: KhÃ´ng thá» gia háº¡n vÃ¬ ÄÃ£ cÃ³ khÃ¡ch khÃ¡c Äáº·t phÃ²ng trong thá»i gian nÃ y!");
+        if(overlap) return alert("Lỗi: Không thể gia hạn vì đã có khách khác đặt phòng trong thời gian này!");
 
         b.guest = newName;
         b.phone = newPhone;
@@ -638,11 +638,11 @@
         b.deposit = newDeposit;
 
         save();
-        openDetail(bid); // Má» láº¡i báº£ng chi tiáº¿t Äá» cáº­p nháº­t hiá»n thá» Bill má»i
+        openDetail(bid); // Mở lại bảng chi tiết để cập nhật hiển thị Bill mới
     }
 
     function checkOut(bid) {
-        if(confirm("XÃ¡c nháº­n khÃ¡ch ÄÃ£ thanh toÃ¡n Äá»§ vÃ  tráº£ phÃ²ng?")) {
+        if(confirm("Xác nhận khách đã thanh toán đủ và trả phòng?")) {
             const b = bookings.find(x => x.id === bid);
             rooms.find(r => r.id === b.roomId).status = 'dirty';
             b.type = 'grey'; 
@@ -651,17 +651,17 @@
     }
 
     function updateBK(bid, type) { bookings.find(x => x.id === bid).type = type; closeModal(); save(); }
-    function delBK(bid) { if(confirm("Báº¡n cÃ³ cháº¯c cháº¯n muá»n xÃ³a dá»¯ liá»u nÃ y?")) { bookings = bookings.filter(x => x.id !== bid); closeModal(); save(); } }
+    function delBK(bid) { if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) { bookings = bookings.filter(x => x.id !== bid); closeModal(); save(); } }
 
     function addRoom() {
-        const id = prompt("Nháº­p Sá»/TÃªn phÃ²ng má»i (VD: 301, P201):");
-        const price = prompt("GiÃ¡ máº·c Äá»nh má»i ÄÃªm (VNÄ):", "350000");
+        const id = prompt("Nhập Số/Tên phòng mới (VD: 301, P201):");
+        const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
         if(id && price) { rooms.push({ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }); save(); }
     }
 
-    // Cáº­p nháº­t Xuáº¥t File CSV cÃ³ thÃªm cá»t SÄT
+    // Cập nhật Xuất File CSV có thêm cột SĐT
     function exportCSV() {
-        if(bookings.length === 0) return alert("ChÆ°a cÃ³ dá»¯ liá»u Äáº·t phÃ²ng Äá» xuáº¥t!");
+        if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
         let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
         bookings.forEach(b => {
             const r = rooms.find(rm => rm.id === b.roomId);
@@ -669,9 +669,9 @@
             const appliedPrice = b.price !== undefined ? b.price : (r ? r.price : 0);
             const total = nights * appliedPrice;
             const deposit = b.deposit || 0;
-            let statusVN = "Lá»i";
-            if(b.type === 'blue') statusVN = "ChÆ°a cá»c"; if(b.type === 'purple') statusVN = "ÄÃ£ cá»c";
-            if(b.type === 'red') statusVN = "Äang á»"; if(b.type === 'grey') statusVN = "ÄÃ£ tráº£ phÃ²ng";
+            let statusVN = "Lỗi";
+            if(b.type === 'blue') statusVN = "Chưa cọc"; if(b.type === 'purple') statusVN = "Đã cọc";
+            if(b.type === 'red') statusVN = "Đang ở"; if(b.type === 'grey') statusVN = "Đã trả phòng";
             csvContent += [b.id, b.guest.replace(/,/g, " "), b.phone || "", b.roomId, b.start, b.end, nights, appliedPrice, deposit, total, statusVN].join(",") + "\r\n";
         });
         const link = document.createElement("a");
