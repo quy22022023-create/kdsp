@@ -133,7 +133,7 @@
 
         /* Flex Container chống tràn (Chữa lỗi iPhone) */
         .flex-row { display: flex; gap: 10px; width: 100%; }
-        .flex-col { flex: 1; min-width: 0; } /* min-width: 0; là key để flexbox không bị bung viền */
+        .flex-col { flex: 1; min-width: 0; } 
 
         /* Fix Date Input for iOS Safari */
         .date-wrapper { position: relative; width: 100%; height: 47px; border: 2px solid #eee; border-radius: 10px; background: #fff; display: flex; align-items: center; padding: 0 12px; transition: 0.3s; box-sizing: border-box; }
@@ -177,9 +177,8 @@
             .header-tools .btn { padding: 10px !important; font-size: 12px !important; }
             #roomFilter { display: none; } 
             .month-nav input[type="month"] { width: 100px; }
-            .modal-content { padding: 15px; } /* Thu nhỏ lề cho đt nhỏ */
+            .modal-content { padding: 15px; } 
         }
-        /* Phân luồng Grid 1 cột nếu màn hình quá hẹp để nút bấm không đè nhau */
         @media (max-width: 380px) {
             .btn-row { grid-template-columns: 1fr; }
             .btn-cancel { grid-column: 1; }
@@ -208,7 +207,7 @@
         
         <button class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
         <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="openMinibarCatalog()">📦 DỊCH VỤ</button>
-        <button class="btn btn-s" style="background: #27ae60; padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 CSV</button>
+        <button class="btn btn-s" style="background: #27ae60; padding: 10px 15px; font-size: 13px;" onclick="exportExcel()">📥 XUẤT EXCEL</button>
         <button class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
     </div>
 </header>
@@ -685,7 +684,6 @@
         }
     }
 
-
     // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG ---
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
@@ -809,7 +807,6 @@
 
         document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Chi tiết & Gia hạn phòng";
         
-        // --- HTML CHO MINIBAR (FIX TRÀN VIỀN BẰNG FLEX-CONTAINER CHUẨN) ---
         let miniHtml = '';
         if (!isCompleted) {
             miniHtml = `
@@ -996,18 +993,15 @@
         const newStart = `${newStartD}T${oldStartTime}`;
         const newEnd = `${newEndD}T${oldEndTime}`;
 
-        // Kiểm tra xem phòng dự kiến Đổi/Gia hạn có đang bị kẹt lịch bởi khách nào khác không
         const overlap = bookings.some(x => x.id !== bid && x.roomId === newRoomId && (newStart < x.end && newEnd > x.start));
         if(overlap) return alert(`Lỗi: Không thể thực hiện vì Phòng ${newRoomId} đã có khách đặt trong khoảng thời gian này!`);
 
-        // Update dữ liệu thẳng thừng (Nếu là đổi phòng, giá tiền mới đã được tự động thay bằng giá phòng mới)
         await _supabase.from('bookings').update({ 
             roomId: newRoomId, 
             guest: newName, phone: newPhone, start: newStart, 
             end: newEnd, price: newPrice, deposit: newDeposit 
         }).eq('id', bid);
 
-        // NẾU LÀ ĐỔI PHÒNG: Đánh dấu phòng cũ là "Chờ dọn dẹp" nếu khách đã check-in
         if (b.roomId !== newRoomId && b.type === 'red') {
             await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
         }
@@ -1060,31 +1054,111 @@
         }
     }
 
-    // Xuất File CSV (Đã cập nhật Minibar)
-    function exportCSV() {
-        if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
-        let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Minibar,Tien Coc,Tong Tien,Trang Thai\r\n";
-        bookings.forEach(b => {
-            const r = rooms.find(rm => rm.id === b.roomId);
+    // --- TÍNH NĂNG XUẤT EXCEL DẠNG TIMELINE (GANTT CHART) ---
+    window.exportExcel = function() {
+        if(bookings.length === 0 && rooms.length === 0) return alert("Chưa có dữ liệu để xuất!");
+        
+        const year = currentViewDate.getFullYear();
+        const month = currentViewDate.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        // Xây dựng bảng HTML ẩn để nén thành Excel
+        let html = `
+            <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+            <head><meta charset="utf-8"></head>
+            <body>
+            <table border="1" style="border-collapse: collapse; font-family: Arial, sans-serif;">
+                <thead>
+                    <tr style="background-color: #f3f2f1; height: 40px;">
+                        <th style="width: 80px;">Mã LB</th>
+                        <th style="width: 100px;">Tên Phòng</th>
+                        <th style="width: 150px;">Ghi chú</th>
+        `;
+        
+        // Vẽ header ngày tháng
+        for(let i = 1; i <= daysInMonth; i++) {
+            html += `<th style="width: 150px; text-align: center;">${String(i).padStart(2, '0')}/${String(month+1).padStart(2, '0')}</th>`;
+        }
+        html += `</tr></thead><tbody>`;
+
+        // Vẽ từng phòng
+        rooms.forEach(r => {
+            html += `<tr style="height: 60px;">
+                        <td style="text-align: center; font-weight: bold; color: #8e44ad;">${r.lockbox || ''}</td>
+                        <td style="text-align: center; font-weight: bold; background-color: #e8f5e9;">${r.id}</td>
+                        <td style="font-size: 11px;">${r.notes || ''}</td>`;
             
-            const startCal = new Date((b.start ? b.start.substring(0, 10) : realTodayStr) + 'T00:00:00');
-            const endCal = new Date((b.end ? b.end.substring(0, 10) : realTodayStr) + 'T00:00:00');
-            const nights = Math.max((endCal - startCal) / 86400000, 1);
-            
-            const appliedPrice = b.price !== undefined ? b.price : (r ? r.price : 0);
-            const miniTotal = parseInt(b.minibar_total) || 0;
-            const total = (nights * appliedPrice) + miniTotal;
-            const deposit = b.deposit || 0;
-            
-            let statusVN = "Lỗi";
-            if(b.type === 'blue') statusVN = "Chưa cọc"; if(b.type === 'purple') statusVN = "Đã cọc";
-            if(b.type === 'red') statusVN = "Đang ở"; if(b.type === 'grey') statusVN = "Đã trả phòng";
-            
-            csvContent += [b.id, b.guest.replace(/,/g, " "), b.phone || "", b.roomId, fmt(b.start, true), fmt(b.end, true), nights, appliedPrice, miniTotal, deposit, total, statusVN].join(",") + "\r\n";
+            let d = 1;
+            while(d <= daysInMonth) {
+                let currentDateStr = getLocalISODate(new Date(year, month, d, 12, 0, 0));
+                
+                // Tìm booking đè lên ngày hiện tại
+                let b = bookings.find(bk => {
+                    let bkStartD = bk.start ? bk.start.substring(0, 10) : '';
+                    let bkEndD = bk.end ? bk.end.substring(0, 10) : '';
+                    return bk.roomId === r.id && bkStartD <= currentDateStr && bkEndD > currentDateStr;
+                });
+
+                if(b) {
+                    let bkStartD = b.start ? b.start.substring(0, 10) : '';
+                    let bkEndD = b.end ? b.end.substring(0, 10) : '';
+                    
+                    // Cắt gọt số ngày sao cho vừa khít với tháng đang xem
+                    let actualStartD = bkStartD < currentDateStr ? currentDateStr : bkStartD; 
+                    let lastDayOfMonthStr = getLocalISODate(new Date(year, month, daysInMonth, 12));
+                    let actualEndD = bkEndD > lastDayOfMonthStr ? getLocalISODate(new Date(year, month, daysInMonth + 1, 12)) : bkEndD;
+
+                    let sCal = new Date(actualStartD + 'T00:00:00');
+                    let eCal = new Date(actualEndD + 'T00:00:00');
+                    let colspan = Math.max((eCal - sCal) / 86400000, 1);
+
+                    // Tránh việc tràn colspan qua tháng sau
+                    if (d + colspan - 1 > daysInMonth) colspan = daysInMonth - d + 1;
+
+                    // Thông tin hiển thị
+                    let ciTime = b.start ? b.start.substring(11, 16) : '14:00';
+                    let coTime = b.end ? b.end.substring(11, 16) : '12:00';
+                    let appliedPrice = b.price !== undefined ? b.price : r.price;
+                    
+                    // Tính tổng tiền toàn bộ booking (không chỉ phần ở trong tháng này)
+                    let totalNights = Math.max((new Date((b.end?b.end.substring(0,10):realTodayStr)+'T00:00:00') - new Date((b.start?b.start.substring(0,10):realTodayStr)+'T00:00:00')) / 86400000, 1);
+                    let miniTotal = parseInt(b.minibar_total) || 0;
+                    let totalCost = (totalNights * appliedPrice) + miniTotal;
+                    let dep = b.deposit || 0;
+
+                    // Định vị màu sắc theo type
+                    let bgColor = '#fff', fontColor = '#fff';
+                    if(b.type === 'blue') bgColor = '#0071c2'; 
+                    if(b.type === 'purple') bgColor = '#a332c3'; 
+                    if(b.type === 'red') bgColor = '#d4111e'; 
+                    if(b.type === 'grey') { bgColor = '#bdc3c7'; fontColor = '#333'; } // Xám thì chữ đen cho dễ đọc
+
+                    let text = `${b.guest} - Cọc ${(dep/1000)}k - Thu ${(totalCost/1000)}k - CI ${ciTime} CO ${coTime}`;
+
+                    html += `<td colspan="${colspan}" style="background-color: ${bgColor}; color: ${fontColor}; text-align: center; vertical-align: middle; white-space: nowrap; font-size: 12px; font-weight: bold; border: 1px solid #fff;">${text}</td>`;
+
+                    // Nhảy bước loop để bỏ qua các ngày đã bị gộp
+                    d += colspan;
+                } else {
+                    html += `<td></td>`;
+                    d++;
+                }
+            }
+            html += `</tr>`;
         });
-        const link = document.createElement("a");
-        link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "Bao_Cao_Doanh_Thu_PMS.csv");
-        document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        
+        html += `</tbody></table></body></html>`;
+
+        // Xuất file và Đặt tên động
+        let blob = new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel' });
+        let url = URL.createObjectURL(blob);
+        let link = document.createElement("a");
+        link.href = url;
+        let monthStr = String(month + 1).padStart(2, '0');
+        link.download = `T${monthStr}_${year}_LICH_BOOK_PHONG.xls`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 
     function closeModal() { document.getElementById('pmsModal').style.display = 'none'; }
