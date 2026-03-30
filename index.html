@@ -140,6 +140,14 @@
         .btn-d { background: var(--p-red); color: #fff; }
         .btn-cancel { background: #eee; color: #333; grid-column: span 2; }
 
+        /* Excel-like Table cho Minibar */
+        .excel-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 15px;}
+        .excel-table th { background: #f3f2f1; border: 1px solid #c8c6c4; padding: 10px; font-weight: 600; color: #323130; text-align: left; }
+        .excel-table td { border: 1px solid #c8c6c4; padding: 0; background: #fff; position: relative; }
+        .excel-table input { width: 100%; height: 100%; border: none; padding: 10px; outline: none; background: transparent; font-size: 16px !important; }
+        .excel-table input:focus { box-shadow: inset 0 0 0 2px var(--p-blue); }
+        .excel-table button { width: 100%; height: 100%; border: none; padding: 10px; cursor: pointer; font-size: 14px; }
+
         @media (max-width: 1024px) {
             .brand { display: none; } 
         }
@@ -174,7 +182,10 @@
         </select>
         
         <button class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
-        <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 CSV</button>
+        
+        <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="openMinibarCatalog()">📦 DỊCH VỤ</button>
+        
+        <button class="btn btn-s" style="background: #27ae60; padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 CSV</button>
         <button class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
     </div>
 </header>
@@ -235,15 +246,13 @@
         return `${dd}/${mm}/${yyyy}`;
     }
 
-    // Hàm kiểm tra Cảnh báo Quá giờ Check-out
     function checkOverdue(booking) {
-        if (booking.type === 'grey') return false; // Khách đã check-out, bỏ qua
+        if (booking.type === 'grey') return false; 
         if (!booking.end) return false;
         
         const nowMs = new Date().getTime();
-        // Xử lý chuỗi an toàn
         const endMs = new Date(booking.end.replace(' ', 'T')).getTime();
-        return nowMs > endMs; // Trả về true nếu giờ hiện tại đã vượt qua giờ Check-out dự kiến
+        return nowMs > endMs; 
     }
 
     // --- DATA ENGINE ---
@@ -256,6 +265,67 @@
     const realTodayStr = getLocalISODate(new Date()); 
     let currentViewDate = new Date();
     currentViewDate.setHours(12, 0, 0, 0); 
+
+    // --- QUẢN LÝ MINIBAR CATALOG (EXCEL-LIKE) ---
+    function getMinibarCatalog() {
+        return JSON.parse(localStorage.getItem('pms_minibar_catalog')) || [
+            {name: 'Nước suối', price: 10000}, {name: 'Mì ly', price: 15000}, {name: 'Bò húc', price: 20000}
+        ];
+    }
+
+    window.openMinibarCatalog = function() {
+        let catalog = getMinibarCatalog();
+        let html = `
+            <div style="margin-bottom: 10px; font-size: 13px; color: #444;">Nhập trực tiếp vào ô để sửa dữ liệu (giao diện giống Excel). Hệ thống sẽ tự động lưu lại.</div>
+            <div style="overflow-x:auto;">
+            <table class="excel-table">
+                <tr>
+                    <th>Tên mặt hàng</th>
+                    <th>Giá bán (VNĐ)</th>
+                    <th style="width: 50px; text-align:center;">Xóa</th>
+                </tr>`;
+        catalog.forEach((item, idx) => {
+            html += `<tr>
+                <td><input type="text" value="${item.name}" onchange="updateCatalog(${idx}, 'name', this.value)"></td>
+                <td><input type="number" value="${item.price}" onchange="updateCatalog(${idx}, 'price', this.value)"></td>
+                <td style="text-align: center;"><button style="background: #ffebee; color: var(--p-red);" onclick="deleteCatalog(${idx})">✕</button></td>
+            </tr>`;
+        });
+        html += `<tr>
+                <td><input type="text" id="newCatName" placeholder="Thêm món mới..." style="background: #f0f7ff;"></td>
+                <td><input type="number" id="newCatPrice" placeholder="Giá tiền..." style="background: #f0f7ff;"></td>
+                <td style="text-align: center;"><button style="background: var(--s-green); color: white; font-weight:bold;" onclick="addCatalog()">+</button></td>
+            </tr>
+            </table></div>
+            <button class="btn btn-cancel" style="width:100%; margin-top:10px;" onclick="closeModal()">ĐÓNG LẠI</button>
+        `;
+        document.getElementById('mTitle').innerText = `Quản lý Danh mục Dịch vụ`;
+        document.getElementById('mContent').innerHTML = html;
+        document.getElementById('pmsModal').style.display = 'flex';
+    }
+
+    window.updateCatalog = function(idx, field, val) {
+        let cat = getMinibarCatalog();
+        if(field === 'price') val = parseInt(val) || 0;
+        cat[idx][field] = val;
+        localStorage.setItem('pms_minibar_catalog', JSON.stringify(cat));
+    }
+    window.deleteCatalog = function(idx) {
+        let cat = getMinibarCatalog();
+        cat.splice(idx, 1);
+        localStorage.setItem('pms_minibar_catalog', JSON.stringify(cat));
+        openMinibarCatalog();
+    }
+    window.addCatalog = function() {
+        let name = document.getElementById('newCatName').value.trim();
+        let price = parseInt(document.getElementById('newCatPrice').value) || 0;
+        if(!name) return;
+        let cat = getMinibarCatalog();
+        cat.push({name, price});
+        localStorage.setItem('pms_minibar_catalog', JSON.stringify(cat));
+        openMinibarCatalog();
+    }
+
 
     // --- HÀM TẢI VÀ ĐỒNG BỘ DỮ LIỆU TỪ SUPABASE ---
     async function loadData() {
@@ -320,7 +390,8 @@
             const endCal = new Date((b.end ? b.end.substring(0, 10) : realTodayStr) + 'T00:00:00');
             const nights = Math.max((endCal - startCal) / 86400000, 1);
             const appliedPrice = b.price !== undefined ? b.price : (rooms.find(rm => rm.id === b.roomId)?.price || 0);
-            return sum + (nights * appliedPrice);
+            const miniTotal = parseInt(b.minibar_total) || 0; // Cộng doanh thu minibar
+            return sum + (nights * appliedPrice) + miniTotal; 
         }, 0);
 
         document.getElementById('topStats').innerHTML = `
@@ -354,7 +425,6 @@
             let sttText = 'Sạch - Sẵn sàng';
             
             if (activeBooking) {
-                // Tích hợp cảnh báo màu Cam cho Sidebar
                 if (checkOverdue(activeBooking)) {
                     badgeColor = '#ff9800'; 
                     sttText = 'QUÁ GIỜ TRẢ PHÒNG!';
@@ -444,7 +514,6 @@
 
                     const isCrossMonth = (b.start ? b.start.substring(0, 10) : '') < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
 
-                    // Tích hợp Class CSS Nhấp nháy Overdue
                     const overdueCls = checkOverdue(b) ? ' tag-overdue' : '';
 
                     cell.innerHTML = `
@@ -667,7 +736,7 @@
 
         const newBk = { 
             id: 'BK'+Date.now(), roomId, guest, phone, start: startStr, end: endStr, 
-            type: type, price: price, deposit: deposit 
+            type: type, price: price, deposit: deposit, minibar_total: 0, minibar_items: JSON.stringify([])
         };
         
         await _supabase.from('bookings').insert([newBk]);
@@ -675,7 +744,7 @@
         await loadData();
     }
 
-    function openDetail(bid) {
+    window.openDetail = function(bid) {
         const b = bookings.find(x => x.id === bid);
         if(!b) return; 
         const r = rooms.find(rm => rm.id === b.roomId);
@@ -692,12 +761,42 @@
         
         const appliedPrice = b.price !== undefined ? b.price : r.price;
         const deposit = b.deposit || 0;
-        const totalCost = nights * appliedPrice;
+        const roomCost = nights * appliedPrice;
+        
+        // --- XỬ LÝ DỮ LIỆU MINIBAR ---
+        let miniItems = [];
+        try { miniItems = typeof b.minibar_items === 'string' ? JSON.parse(b.minibar_items) : (b.minibar_items || []); } catch(e) { miniItems = []; }
+        let miniTotal = parseInt(b.minibar_total) || 0;
+
+        const totalCost = roomCost + miniTotal;
         const remaining = totalCost - deposit;
         const isCompleted = b.type === 'grey';
 
         document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Chi tiết & Gia hạn phòng";
         
+        // --- HTML CHO MINIBAR ---
+        const catalog = getMinibarCatalog();
+        let miniHtml = '';
+        if (!isCompleted) {
+            miniHtml = `
+            <div style="background:#fdfaf0; border: 1px solid #fcebb6; padding:15px; border-radius:12px; margin-bottom:15px;">
+                <h4 style="margin: 0 0 10px 0; color: var(--p-blue); font-size: 14px;">🛒 Gọi Dịch vụ / Minibar</h4>
+                <div style="display:flex; gap:8px; margin-bottom: 12px;">
+                    <select id="mbItem" style="flex:2; padding: 12px; border: 2px solid #eee; border-radius: 8px; font-size: 16px !important; background: #fff; outline:none;">
+                        ${catalog.map(c => `<option value="${c.name}|${c.price}">${c.name} - ${(c.price/1000)}k</option>`).join('')}
+                    </select>
+                    <input type="number" id="mbQty" value="1" min="1" style="flex:1; padding: 12px; border: 2px solid #eee; border-radius: 8px; font-size: 16px !important; text-align: center; outline:none; background:#fff;">
+                    <button class="btn btn-s" style="padding: 10px 15px; font-size: 16px; font-weight:bold;" onclick="addMbToBooking('${bid}')">+</button>
+                </div>
+                <div id="mbList" style="font-size: 14px; color: #444;">
+                    ${miniItems.map((m, i) => `<div style="display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px dashed #e0e0e0;">
+                        <span>${m.qty}x ${m.name}</span>
+                        <span><b>${(m.qty * m.price).toLocaleString()}đ</b> <span style="color:var(--p-red); cursor:pointer; margin-left:12px; font-weight:bold;" onclick="removeMb('${bid}', ${i})">✕</span></span>
+                    </div>`).join('')}
+                </div>
+            </div>`;
+        }
+
         let actionButtons = '';
         if (isCompleted) {
             actionButtons = `
@@ -714,7 +813,8 @@
                     <div class="bill-row" style="color:var(--p-blue); font-size:13px; font-weight:bold;"><span>⏱ Giờ vào:</span><span>${fmt(bStart, true)}</span></div>
                     <div class="bill-row" style="color:var(--p-red); font-size:13px; font-weight:bold; margin-bottom: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 8px;"><span>🚪 Giờ ra:</span><span>${fmt(bEnd, true)}</span></div>
                     <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
-                    <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
+                    <div class="bill-row"><span>Tiền phòng:</span><span>${roomCost.toLocaleString()}đ</span></div>
+                    ${miniTotal > 0 ? `<div class="bill-row" style="color:var(--s-purple);"><span>Phụ thu Dịch vụ:</span><span>+ ${miniTotal.toLocaleString()}đ</span></div>` : ''}
                     <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
                     <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
                 </div>
@@ -730,17 +830,15 @@
             
             const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
 
-            // Tích hợp thả xuống Đảo Phòng (Dropdown Select)
             const roomSelectHtml = `
                 <div style="flex:1;">
                     <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px; color:var(--p-blue);">Phòng (Đổi phòng)</label>
-                    <select id="dRoomId" style="padding: 6px; font-size: 15px; font-weight: bold; color: var(--p-blue); border: 2px solid var(--p-blue); border-radius: 8px; outline: none; width: 100%; max-width: 140px; background: white;">
+                    <select id="dRoomId" style="padding: 8px; font-size: 16px !important; font-weight: bold; color: var(--p-blue); border: 2px solid var(--p-blue); border-radius: 8px; outline: none; width: 100%; max-width: 140px; background: white;">
                         ${rooms.map(rm => `<option value="${rm.id}" ${rm.id === b.roomId ? 'selected' : ''}>Phòng ${rm.id}</option>`).join('')}
                     </select>
                 </div>
             `;
 
-            // Tích hợp cảnh báo Quá Giờ
             const overdueWarningHtml = checkOverdue(b) ? `<div style="color:white; font-weight:bold; font-size: 13px; text-align:center; padding: 8px; margin-bottom: 12px; background: #ff9800; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">⚠️ KHÁCH ĐÃ QUÁ GIỜ CHECK-OUT DỰ KIẾN!</div>` : '';
 
             document.getElementById('mContent').innerHTML = `
@@ -776,11 +874,14 @@
                     </div>
                     <button class="btn btn-p" style="width:100%; padding: 10px; font-size: 13px; margin-top:5px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / ĐỔI PHÒNG</button>
                 </div>
+                
+                ${miniHtml}
 
                 <div class="bill-box">
                     ${b.type === 'red' ? `<div class="bill-row" style="color:var(--p-blue); font-size:13px; font-weight:bold; margin-bottom: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 8px;"><span>⏱ Giờ vào (thực tế):</span><span>${fmt(bStart, true)}</span></div>` : ''}
                     <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
-                    <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
+                    <div class="bill-row"><span>Tiền phòng:</span><span>${roomCost.toLocaleString()}đ</span></div>
+                    ${miniTotal > 0 ? `<div class="bill-row" style="color:var(--s-purple);"><span>Phụ thu Dịch vụ:</span><span>+ ${miniTotal.toLocaleString()}đ</span></div>` : ''}
                     <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
                     <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
                 </div>
@@ -790,9 +891,59 @@
         document.getElementById('pmsModal').style.display = 'flex';
     }
 
+    // --- CÁC HÀM XỬ LÝ MINIBAR THÊM/XÓA ---
+    window.addMbToBooking = async function(bid) {
+        const b = bookings.find(x => x.id === bid);
+        const itemVal = document.getElementById('mbItem').value;
+        const qty = parseInt(document.getElementById('mbQty').value) || 1;
+        
+        if(!itemVal || qty < 1) return;
+        
+        const [name, priceStr] = itemVal.split('|');
+        const price = parseInt(priceStr);
+        
+        let miniItems = [];
+        try { miniItems = typeof b.minibar_items === 'string' ? JSON.parse(b.minibar_items) : (b.minibar_items || []); } catch(e) { miniItems = []; }
+        miniItems.push({ name, price, qty });
+        const newTotal = (parseInt(b.minibar_total) || 0) + (price * qty);
+        
+        const { error } = await _supabase.from('bookings').update({ 
+            minibar_total: newTotal,
+            minibar_items: JSON.stringify(miniItems)
+        }).eq('id', bid);
+
+        if(error) {
+            alert("Lưu thất bại! Bạn đã tạo 2 cột minibar_total và minibar_items trên Supabase chưa?");
+            return;
+        }
+        await loadData();
+        openDetail(bid); 
+    }
+
+    window.removeMb = async function(bid, idx) {
+        const b = bookings.find(x => x.id === bid);
+        let miniItems = typeof b.minibar_items === 'string' ? JSON.parse(b.minibar_items) : (b.minibar_items || []);
+        
+        if(idx < 0 || idx >= miniItems.length) return;
+        
+        const removed = miniItems.splice(idx, 1)[0];
+        const newTotal = Math.max((parseInt(b.minibar_total) || 0) - (removed.price * removed.qty), 0);
+        
+        const { error } = await _supabase.from('bookings').update({ 
+            minibar_total: newTotal,
+            minibar_items: JSON.stringify(miniItems)
+        }).eq('id', bid);
+        
+        if(!error) {
+            await loadData();
+            openDetail(bid);
+        }
+    }
+
+    // --- LƯU THAY ĐỔI & LOGIC ĐỔI PHÒNG (CẮT ĐÔI) ---
     async function saveBookingChanges(bid) {
         const b = bookings.find(x => x.id === bid);
-        const newRoomId = document.getElementById('dRoomId').value; // Lấy ID phòng mới để xử lý Đổi phòng
+        const newRoomId = document.getElementById('dRoomId').value; 
         const newName = document.getElementById('dName').value;
         const newPhone = document.getElementById('dPhone').value.trim();
         const newStartD = document.getElementById('dStart').value;
@@ -802,30 +953,71 @@
 
         if(!newName || newStartD >= newEndD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
 
-        // Giữ nguyên giờ checkin checkout cũ
         const oldStartTime = (b.start && b.start.includes('T')) ? b.start.substring(11, 16) : '14:00';
         const oldEndTime = (b.end && b.end.includes('T')) ? b.end.substring(11, 16) : '12:00';
 
         const newStart = `${newStartD}T${oldStartTime}`;
         const newEnd = `${newEndD}T${oldEndTime}`;
 
-        // Kiểm tra xem phòng dự kiến Đổi/Gia hạn có đang bị kẹt lịch bởi khách nào khác không
         const overlap = bookings.some(x => x.id !== bid && x.roomId === newRoomId && (newStart < x.end && newEnd > x.start));
         if(overlap) return alert(`Lỗi: Không thể thực hiện vì Phòng ${newRoomId} đã có khách đặt trong khoảng thời gian này!`);
 
-        await _supabase.from('bookings').update({ 
-            roomId: newRoomId, // Đổi phòng
-            guest: newName, phone: newPhone, start: newStart, 
-            end: newEnd, price: newPrice, deposit: newDeposit 
-        }).eq('id', bid);
-
-        // Cập nhật lại trạng thái sạch/bẩn nếu có thao tác đổi phòng
+        // NẾU ĐANG LƯU TRÚ MÀ ĐỔI PHÒNG (Thực hiện Cắt đôi booking)
         if (b.roomId !== newRoomId && b.type === 'red') {
+            
+            // 1. Tính toán nhẩm tiền phòng cũ để nhắc nhở
+            const startCal = new Date((b.start ? b.start.substring(0, 10) : realTodayStr) + 'T00:00:00');
+            const actualOutDateStr = realTodayStr; 
+            const endCal = new Date(actualOutDateStr + 'T00:00:00');
+            let nightsOld = Math.max((endCal - startCal) / 86400000, 0); 
+            if (nightsOld === 0) nightsOld = 1; 
+            const appliedPriceOld = b.price !== undefined ? b.price : rooms.find(r => r.id === b.roomId).price;
+            const oldTotalCost = nightsOld * appliedPriceOld + (parseInt(b.minibar_total) || 0);
+            
+            const actualOut = `${actualOutDateStr}T${getCurrentTimeStr()}`;
+
+            // 2. Chốt sổ phòng cũ
+            await _supabase.from('bookings').update({ 
+                end: actualOut,
+                deposit: 0, // Bưng toàn bộ cọc sang phòng mới
+                type: 'grey',
+                guest: b.guest + ` (Đã chuyển sang P.${newRoomId})`
+            }).eq('id', bid);
+
+            // 3. Đẻ ra Booking ở phòng mới nối tiếp thời gian
+            const newBk = {
+                id: 'BK' + Date.now(),
+                roomId: newRoomId,
+                guest: newName + ` (Từ P.${b.roomId} - Nhớ thu ${oldTotalCost.toLocaleString()}đ phòng cũ)`,
+                phone: newPhone,
+                start: `${actualOutDateStr}T${getCurrentTimeStr()}`,
+                end: newEnd,
+                type: 'red',
+                price: newPrice,
+                deposit: newDeposit, 
+                minibar_total: 0, 
+                minibar_items: JSON.stringify([])
+            };
+            await _supabase.from('bookings').insert([newBk]);
+
+            // 4. Bật cờ dọn dẹp cho phòng cũ
             await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
+
+        } else {
+            // CẬP NHẬT BÌNH THƯỜNG (Cùng phòng hoặc chưa check-in)
+            await _supabase.from('bookings').update({ 
+                roomId: newRoomId, 
+                guest: newName, phone: newPhone, start: newStart, 
+                end: newEnd, price: newPrice, deposit: newDeposit 
+            }).eq('id', bid);
+
+            if (b.roomId !== newRoomId && b.type === 'red') {
+                await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
+            }
         }
 
         await loadData();
-        openDetail(bid); 
+        closeModal(); 
     }
 
     async function checkOut(bid) {
@@ -872,10 +1064,10 @@
         }
     }
 
-    // Xuất File CSV
+    // Xuất File CSV (Đã cập nhật Minibar)
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
-        let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Minibar,Tien Coc,Tong Tien,Trang Thai\r\n";
         bookings.forEach(b => {
             const r = rooms.find(rm => rm.id === b.roomId);
             
@@ -884,13 +1076,15 @@
             const nights = Math.max((endCal - startCal) / 86400000, 1);
             
             const appliedPrice = b.price !== undefined ? b.price : (r ? r.price : 0);
-            const total = nights * appliedPrice;
+            const miniTotal = parseInt(b.minibar_total) || 0;
+            const total = (nights * appliedPrice) + miniTotal;
             const deposit = b.deposit || 0;
+            
             let statusVN = "Lỗi";
             if(b.type === 'blue') statusVN = "Chưa cọc"; if(b.type === 'purple') statusVN = "Đã cọc";
             if(b.type === 'red') statusVN = "Đang ở"; if(b.type === 'grey') statusVN = "Đã trả phòng";
             
-            csvContent += [b.id, b.guest.replace(/,/g, " "), b.phone || "", b.roomId, fmt(b.start, true), fmt(b.end, true), nights, appliedPrice, deposit, total, statusVN].join(",") + "\r\n";
+            csvContent += [b.id, b.guest.replace(/,/g, " "), b.phone || "", b.roomId, fmt(b.start, true), fmt(b.end, true), nights, appliedPrice, miniTotal, deposit, total, statusVN].join(",") + "\r\n";
         });
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "Bao_Cao_Doanh_Thu_PMS.csv");
