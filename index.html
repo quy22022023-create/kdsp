@@ -189,10 +189,30 @@
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A';
     const _supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    // --- HÀM HỖ TRỢ NGÀY GIỜ CHUẨN ---
+    // --- CÁC HÀM HỖ TRỢ NGÀY GIỜ CHUẨN (CẬP NHẬT MỚI) ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - offset).toISOString().split('T')[0];
+    }
+
+    function getLocalISODateTime(d) {
+        const offset = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+    }
+
+    // Hàm chuyển đổi format sang dd/mm/yy hh:mm
+    function fmt(isoDateStr, includeTime = false) {
+        if(!isoDateStr) return '';
+        const d = new Date(isoDateStr);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yy = String(d.getFullYear()).slice(-2);
+        if (includeTime && isoDateStr.includes('T')) {
+            const hh = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            return `${dd}/${mm}/${yy} ${hh}:${min}`;
+        }
+        return `${dd}/${mm}/${yy}`;
     }
 
     // --- DATA ENGINE ---
@@ -208,9 +228,7 @@
 
     // --- HÀM TẢI VÀ ĐỒNG BỘ DỮ LIỆU TỪ SUPABASE ---
     async function loadData() {
-        // Tải dữ liệu phòng
         const { data: rms, error: e1 } = await _supabase.from('rooms').select('*').order('id', { ascending: true });
-        // Tải dữ liệu đặt phòng
         const { data: bks, error: e2 } = await _supabase.from('bookings').select('*');
         
         if (e1 || e2) {
@@ -256,12 +274,18 @@
     }
 
     function renderDashboard() {
-        const active = bookings.filter(b => realTodayStr >= b.start && realTodayStr < b.end && b.type === 'red').length;
+        const active = bookings.filter(b => {
+            const bStartD = b.start.split('T')[0];
+            const bEndD = b.end.split('T')[0];
+            return realTodayStr >= bStartD && realTodayStr < bEndD && b.type === 'red';
+        }).length;
         
         const totalRev = bookings.reduce((sum, b) => {
-            const days = (new Date(b.end) - new Date(b.start)) / 86400000;
+            const startCal = new Date(b.start.split('T')[0] + 'T00:00:00');
+            const endCal = new Date(b.end.split('T')[0] + 'T00:00:00');
+            const nights = Math.max((endCal - startCal) / 86400000, 1);
             const appliedPrice = b.price !== undefined ? b.price : (rooms.find(rm => rm.id === b.roomId)?.price || 0);
-            return sum + (days * appliedPrice);
+            return sum + (nights * appliedPrice);
         }, 0);
 
         document.getElementById('topStats').innerHTML = `
@@ -284,9 +308,13 @@
         });
 
         filteredRooms.forEach(r => {
-            const activeBooking = bookings.find(b => b.roomId === r.id && realTodayStr >= b.start && realTodayStr < b.end && b.type === 'red');
-            let isDirty = r.status === 'dirty';
+            const activeBooking = bookings.find(b => {
+                const bStartD = b.start.split('T')[0];
+                const bEndD = b.end.split('T')[0];
+                return b.roomId === r.id && realTodayStr >= bStartD && realTodayStr < bEndD && b.type === 'red';
+            });
             
+            let isDirty = r.status === 'dirty';
             let badgeColor = 'var(--s-green)'; 
             let sttText = 'Sạch - Sẵn sàng';
             
@@ -328,10 +356,12 @@
             dateArr.push(ds);
             
             const isToday = ds === realTodayStr ? 'today' : '';
+            const labelDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}`;
+            
             header.innerHTML += `
                 <div class="date-unit ${isToday}">
                     <span>${d.toLocaleDateString('vi-VN', {weekday: 'short'})}</span>
-                    <b>${d.getDate()}/${d.getMonth()+1}</b>
+                    <b>${labelDate}</b>
                 </div>`;
         }
 
@@ -355,17 +385,18 @@
                 const cell = document.createElement('div');
                 cell.className = 'grid-cell';
                 
-                const b = bookings.find(bk => bk.roomId === r.id && 
-                    (bk.start === date || (date === viewStartStr && bk.start < viewStartStr && bk.end > viewStartStr))
-                );
+                const b = bookings.find(bk => {
+                    const bkStartD = bk.start.split('T')[0];
+                    const bkEndD = bk.end.split('T')[0];
+                    return bk.roomId === r.id && (bkStartD === date || (date === viewStartStr && bk.start < viewStartStr && bkEndD > viewStartStr));
+                });
 
                 if(b) {
-                    let startRenderDate = new Date(date);
-                    let endRenderDate = new Date(b.end);
-                    let durationToRender = (endRenderDate - startRenderDate) / 86400000;
+                    const startCal = new Date(b.start.split('T')[0] + 'T00:00:00');
+                    const endCal = new Date(b.end.split('T')[0] + 'T00:00:00');
+                    const durationToRender = Math.max((endCal - startCal) / 86400000, 1);
                     
                     const width = (durationToRender * (window.innerWidth <= 768 ? 70 : 100)) - 10;
-                    const totalNights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
                     const label = b.type === 'grey' ? '(Đã xong)' : '';
                     const depositText = (b.deposit && b.deposit > 0) ? ` - Cọc: ${(b.deposit/1000)}k` : '';
 
@@ -374,7 +405,7 @@
                     cell.innerHTML = `
                         <div class="booking-tag tag-${b.type}" style="width: ${width}px; ${isCrossMonth}" onclick="openDetail('${b.id}')">
                             <div style="white-space:nowrap; overflow:hidden">${b.guest} ${label}</div>
-                            <small>${totalNights} đêm${depositText}</small>
+                            <small>${durationToRender} đêm${depositText}</small>
                         </div>`;
                 } else {
                     cell.onclick = () => openBooking(r.id, date);
@@ -385,18 +416,22 @@
         });
     }
 
-    // --- TÍNH NĂNG TÌM PHÒNG TRỐNG THEO NGÀY ---
+    // --- TÍNH NĂNG TÌM PHÒNG TRỐNG THEO NGÀY GIỜ ---
     function openSearchModal() {
         document.getElementById('mTitle').innerText = `Bộ lọc Tìm phòng trống`;
-        let tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
-        const defaultOut = getLocalISODate(tmr);
+        
+        let today = new Date(); today.setHours(14, 0, 0, 0);
+        let tmr = new Date(); tmr.setDate(tmr.getDate() + 1); tmr.setHours(12, 0, 0, 0);
+        
+        const defaultIn = getLocalISODateTime(today);
+        const defaultOut = getLocalISODateTime(tmr);
 
         document.getElementById('mContent').innerHTML = `
             <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px; font-size:13px; color:#333;">
                 Nhập khoảng thời gian khách muốn ở. Hệ thống sẽ lọc và chỉ hiển thị những phòng <b>chưa có ai đặt</b> trong thời gian này.
             </div>
-            <div class="f-group"><label>Ngày khách muốn Check-in</label><input id="sStart" type="date" value="${realTodayStr}"></div>
-            <div class="f-group"><label>Ngày khách Check-out</label><input id="sEnd" type="date" value="${defaultOut}"></div>
+            <div class="f-group"><label>Thời gian khách Check-in</label><input id="sStart" type="datetime-local" value="${defaultIn}"></div>
+            <div class="f-group"><label>Thời gian khách Check-out</label><input id="sEnd" type="datetime-local" value="${defaultOut}"></div>
             <div class="btn-row" style="margin-top: 25px;">
                 <button class="btn btn-p" onclick="executeSearch()">TÌM PHÒNG TRỐNG</button>
                 <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
@@ -408,7 +443,7 @@
     function executeSearch() {
         const sStart = document.getElementById('sStart').value;
         const sEnd = document.getElementById('sEnd').value;
-        if (!sStart || !sEnd || sStart >= sEnd) return alert("Ngày đi phải lớn hơn ngày đến!");
+        if (!sStart || !sEnd || sStart >= sEnd) return alert("Ngày giờ đi phải lớn hơn ngày đến!");
 
         searchCriteria = { start: sStart, end: sEnd };
 
@@ -419,7 +454,7 @@
             opt.value = 'search';
             document.getElementById('roomFilter').appendChild(opt);
         }
-        opt.text = `Đang lọc: ${sStart.split('-').reverse().join('/')} ➔ ${sEnd.split('-').reverse().join('/')}`;
+        opt.text = `Đang lọc: ${fmt(sStart, true)} ➔ ${fmt(sEnd, true)}`;
         opt.style.display = 'block';
         
         document.getElementById('roomFilter').value = 'search';
@@ -428,7 +463,7 @@
         closeModal(); render();
     }
 
-    // --- TÍNH NĂNG QUẢN LÝ PHÒNG (SUPABASE) ---
+    // --- TÍNH NĂNG QUẢN LÝ PHÒNG ---
     function openRoomSettings(rid) {
         const r = rooms.find(x => x.id === rid);
         document.getElementById('mTitle').innerText = `Cài đặt phòng`;
@@ -458,13 +493,11 @@
         if(newId !== oldRid && rooms.some(x => x.id === newId)) return alert("Tên phòng này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.");
 
         if(newId !== oldRid) {
-            // Thay đổi ID phòng: Tạo phòng mới -> Chuyển Bookings sang phòng mới -> Xóa phòng cũ
             const r = rooms.find(x => x.id === oldRid);
             await _supabase.from('rooms').insert([{ id: newId, price: newPrice, cat: r.cat || "", status: r.status, lockbox: newLockbox, notes: newNotes }]);
             await _supabase.from('bookings').update({ roomId: newId }).eq('roomId', oldRid);
             await _supabase.from('rooms').delete().eq('id', oldRid);
         } else {
-            // Chỉ cập nhật thông tin
             await _supabase.from('rooms').update({ price: newPrice, lockbox: newLockbox, notes: newNotes }).eq('id', oldRid);
         }
         
@@ -478,8 +511,8 @@
         if (hasBookings) msg = `CẢNH BÁO NGUY HIỂM:\nPhòng ${rid} đang có lịch sử khách hàng!\nBạn vẫn muốn tiếp tục xóa?`;
 
         if(confirm(msg)) {
-            await _supabase.from('bookings').delete().eq('roomId', rid); // Xóa lịch sử phòng trước
-            await _supabase.from('rooms').delete().eq('id', rid); // Xóa phòng sau
+            await _supabase.from('bookings').delete().eq('roomId', rid); 
+            await _supabase.from('rooms').delete().eq('id', rid); 
             closeModal(); 
             await loadData();
         }
@@ -502,7 +535,7 @@
     }
 
 
-    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG (SUPABASE) ---
+    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG CHI TIẾT THEO GIỜ ---
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
@@ -512,8 +545,13 @@
 
     function openBooking(roomId, date) {
         const r = rooms.find(x => x.id === roomId);
-        let nextDay = new Date(date); nextDay.setDate(nextDay.getDate() + 1);
-        const nextDayStr = getLocalISODate(nextDay);
+        
+        let startD = new Date(date + 'T14:00:00');
+        let endD = new Date(date + 'T12:00:00');
+        endD.setDate(endD.getDate() + 1);
+        
+        const startStr = getLocalISODateTime(startD);
+        const endStr = getLocalISODateTime(endD);
 
         document.getElementById('mTitle').innerText = `Đặt phòng ${roomId}`;
         document.getElementById('mContent').innerHTML = `
@@ -525,8 +563,8 @@
             </div>
 
             <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="fStart" type="date" value="${date}"></div>
-                <div class="f-group" style="flex:1"><label>Đến ngày</label><input id="fEnd" type="date" value="${nextDayStr}"></div>
+                <div class="f-group" style="flex:1"><label>Ngày giờ Check-in</label><input id="fStart" type="datetime-local" value="${startStr}"></div>
+                <div class="f-group" style="flex:1"><label>Ngày giờ Check-out</label><input id="fEnd" type="datetime-local" value="${endStr}"></div>
             </div>
             <div style="display:flex; gap:10px">
                 <div class="f-group" style="flex:1"><label>Giá thỏa thuận / Đêm</label><input id="fPrice" type="number" value="${r.price}"></div>
@@ -553,7 +591,7 @@
         const price = parseInt(document.getElementById('fPrice').value) || 0;
         const deposit = parseInt(document.getElementById('fDeposit').value) || 0;
 
-        if(!guest || start >= end) return alert("Vui lòng kiểm tra lại thông tin ngày tháng hoặc tên khách!");
+        if(!guest || start >= end) return alert("Vui lòng kiểm tra lại thông tin thời gian hoặc tên khách!");
 
         const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
         if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
@@ -572,7 +610,13 @@
         const b = bookings.find(x => x.id === bid);
         const r = rooms.find(rm => rm.id === b.roomId);
         
-        const nights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
+        let bStart = b.start.includes('T') ? b.start.slice(0, 16) : b.start + 'T14:00';
+        let bEnd = b.end.includes('T') ? b.end.slice(0, 16) : b.end + 'T12:00';
+        
+        const startCal = new Date(bStart.split('T')[0] + 'T00:00:00');
+        const endCal = new Date(bEnd.split('T')[0] + 'T00:00:00');
+        const nights = Math.max((endCal - startCal) / 86400000, 1);
+        
         const appliedPrice = b.price !== undefined ? b.price : r.price;
         const deposit = b.deposit || 0;
         const totalCost = nights * appliedPrice;
@@ -587,12 +631,11 @@
                 <button class="btn btn-d" style="grid-column: span 2" onclick="delBK('${bid}')">XÓA HẲN LỊCH SỬ NÀY</button>
                 <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
             `;
-            // Giao diện chỉ đọc cho lịch sử
             document.getElementById('mContent').innerHTML = `
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
                     <h2 style="margin:0">${b.guest} <span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span></h2>
                     <p style="margin: 4px 0; color: #555;">SĐT: <b>${b.phone || 'Không có'}</b></p>
-                    <p style="margin: 4px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
+                    <p style="margin: 4px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${fmt(bStart, true)} ➔ ${fmt(bEnd, true)}</p>
                 </div>
                 <div class="bill-box">
                     <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
@@ -612,7 +655,6 @@
             
             const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
 
-            // Giao diện có thể Chỉnh sửa/Gia hạn trực tiếp
             document.getElementById('mContent').innerHTML = `
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
@@ -624,8 +666,8 @@
                         <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
                     </div>
                     <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="dStart" type="date" value="${b.start}"></div>
-                        <div class="f-group" style="flex:1"><label>Đến ngày (Gia hạn)</label><input id="dEnd" type="date" value="${b.end}"></div>
+                        <div class="f-group" style="flex:1"><label>Giờ Check-in</label><input id="dStart" type="datetime-local" value="${bStart}"></div>
+                        <div class="f-group" style="flex:1"><label>Giờ Check-out (Gia hạn)</label><input id="dEnd" type="datetime-local" value="${bEnd}"></div>
                     </div>
                     <div style="display:flex; gap:10px">
                         <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
@@ -655,9 +697,8 @@
         const newPrice = parseInt(document.getElementById('dPrice').value) || 0;
         const newDeposit = parseInt(document.getElementById('dDeposit').value) || 0;
 
-        if(!newName || newStart >= newEnd) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
+        if(!newName || newStart >= newEnd) return alert("Vui lòng kiểm tra lại thông tin ngày giờ!");
 
-        // Kiểm tra trùng lịch (loại trừ chính booking đang sửa)
         const overlap = bookings.some(x => x.id !== bid && x.roomId === b.roomId && (newStart < x.end && newEnd > x.start));
         if(overlap) return alert("Lỗi: Không thể gia hạn vì đã có khách khác đặt phòng trong thời gian này!");
 
@@ -667,7 +708,7 @@
         }).eq('id', bid);
 
         await loadData();
-        openDetail(bid); // Mở lại bảng chi tiết để cập nhật hiển thị Bill mới
+        openDetail(bid); 
     }
 
     async function checkOut(bid) {
@@ -703,20 +744,25 @@
         }
     }
 
-    // Xuất File CSV (giữ nguyên hoạt động trên dữ liệu hiện tại của local)
+    // Xuất File CSV với format dd/mm/yy hh:mm
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
         let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
         bookings.forEach(b => {
             const r = rooms.find(rm => rm.id === b.roomId);
-            const nights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
+            
+            const startCal = new Date(b.start.split('T')[0] + 'T00:00:00');
+            const endCal = new Date(b.end.split('T')[0] + 'T00:00:00');
+            const nights = Math.max((endCal - startCal) / 86400000, 1);
+            
             const appliedPrice = b.price !== undefined ? b.price : (r ? r.price : 0);
             const total = nights * appliedPrice;
             const deposit = b.deposit || 0;
             let statusVN = "Lỗi";
             if(b.type === 'blue') statusVN = "Chưa cọc"; if(b.type === 'purple') statusVN = "Đã cọc";
             if(b.type === 'red') statusVN = "Đang ở"; if(b.type === 'grey') statusVN = "Đã trả phòng";
-            csvContent += [b.id, b.guest.replace(/,/g, " "), b.phone || "", b.roomId, b.start, b.end, nights, appliedPrice, deposit, total, statusVN].join(",") + "\r\n";
+            
+            csvContent += [b.id, b.guest.replace(/,/g, " "), b.phone || "", b.roomId, fmt(b.start, true), fmt(b.end, true), nights, appliedPrice, deposit, total, statusVN].join(",") + "\r\n";
         });
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "Bao_Cao_Doanh_Thu_PMS.csv");
