@@ -189,30 +189,35 @@
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A';
     const _supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    // --- CÁC HÀM HỖ TRỢ NGÀY GIỜ CHUẨN (CẬP NHẬT MỚI) ---
+    // --- CÁC HÀM HỖ TRỢ NGÀY GIỜ CHUẨN ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - offset).toISOString().split('T')[0];
     }
 
-    function getLocalISODateTime(d) {
-        const offset = d.getTimezoneOffset() * 60000;
-        return new Date(d.getTime() - offset).toISOString().slice(0, 16);
+    // Hàm tạo chuỗi chuẩn YYYY-MM-DDTHH:mm cho input datetime-local để tránh lỗi trắng dữ liệu
+    function formatForInput(d) {
+        const yyyy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
     }
 
-    // Hàm chuyển đổi format sang dd/mm/yy hh:mm
+    // Hàm chuyển đổi format sang d/m/yyyy hh:mm (Bỏ số 0 vô nghĩa, đủ 4 số năm)
     function fmt(isoDateStr, includeTime = false) {
         if(!isoDateStr) return '';
         const d = new Date(isoDateStr);
-        const dd = String(d.getDate()).padStart(2, '0');
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const yy = String(d.getFullYear()).slice(-2);
+        const dd = d.getDate();
+        const mm = d.getMonth() + 1;
+        const yyyy = d.getFullYear();
         if (includeTime && isoDateStr.includes('T')) {
             const hh = String(d.getHours()).padStart(2, '0');
             const min = String(d.getMinutes()).padStart(2, '0');
-            return `${dd}/${mm}/${yy} ${hh}:${min}`;
+            return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
         }
-        return `${dd}/${mm}/${yy}`;
+        return `${dd}/${mm}/${yyyy}`;
     }
 
     // --- DATA ENGINE ---
@@ -356,7 +361,7 @@
             dateArr.push(ds);
             
             const isToday = ds === realTodayStr ? 'today' : '';
-            const labelDate = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}`;
+            const labelDate = `${d.getDate()}/${d.getMonth()+1}`;
             
             header.innerHTML += `
                 <div class="date-unit ${isToday}">
@@ -423,8 +428,8 @@
         let today = new Date(); today.setHours(14, 0, 0, 0);
         let tmr = new Date(); tmr.setDate(tmr.getDate() + 1); tmr.setHours(12, 0, 0, 0);
         
-        const defaultIn = getLocalISODateTime(today);
-        const defaultOut = getLocalISODateTime(tmr);
+        const defaultIn = formatForInput(today);
+        const defaultOut = formatForInput(tmr);
 
         document.getElementById('mContent').innerHTML = `
             <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px; font-size:13px; color:#333;">
@@ -550,8 +555,8 @@
         let endD = new Date(date + 'T12:00:00');
         endD.setDate(endD.getDate() + 1);
         
-        const startStr = getLocalISODateTime(startD);
-        const endStr = getLocalISODateTime(endD);
+        const startStr = formatForInput(startD);
+        const endStr = formatForInput(endD);
 
         document.getElementById('mTitle').innerText = `Đặt phòng ${roomId}`;
         document.getElementById('mContent').innerHTML = `
@@ -559,7 +564,7 @@
             
             <div class="f-group">
                 <label>Số điện thoại (Dán tự động lọc chữ)</label>
-                <input id="fPhone" type="tel" placeholder="Dán thông tin chứa SĐT vào đây..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
+                <input id="fPhone" type="tel" placeholder="Dán thông tự động lấy số..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
             </div>
 
             <div style="display:flex; gap:10px">
@@ -586,19 +591,26 @@
     async function confirmBooking(roomId) {
         const guest = document.getElementById('fName').value;
         const phone = document.getElementById('fPhone').value.trim();
-        const start = document.getElementById('fStart').value;
+        let start = document.getElementById('fStart').value;
         const end = document.getElementById('fEnd').value;
         const price = parseInt(document.getElementById('fPrice').value) || 0;
         const deposit = parseInt(document.getElementById('fDeposit').value) || 0;
+        const type = document.getElementById('fType').value;
 
         if(!guest || start >= end) return alert("Vui lòng kiểm tra lại thông tin thời gian hoặc tên khách!");
+
+        // Nếu nhấn Check-in luôn, ghi nhận thời gian bấm nút ngay lập tức
+        if (type === 'red') {
+            const now = new Date();
+            start = formatForInput(now); // Đẩy thời gian thực vào CSDL
+        }
 
         const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
         if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
 
         const newBk = { 
             id: 'BK'+Date.now(), roomId, guest, phone, start, end, 
-            type: document.getElementById('fType').value, price: price, deposit: deposit 
+            type: type, price: price, deposit: deposit 
         };
         
         await _supabase.from('bookings').insert([newBk]);
@@ -610,9 +622,15 @@
         const b = bookings.find(x => x.id === bid);
         const r = rooms.find(rm => rm.id === b.roomId);
         
-        let bStart = b.start.includes('T') ? b.start.slice(0, 16) : b.start + 'T14:00';
-        let bEnd = b.end.includes('T') ? b.end.slice(0, 16) : b.end + 'T12:00';
+        let bStart = b.start.includes('T') ? b.start : b.start + 'T14:00:00Z';
+        let bEnd = b.end.includes('T') ? b.end : b.end + 'T12:00:00Z';
         
+        let dStartObj = new Date(bStart);
+        let dEndObj = new Date(bEnd);
+        
+        const dStartInput = formatForInput(dStartObj);
+        const dEndInput = formatForInput(dEndObj);
+
         const startCal = new Date(bStart.split('T')[0] + 'T00:00:00');
         const endCal = new Date(bEnd.split('T')[0] + 'T00:00:00');
         const nights = Math.max((endCal - startCal) / 86400000, 1);
@@ -666,8 +684,8 @@
                         <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
                     </div>
                     <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>Giờ Check-in</label><input id="dStart" type="datetime-local" value="${bStart}"></div>
-                        <div class="f-group" style="flex:1"><label>Giờ Check-out (Gia hạn)</label><input id="dEnd" type="datetime-local" value="${bEnd}"></div>
+                        <div class="f-group" style="flex:1"><label>Giờ Check-in</label><input id="dStart" type="datetime-local" value="${dStartInput}"></div>
+                        <div class="f-group" style="flex:1"><label>Giờ Check-out (Gia hạn)</label><input id="dEnd" type="datetime-local" value="${dEndInput}"></div>
                     </div>
                     <div style="display:flex; gap:10px">
                         <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
@@ -714,7 +732,10 @@
     async function checkOut(bid) {
         if(confirm("Xác nhận khách đã thanh toán đủ và trả phòng?")) {
             const b = bookings.find(x => x.id === bid);
-            await _supabase.from('bookings').update({ type: 'grey' }).eq('id', bid);
+            // Ghi nhận thời gian Checkout thực tế bằng giờ hiện tại
+            const actualOut = formatForInput(new Date()); 
+            
+            await _supabase.from('bookings').update({ type: 'grey', end: actualOut }).eq('id', bid);
             await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
             closeModal(); 
             await loadData();
@@ -722,7 +743,14 @@
     }
 
     async function updateBK(bid, type) { 
-        await _supabase.from('bookings').update({ type: type }).eq('id', bid);
+        let updateData = { type: type };
+        
+        // Ghi nhận thời gian Checkin thực tế nếu vừa nhấn Check-in
+        if (type === 'red') {
+            updateData.start = formatForInput(new Date());
+        }
+        
+        await _supabase.from('bookings').update(updateData).eq('id', bid);
         closeModal(); 
         await loadData(); 
     }
@@ -744,7 +772,7 @@
         }
     }
 
-    // Xuất File CSV với format dd/mm/yy hh:mm
+    // Xuất File CSV với format d/m/yyyy hh:mm
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
         let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
@@ -771,7 +799,7 @@
 
     function closeModal() { document.getElementById('pmsModal').style.display = 'none'; }
     
-    // Gọi hàm load dữ liệu ngay khi mở app thay vì render() tĩnh
+    // Gọi hàm load dữ liệu ngay khi mở app
     loadData();
 </script>
 </body>
