@@ -195,7 +195,7 @@
         return new Date(d.getTime() - offset).toISOString().substring(0, 10);
     }
 
-    // Hàm tạo chuỗi chuẩn YYYY-MM-DDTHH:mm cho input datetime-local
+    // Hàm tạo chuỗi chuẩn YYYY-MM-DDTHH:mm cho việc chốt giờ
     function formatForInput(d) {
         const yyyy = d.getFullYear();
         const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -205,10 +205,9 @@
         return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
     }
 
-    // Hàm chuyển đổi format sang d/m/yyyy hh:mm
+    // Hàm hiển thị định dạng d/m/yyyy hoặc hh:mm - d/m/yyyy
     function fmt(isoDateStr, includeTime = false) {
         if(!isoDateStr) return '';
-        // Chuẩn hóa dấu cách thành T để tạo đối tượng Date không bị lỗi
         let normalized = isoDateStr.replace(' ', 'T');
         const d = new Date(normalized);
         const dd = d.getDate();
@@ -217,7 +216,7 @@
         if (includeTime && normalized.includes('T')) {
             const hh = String(d.getHours()).padStart(2, '0');
             const min = String(d.getMinutes()).padStart(2, '0');
-            return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+            return `${hh}:${min} - ${dd}/${mm}/${yyyy}`;
         }
         return `${dd}/${mm}/${yyyy}`;
     }
@@ -242,7 +241,6 @@
             console.error("Lỗi tải dữ liệu Supabase:", e1 || e2);
         } else {
             rooms = rms || [];
-            // Vá lỗi Supabase trả về khoảng trắng: Thay thế bằng chữ T để đồng bộ chuẩn hệ thống
             bookings = (bks || []).map(b => {
                 if (b.start && b.start.includes(' ')) b.start = b.start.replace(' ', 'T');
                 if (b.end && b.end.includes(' ')) b.end = b.end.replace(' ', 'T');
@@ -287,7 +285,6 @@
 
     function renderDashboard() {
         const active = bookings.filter(b => {
-            // Lấy chính xác chuỗi YYYY-MM-DD
             const bStartD = b.start.substring(0, 10);
             const bEndD = b.end.substring(0, 10);
             return realTodayStr >= bStartD && realTodayStr < bEndD && b.type === 'red';
@@ -399,7 +396,6 @@
                 cell.className = 'grid-cell';
                 
                 const b = bookings.find(bk => {
-                    // Dùng substring để chống lỗi ngày bị cách ra từ DB
                     const bkStartD = bk.start.substring(0, 10);
                     const bkEndD = bk.end.substring(0, 10);
                     return bk.roomId === r.id && (bkStartD === date || (date === viewStartStr && bkStartD < viewStartStr && bkEndD > viewStartStr));
@@ -430,22 +426,22 @@
         });
     }
 
-    // --- TÍNH NĂNG TÌM PHÒNG TRỐNG THEO NGÀY GIỜ ---
+    // --- TÍNH NĂNG TÌM PHÒNG TRỐNG THEO NGÀY ---
     function openSearchModal() {
         document.getElementById('mTitle').innerText = `Bộ lọc Tìm phòng trống`;
         
-        let today = new Date(); today.setHours(14, 0, 0, 0);
-        let tmr = new Date(); tmr.setDate(tmr.getDate() + 1); tmr.setHours(12, 0, 0, 0);
+        let tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
         
-        const defaultIn = formatForInput(today);
-        const defaultOut = formatForInput(tmr);
+        // Trả về type="date" cho gọn gàng
+        const defaultIn = realTodayStr;
+        const defaultOut = getLocalISODate(tmr);
 
         document.getElementById('mContent').innerHTML = `
             <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px; font-size:13px; color:#333;">
-                Nhập khoảng thời gian khách muốn ở. Hệ thống sẽ lọc và chỉ hiển thị những phòng <b>chưa có ai đặt</b> trong thời gian này.
+                Nhập khoảng ngày khách muốn ở. Hệ thống sẽ lọc những phòng <b>chưa có người đặt</b>.
             </div>
-            <div class="f-group"><label>Thời gian khách Check-in</label><input id="sStart" type="datetime-local" value="${defaultIn}"></div>
-            <div class="f-group"><label>Thời gian khách Check-out</label><input id="sEnd" type="datetime-local" value="${defaultOut}"></div>
+            <div class="f-group"><label>Ngày khách Check-in</label><input id="sStart" type="date" value="${defaultIn}"></div>
+            <div class="f-group"><label>Ngày khách Check-out</label><input id="sEnd" type="date" value="${defaultOut}"></div>
             <div class="btn-row" style="margin-top: 25px;">
                 <button class="btn btn-p" onclick="executeSearch()">TÌM PHÒNG TRỐNG</button>
                 <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
@@ -457,9 +453,10 @@
     function executeSearch() {
         const sStart = document.getElementById('sStart').value;
         const sEnd = document.getElementById('sEnd').value;
-        if (!sStart || !sEnd || sStart >= sEnd) return alert("Ngày giờ đi phải lớn hơn ngày đến!");
+        if (!sStart || !sEnd || sStart >= sEnd) return alert("Ngày đi phải lớn hơn ngày đến!");
 
-        searchCriteria = { start: sStart, end: sEnd };
+        // Gắn thêm đuôi giờ mặc định để bộ lọc so sánh được với TIMESTAMP trong DB
+        searchCriteria = { start: sStart + 'T14:00', end: sEnd + 'T12:00' };
 
         let opt = document.getElementById('optSearch');
         if (!opt) {
@@ -468,7 +465,7 @@
             opt.value = 'search';
             document.getElementById('roomFilter').appendChild(opt);
         }
-        opt.text = `Đang lọc: ${fmt(sStart, true)} ➔ ${fmt(sEnd, true)}`;
+        opt.text = `Đang lọc: ${fmt(sStart)} ➔ ${fmt(sEnd)}`;
         opt.style.display = 'block';
         
         document.getElementById('roomFilter').value = 'search';
@@ -549,7 +546,7 @@
     }
 
 
-    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG CHI TIẾT THEO GIỜ ---
+    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG ---
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
@@ -560,12 +557,9 @@
     function openBooking(roomId, date) {
         const r = rooms.find(x => x.id === roomId);
         
-        let startD = new Date(date + 'T14:00:00');
-        let endD = new Date(date + 'T12:00:00');
-        endD.setDate(endD.getDate() + 1);
-        
-        const startStr = formatForInput(startD);
-        const endStr = formatForInput(endD);
+        // Trả về type="date" cho gọn gàng
+        let nextDay = new Date(date); nextDay.setDate(nextDay.getDate() + 1);
+        const endD = getLocalISODate(nextDay);
 
         document.getElementById('mTitle').innerText = `Đặt phòng ${roomId}`;
         document.getElementById('mContent').innerHTML = `
@@ -573,12 +567,12 @@
             
             <div class="f-group">
                 <label>Số điện thoại (Dán tự động lọc chữ)</label>
-                <input id="fPhone" type="tel" placeholder="Dán thông tự động lấy số..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
+                <input id="fPhone" type="tel" placeholder="Dán thông tin chứa SĐT vào đây..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
             </div>
 
             <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1"><label>Ngày giờ Check-in</label><input id="fStart" type="datetime-local" value="${startStr}"></div>
-                <div class="f-group" style="flex:1"><label>Ngày giờ Check-out</label><input id="fEnd" type="datetime-local" value="${endStr}"></div>
+                <div class="f-group" style="flex:1"><label>Ngày đến</label><input id="fStart" type="date" value="${date}"></div>
+                <div class="f-group" style="flex:1"><label>Ngày đi</label><input id="fEnd" type="date" value="${endD}"></div>
             </div>
             <div style="display:flex; gap:10px">
                 <div class="f-group" style="flex:1"><label>Giá thỏa thuận / Đêm</label><input id="fPrice" type="number" value="${r.price}"></div>
@@ -600,24 +594,27 @@
     async function confirmBooking(roomId) {
         const guest = document.getElementById('fName').value;
         const phone = document.getElementById('fPhone').value.trim();
-        let start = document.getElementById('fStart').value;
-        const end = document.getElementById('fEnd').value;
+        let startD = document.getElementById('fStart').value;
+        const endD = document.getElementById('fEnd').value;
         const price = parseInt(document.getElementById('fPrice').value) || 0;
         const deposit = parseInt(document.getElementById('fDeposit').value) || 0;
         const type = document.getElementById('fType').value;
 
-        if(!guest || start >= end) return alert("Vui lòng kiểm tra lại thông tin thời gian hoặc tên khách!");
+        if(!guest || startD >= endD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng hoặc tên khách!");
 
+        let startStr = startD + 'T14:00';
+        let endStr = endD + 'T12:00';
+
+        // Nếu bấm Check-in luôn, thay thế ngày giờ nhập vào bằng GIỜ THỰC TẾ
         if (type === 'red') {
-            const now = new Date();
-            start = formatForInput(now); 
+            startStr = formatForInput(new Date()); 
         }
 
-        const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
+        const overlap = bookings.some(b => b.roomId === roomId && (startStr < b.end && endStr > b.start));
         if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
 
         const newBk = { 
-            id: 'BK'+Date.now(), roomId, guest, phone, start, end, 
+            id: 'BK'+Date.now(), roomId, guest, phone, start: startStr, end: endStr, 
             type: type, price: price, deposit: deposit 
         };
         
@@ -630,17 +627,15 @@
         const b = bookings.find(x => x.id === bid);
         const r = rooms.find(rm => rm.id === b.roomId);
         
+        // Chuẩn hóa dữ liệu hiển thị
         let bStart = b.start.includes('T') ? b.start : b.start + 'T14:00:00Z';
         let bEnd = b.end.includes('T') ? b.end : b.end + 'T12:00:00Z';
         
-        let dStartObj = new Date(bStart);
-        let dEndObj = new Date(bEnd);
+        const dStartInput = bStart.substring(0, 10); // Chỉ lấy YYYY-MM-DD
+        const dEndInput = bEnd.substring(0, 10);
         
-        const dStartInput = formatForInput(dStartObj);
-        const dEndInput = formatForInput(dEndObj);
-
-        const startCal = new Date(bStart.substring(0, 10) + 'T00:00:00');
-        const endCal = new Date(bEnd.substring(0, 10) + 'T00:00:00');
+        const startCal = new Date(dStartInput + 'T00:00:00');
+        const endCal = new Date(dEndInput + 'T00:00:00');
         const nights = Math.max((endCal - startCal) / 86400000, 1);
         
         const appliedPrice = b.price !== undefined ? b.price : r.price;
@@ -661,9 +656,11 @@
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
                     <h2 style="margin:0">${b.guest} <span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span></h2>
                     <p style="margin: 4px 0; color: #555;">SĐT: <b>${b.phone || 'Không có'}</b></p>
-                    <p style="margin: 4px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${fmt(bStart, true)} ➔ ${fmt(bEnd, true)}</p>
+                    <p style="margin: 4px 0; color: #555;">Phòng: <b>${b.roomId}</b></p>
                 </div>
                 <div class="bill-box">
+                    <div class="bill-row" style="color:var(--p-blue); font-size:13px; font-weight:bold;"><span>⏱ Giờ vào:</span><span>${fmt(bStart, true)}</span></div>
+                    <div class="bill-row" style="color:var(--p-red); font-size:13px; font-weight:bold; margin-bottom: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 8px;"><span>🚪 Giờ ra:</span><span>${fmt(bEnd, true)}</span></div>
                     <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
                     <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
                     <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
@@ -681,6 +678,7 @@
             
             const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
 
+            // Đã trả lại input dạng date đơn giản
             document.getElementById('mContent').innerHTML = `
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
@@ -692,8 +690,8 @@
                         <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
                     </div>
                     <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>Giờ Check-in</label><input id="dStart" type="datetime-local" value="${dStartInput}"></div>
-                        <div class="f-group" style="flex:1"><label>Giờ Check-out (Gia hạn)</label><input id="dEnd" type="datetime-local" value="${dEndInput}"></div>
+                        <div class="f-group" style="flex:1"><label>Ngày đến</label><input id="dStart" type="date" value="${dStartInput}"></div>
+                        <div class="f-group" style="flex:1"><label>Ngày đi (Gia hạn)</label><input id="dEnd" type="date" value="${dEndInput}"></div>
                     </div>
                     <div style="display:flex; gap:10px">
                         <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
@@ -703,6 +701,7 @@
                 </div>
 
                 <div class="bill-box">
+                    ${b.type === 'red' ? `<div class="bill-row" style="color:var(--p-blue); font-size:13px; font-weight:bold; margin-bottom: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 8px;"><span>⏱ Giờ vào (thực tế):</span><span>${fmt(bStart, true)}</span></div>` : ''}
                     <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
                     <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
                     <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
@@ -718,12 +717,19 @@
         const b = bookings.find(x => x.id === bid);
         const newName = document.getElementById('dName').value;
         const newPhone = document.getElementById('dPhone').value.trim();
-        const newStart = document.getElementById('dStart').value;
-        const newEnd = document.getElementById('dEnd').value;
+        const newStartD = document.getElementById('dStart').value;
+        const newEndD = document.getElementById('dEnd').value;
         const newPrice = parseInt(document.getElementById('dPrice').value) || 0;
         const newDeposit = parseInt(document.getElementById('dDeposit').value) || 0;
 
-        if(!newName || newStart >= newEnd) return alert("Vui lòng kiểm tra lại thông tin ngày giờ!");
+        if(!newName || newStartD >= newEndD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
+
+        // Lấy lại phần thời gian (giờ phút) đã lưu trước đó để ghép với ngày mới
+        const oldStartTime = b.start.includes('T') ? b.start.substring(11, 16) : '14:00';
+        const oldEndTime = b.end.includes('T') ? b.end.substring(11, 16) : '12:00';
+
+        const newStart = `${newStartD}T${oldStartTime}`;
+        const newEnd = `${newEndD}T${oldEndTime}`;
 
         const overlap = bookings.some(x => x.id !== bid && x.roomId === b.roomId && (newStart < x.end && newEnd > x.start));
         if(overlap) return alert("Lỗi: Không thể gia hạn vì đã có khách khác đặt phòng trong thời gian này!");
@@ -740,7 +746,7 @@
     async function checkOut(bid) {
         if(confirm("Xác nhận khách đã thanh toán đủ và trả phòng?")) {
             const b = bookings.find(x => x.id === bid);
-            const actualOut = formatForInput(new Date()); 
+            const actualOut = formatForInput(new Date()); // Chốt giờ thực tế
             
             await _supabase.from('bookings').update({ type: 'grey', end: actualOut }).eq('id', bid);
             await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
@@ -752,6 +758,7 @@
     async function updateBK(bid, type) { 
         let updateData = { type: type };
         
+        // Nếu nhấn Check-in, chốt giờ thực tế ngay lúc bấm nút
         if (type === 'red') {
             updateData.start = formatForInput(new Date());
         }
@@ -778,7 +785,7 @@
         }
     }
 
-    // Xuất File CSV với format d/m/yyyy hh:mm
+    // Xuất File CSV với format ngày/tháng
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
         let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
