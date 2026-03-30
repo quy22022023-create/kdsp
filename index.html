@@ -8,14 +8,13 @@
         :root {
             --p-blue: #00459e; --p-gold: #feba02; --p-red: #d4111e;
             --s-green: #008009; --s-purple: #8e44ad; --bg: #f4f7f6;
-            --sidebar-w: 120px; --row-h: 105px; /* Tăng chiều cao để chứa Lockbox và Ghi chú */
+            --sidebar-w: 120px; --row-h: 105px; 
             --cell-w: 100px;
             --border: #e0e0e0; --shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         * { box-sizing: border-box; -webkit-font-smoothing: antialiased; font-family: 'Inter', -apple-system, sans-serif; }
         
-        /* Tối ưu hóa triệt để Viewport cho iOS / Android */
         body { 
             margin: 0; background: var(--bg); overflow: hidden; 
             height: 100vh; height: 100dvh; display: flex; flex-direction: column; 
@@ -60,7 +59,6 @@
         .room-item .r-price { font-size: 11px; font-weight: bold; color: #333; }
         .room-item .r-notes { font-size: 9px; color: #666; text-align: center; margin-top: 2px; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
         
-        /* Đèn báo trạng thái giờ được làm to hơn chút để dễ bấm */
         .badge-status { 
             width: 14px; height: 14px; border-radius: 50%; position: absolute; top: 8px; right: 8px; 
             box-shadow: 0 0 4px rgba(0,0,0,0.3); border: 2px solid #fff; cursor: pointer; transition: 0.2s;
@@ -103,7 +101,7 @@
         }
         .modal-box {
             background: #fff; width: 95%; max-width: 480px; border-radius: 20px;
-            overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto;
+            overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.3); max-height: 88vh; overflow-y: auto;
         }
         .modal-header { background: var(--p-blue); color: #fff; padding: 18px; font-weight: bold; display: flex; justify-content: space-between; position: sticky; top: 0; z-index: 10;}
         .modal-content { padding: 20px 25px; }
@@ -132,7 +130,7 @@
             .brand { display: none; } 
         }
         @media (max-width: 768px) {
-            :root { --sidebar-w: 90px; --cell-w: 70px; --row-h: 110px; } /* Mở rộng xíu trên mobile để chữ ko bị ép */
+            :root { --sidebar-w: 90px; --cell-w: 70px; --row-h: 110px; } 
             .stats-bar { display: none; }
             .header-tools { width: 100%; justify-content: flex-start; padding: 5px; }
             .header-tools .btn { padding: 10px !important; font-size: 12px !important; }
@@ -192,7 +190,6 @@
     }
 
     // --- DATA ENGINE ---
-    // Cập nhật dữ liệu mẫu để có trường lockbox và notes
     let rooms = JSON.parse(localStorage.getItem('pms_rooms')) || [
         { id: "301 (P4)", price: 710000, cat: "Phòng Lớn", status: "clean", lockbox: "9138", notes: "" },
         { id: "P201 (P1)", price: 350000, cat: "Phòng Đơn", status: "clean", lockbox: "6138", notes: "Ban công, ánh sáng tốt" },
@@ -289,7 +286,6 @@
                 sttText = 'Khách đã out - Chờ dọn dẹp';
             }
 
-            // Giao diện Sidebar mới tích hợp Lockbox và Ghi chú. Khi bấm vào vùng ngoài đèn báo, sẽ mở Cài đặt phòng
             sb.innerHTML += `
                 <div class="room-item" onclick="openRoomSettings('${r.id}')" title="Nhấn để mở Cài đặt phòng">
                     <b>${r.id}</b>
@@ -297,7 +293,7 @@
                     <span class="r-price">${(r.price/1000).toLocaleString()}k/đ</span>
                     <span class="r-notes">${r.notes || '---'}</span>
                     
-                    <div class="badge-status" style="background:${badgeColor}" onclick="toggleDirty('${r.id}', event)" title="Tình trạng: ${sttText}. Nhấn để đổi trạng thái Dọn dẹp"></div>
+                    <div class="badge-status" style="background:${badgeColor}" onclick="toggleDirty('${r.id}', event)" title="Tình trạng: ${sttText}. Nhấn để đổi trạng thái"></div>
                 </div>`;
         });
     }
@@ -420,7 +416,7 @@
         closeModal(); render();
     }
 
-    // --- TÍNH NĂNG QUẢN LÝ PHÒNG (ĐÃ BỔ SUNG LOCKBOX & GHI CHÚ) ---
+    // --- TÍNH NĂNG QUẢN LÝ PHÒNG ---
     function openRoomSettings(rid) {
         const r = rooms.find(x => x.id === rid);
         document.getElementById('mTitle').innerText = `Cài đặt phòng`;
@@ -471,7 +467,7 @@
     }
 
     function toggleDirty(rid, event) {
-        if(event) event.stopPropagation(); // Ngăn việc click vào đèn báo làm mở Form cài đặt phòng
+        if(event) event.stopPropagation(); 
         const r = rooms.find(x => x.id === rid);
         if(r.status === 'dirty') {
             if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { r.status = 'clean'; save(); }
@@ -481,7 +477,7 @@
     }
 
 
-    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG ---
+    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG TỐI ƯU HÓA ---
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
@@ -496,7 +492,13 @@
 
         document.getElementById('mTitle').innerText = `Đặt phòng ${roomId}`;
         document.getElementById('mContent').innerHTML = `
-            <div class="f-group"><label>Khách hàng & SĐT</label><input id="fName" type="text" placeholder="VD: Anh Minh - 090xxx"></div>
+            <div class="f-group"><label>Tên khách hàng</label><input id="fName" type="text" placeholder="VD: Anh Minh"></div>
+            
+            <div class="f-group">
+                <label>Số điện thoại (Dán tự động lọc chữ)</label>
+                <input id="fPhone" type="tel" placeholder="Dán thông tin chứa SĐT vào đây..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
+            </div>
+
             <div style="display:flex; gap:10px">
                 <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="fStart" type="date" value="${date}"></div>
                 <div class="f-group" style="flex:1"><label>Đến ngày</label><input id="fEnd" type="date" value="${nextDayStr}"></div>
@@ -506,7 +508,7 @@
                 <div class="f-group" style="flex:1"><label>Tiền đã cọc (VNĐ)</label><input id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0"></div>
             </div>
             <div class="f-group">
-                <label>Trạng thái đặt phòng</label>
+                <label>Trạng thái ban đầu</label>
                 <select id="fType">
                     <option value="blue">Chưa cọc (Xanh)</option>
                     <option value="purple">Đã đặt cọc (Tím)</option>
@@ -520,6 +522,7 @@
 
     function confirmBooking(roomId) {
         const guest = document.getElementById('fName').value;
+        const phone = document.getElementById('fPhone').value.trim();
         const start = document.getElementById('fStart').value;
         const end = document.getElementById('fEnd').value;
         const price = parseInt(document.getElementById('fPrice').value) || 0;
@@ -530,7 +533,10 @@
         const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
         if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
 
-        bookings.push({ id: 'BK'+Date.now(), roomId, guest, start, end, type: document.getElementById('fType').value, price: price, deposit: deposit });
+        bookings.push({ 
+            id: 'BK'+Date.now(), roomId, guest, phone, start, end, 
+            type: document.getElementById('fType').value, price: price, deposit: deposit 
+        });
         closeModal(); save();
     }
 
@@ -545,13 +551,28 @@
         const remaining = totalCost - deposit;
         const isCompleted = b.type === 'grey';
 
-        document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Quản lý lưu trú";
+        document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Chi tiết & Gia hạn phòng";
         
         let actionButtons = '';
         if (isCompleted) {
             actionButtons = `
                 <button class="btn btn-d" style="grid-column: span 2" onclick="delBK('${bid}')">XÓA HẲN LỊCH SỬ NÀY</button>
                 <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
+            `;
+            // Giao diện chỉ đọc cho lịch sử
+            document.getElementById('mContent').innerHTML = `
+                <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
+                    <h2 style="margin:0">${b.guest} <span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span></h2>
+                    <p style="margin: 4px 0; color: #555;">SĐT: <b>${b.phone || 'Không có'}</b></p>
+                    <p style="margin: 4px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
+                </div>
+                <div class="bill-box">
+                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
+                    <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
+                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
+                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
+                </div>
+                <div class="btn-row">${actionButtons}</div>
             `;
         } else {
             actionButtons = `
@@ -560,25 +581,68 @@
                 <button class="btn btn-d" onclick="delBK('${bid}')">HỦY PHÒNG</button>
                 <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
             `;
+            
+            const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
+
+            // Giao diện có thể Chỉnh sửa/Gia hạn trực tiếp
+            document.getElementById('mContent').innerHTML = `
+                <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
+                        <span style="font-weight:bold; color:var(--p-blue)">Phòng ${b.roomId}</span>
+                        ${lbDisplay}
+                    </div>
+                    <div style="display:flex; gap:10px">
+                        <div class="f-group" style="flex:1"><label>Tên khách</label><input id="dName" type="text" value="${b.guest}"></div>
+                        <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
+                    </div>
+                    <div style="display:flex; gap:10px">
+                        <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="dStart" type="date" value="${b.start}"></div>
+                        <div class="f-group" style="flex:1"><label>Đến ngày (Gia hạn)</label><input id="dEnd" type="date" value="${b.end}"></div>
+                    </div>
+                    <div style="display:flex; gap:10px">
+                        <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
+                        <div class="f-group" style="flex:1"><label>Tiền cọc</label><input id="dDeposit" type="number" value="${deposit}"></div>
+                    </div>
+                    <button class="btn btn-p" style="width:100%; padding: 10px; font-size: 13px; margin-top:5px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / GIA HẠN</button>
+                </div>
+
+                <div class="bill-box">
+                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
+                    <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
+                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
+                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
+                </div>
+                <div class="btn-row">${actionButtons}</div>
+            `;
         }
-
-        // Hiện mã lockbox trong chi tiết khách để dễ copy gửi
-        const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px;">LB: ${r.lockbox}</b>` : '';
-
-        document.getElementById('mContent').innerHTML = `
-            <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
-                <h2 style="margin:0">${b.guest} ${isCompleted ? '<span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span>' : ''}</h2>
-                <p style="margin: 8px 0; color: #555;">Phòng: <b>${b.roomId}</b> ${lbDisplay} <br> Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
-            </div>
-            <div class="bill-box">
-                <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
-                <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
-                <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
-                <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
-            </div>
-            <div class="btn-row">${actionButtons}</div>
-        `;
         document.getElementById('pmsModal').style.display = 'flex';
+    }
+
+    // Hàm LƯU thay đổi / GIA HẠN ngày trực tiếp
+    function saveBookingChanges(bid) {
+        const b = bookings.find(x => x.id === bid);
+        const newName = document.getElementById('dName').value;
+        const newPhone = document.getElementById('dPhone').value.trim();
+        const newStart = document.getElementById('dStart').value;
+        const newEnd = document.getElementById('dEnd').value;
+        const newPrice = parseInt(document.getElementById('dPrice').value) || 0;
+        const newDeposit = parseInt(document.getElementById('dDeposit').value) || 0;
+
+        if(!newName || newStart >= newEnd) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
+
+        // Kiểm tra trùng lịch (loại trừ chính booking đang sửa)
+        const overlap = bookings.some(x => x.id !== bid && x.roomId === b.roomId && (newStart < x.end && newEnd > x.start));
+        if(overlap) return alert("Lỗi: Không thể gia hạn vì đã có khách khác đặt phòng trong thời gian này!");
+
+        b.guest = newName;
+        b.phone = newPhone;
+        b.start = newStart;
+        b.end = newEnd;
+        b.price = newPrice;
+        b.deposit = newDeposit;
+
+        save();
+        openDetail(bid); // Mở lại bảng chi tiết để cập nhật hiển thị Bill mới
     }
 
     function checkOut(bid) {
@@ -599,9 +663,10 @@
         if(id && price) { rooms.push({ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }); save(); }
     }
 
+    // Cập nhật Xuất File CSV có thêm cột SĐT
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
-        let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
         bookings.forEach(b => {
             const r = rooms.find(rm => rm.id === b.roomId);
             const nights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
@@ -611,7 +676,7 @@
             let statusVN = "Lỗi";
             if(b.type === 'blue') statusVN = "Chưa cọc"; if(b.type === 'purple') statusVN = "Đã cọc";
             if(b.type === 'red') statusVN = "Đang ở"; if(b.type === 'grey') statusVN = "Đã trả phòng";
-            csvContent += [b.id, b.guest.replace(/,/g, " "), b.roomId, b.start, b.end, nights, appliedPrice, deposit, total, statusVN].join(",") + "\r\n";
+            csvContent += [b.id, b.guest.replace(/,/g, " "), b.phone || "", b.roomId, b.start, b.end, nights, appliedPrice, deposit, total, statusVN].join(",") + "\r\n";
         });
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "Bao_Cao_Doanh_Thu_PMS.csv");
