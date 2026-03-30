@@ -8,18 +8,17 @@
         :root {
             --p-blue: #00459e; --p-gold: #feba02; --p-red: #d4111e;
             --s-green: #008009; --s-purple: #8e44ad; --bg: #f4f7f6;
-            --sidebar-w: 120px; --row-h: 85px; --cell-w: 100px;
+            --sidebar-w: 120px; --row-h: 105px; /* Tăng chiều cao để chứa Lockbox và Ghi chú */
+            --cell-w: 100px;
             --border: #e0e0e0; --shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         * { box-sizing: border-box; -webkit-font-smoothing: antialiased; font-family: 'Inter', -apple-system, sans-serif; }
         
-        /* Tối ưu hóa triệt để Viewport cho iOS / Android (Sử dụng 100dvh thay vì 100vh) */
+        /* Tối ưu hóa triệt để Viewport cho iOS / Android */
         body { 
             margin: 0; background: var(--bg); overflow: hidden; 
-            height: 100vh; /* Fallback cho trình duyệt cũ */
-            height: 100dvh; /* Chuẩn mới chống nhảy layout trên mobile */
-            display: flex; flex-direction: column; 
+            height: 100vh; height: 100dvh; display: flex; flex-direction: column; 
             -webkit-text-size-adjust: 100%;
         }
 
@@ -27,7 +26,7 @@
         header {
             background: #fff; height: 75px; display: flex; align-items: center; justify-content: space-between;
             padding: 0 15px; border-bottom: 2px solid var(--p-blue); z-index: 1000; box-shadow: var(--shadow);
-            flex-shrink: 0; /* Ép Header không bị co lại khi bật bàn phím */
+            flex-shrink: 0; 
         }
         .brand { font-size: 22px; font-weight: 900; color: var(--p-blue); letter-spacing: -1px; white-space: nowrap; }
         .stats-bar { display: flex; gap: 15px; }
@@ -35,11 +34,9 @@
         .stat-card small { display: block; font-size: 10px; color: #666; font-weight: bold; }
         .stat-card b { font-size: 16px; color: var(--p-blue); }
         
-        /* Chống vỡ layout Header Tool trên mobile nhỏ */
         .header-tools { display: flex; gap: 8px; align-items: center; overflow-x: auto; white-space: nowrap; padding: 5px 0; scrollbar-width: none; }
         .header-tools::-webkit-scrollbar { display: none; }
 
-        /* Component Đổi Tháng */
         .month-nav { display: flex; align-items: center; gap: 2px; background: var(--bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
         .month-nav button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 5px 8px; color: var(--p-blue); font-weight: bold; }
         .month-nav button:hover { background: #e0e0e0; border-radius: 5px; }
@@ -51,21 +48,24 @@
         /* Sidebar Phòng */
         .rooms-aside { background: #fff; border-right: 1px solid var(--border); overflow-y: auto; scroll-behavior: smooth; }
         .room-head { height: 50px; background: #fafafa; border-bottom: 1px solid var(--border); position: sticky; top:0; z-index: 10; }
+        
         .room-item {
             height: var(--row-h); border-bottom: 1px solid #eee; display: flex; flex-direction: column;
             align-items: center; justify-content: center; position: relative; cursor: pointer; transition: 0.3s;
+            padding: 5px;
         }
         .room-item:hover { background: #f0f7ff; }
-        .room-item b { font-size: 18px; }
-        .room-item span { font-size: 11px; color: #888; }
-        .badge-status { width: 10px; height: 10px; border-radius: 50%; position: absolute; top: 10px; right: 10px; box-shadow: 0 0 3px rgba(0,0,0,0.3); }
+        .room-item b { font-size: 18px; line-height: 1.1; }
+        .room-item .lb-code { color: var(--s-purple); font-weight: 900; font-size: 13px; margin: 3px 0; background: #f4e8f9; padding: 2px 6px; border-radius: 4px;}
+        .room-item .r-price { font-size: 11px; font-weight: bold; color: #333; }
+        .room-item .r-notes { font-size: 9px; color: #666; text-align: center; margin-top: 2px; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
         
-        .room-cog {
-            position: absolute; bottom: 5px; right: 5px; font-size: 14px; 
-            color: #999; opacity: 0.4; transition: 0.2s; padding: 4px;
+        /* Đèn báo trạng thái giờ được làm to hơn chút để dễ bấm */
+        .badge-status { 
+            width: 14px; height: 14px; border-radius: 50%; position: absolute; top: 8px; right: 8px; 
+            box-shadow: 0 0 4px rgba(0,0,0,0.3); border: 2px solid #fff; cursor: pointer; transition: 0.2s;
         }
-        .room-item:hover .room-cog { opacity: 1; transform: scale(1.1); }
-        .room-cog:hover { color: var(--p-blue); }
+        .badge-status:hover { transform: scale(1.3); }
 
         /* Timeline & Grid */
         .timeline-view { overflow: auto; background: white; position: relative; }
@@ -111,7 +111,6 @@
         .f-group { margin-bottom: 15px; }
         .f-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #555; }
         
-        /* CỰC KỲ QUAN TRỌNG CHO iOS: Ép font-size 16px để chống Zoom khi gõ phím */
         .f-group input, .f-group select {
             width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 16px !important; outline: none; transition: 0.3s; background: #fff;
         }
@@ -133,11 +132,11 @@
             .brand { display: none; } 
         }
         @media (max-width: 768px) {
-            :root { --sidebar-w: 80px; --cell-w: 70px; --row-h: 75px; }
+            :root { --sidebar-w: 90px; --cell-w: 70px; --row-h: 110px; } /* Mở rộng xíu trên mobile để chữ ko bị ép */
             .stats-bar { display: none; }
             .header-tools { width: 100%; justify-content: flex-start; padding: 5px; }
             .header-tools .btn { padding: 10px !important; font-size: 12px !important; }
-            #roomFilter { display: none; } /* Ẩn bớt dropdown cũ để nhường chỗ cho form Tìm phòng */
+            #roomFilter { display: none; } 
             .month-nav input[type="month"] { width: 100px; }
         }
     </style>
@@ -159,10 +158,9 @@
             <option value="all">Hiển thị: Tất cả</option>
             <option value="clean">Phòng sạch</option>
             <option value="dirty">Phòng chờ dọn</option>
-            </select>
+        </select>
         
         <button class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
-        
         <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 CSV</button>
         <button class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
     </div>
@@ -194,15 +192,16 @@
     }
 
     // --- DATA ENGINE ---
+    // Cập nhật dữ liệu mẫu để có trường lockbox và notes
     let rooms = JSON.parse(localStorage.getItem('pms_rooms')) || [
-        { id: "101", price: 350000, cat: "Single", status: "clean" },
-        { id: "102", price: 450000, cat: "Double", status: "clean" },
-        { id: "201", price: 750000, cat: "VIP", status: "dirty" }
+        { id: "301 (P4)", price: 710000, cat: "Phòng Lớn", status: "clean", lockbox: "9138", notes: "" },
+        { id: "P201 (P1)", price: 350000, cat: "Phòng Đơn", status: "clean", lockbox: "6138", notes: "Ban công, ánh sáng tốt" },
+        { id: "P102 (P2)", price: 350000, cat: "Phòng Đôi", status: "dirty", lockbox: "3168", notes: "Cửa sổ, view đường phố" }
     ];
     let bookings = JSON.parse(localStorage.getItem('pms_bookings')) || [];
     
     let currentFilter = 'all';
-    let searchCriteria = null; // Biến lưu thông tin bộ lọc tìm phòng {start, end}
+    let searchCriteria = null; 
 
     const realTodayStr = getLocalISODate(new Date()); 
     let currentViewDate = new Date();
@@ -239,7 +238,6 @@
 
     function applyFilter() {
         currentFilter = document.getElementById('roomFilter').value;
-        // Nếu người dùng chọn lại "Tất cả", "Sạch", "Bẩn", ta sẽ xóa bộ lọc ngày tìm kiếm
         if (currentFilter !== 'search') {
             searchCriteria = null;
             let opt = document.getElementById('optSearch');
@@ -267,18 +265,10 @@
         const sb = document.getElementById('sidebarRooms');
         sb.innerHTML = '<div class="room-head"></div>';
         
-        // --- LOGIC LỌC TỔNG HỢP (KẾT HỢP TÌM PHÒNG TRỐNG) ---
         const filteredRooms = rooms.filter(r => {
-            // Lọc theo trạng thái thông thường
             if (currentFilter !== 'all' && currentFilter !== 'search' && r.status !== currentFilter) return false;
-            
-            // Lọc theo ngày tìm kiếm (Tìm phòng trống)
             if (currentFilter === 'search' && searchCriteria) {
-                // Nếu phòng có bất kỳ booking nào đè lên khoảng searchCriteria -> Bỏ qua
-                const isOverlapped = bookings.some(b => 
-                    b.roomId === r.id && 
-                    (searchCriteria.start < b.end && searchCriteria.end > b.start)
-                );
+                const isOverlapped = bookings.some(b => b.roomId === r.id && (searchCriteria.start < b.end && searchCriteria.end > b.start));
                 if (isOverlapped) return false; 
             }
             return true;
@@ -299,12 +289,15 @@
                 sttText = 'Khách đã out - Chờ dọn dẹp';
             }
 
+            // Giao diện Sidebar mới tích hợp Lockbox và Ghi chú. Khi bấm vào vùng ngoài đèn báo, sẽ mở Cài đặt phòng
             sb.innerHTML += `
-                <div class="room-item" onclick="toggleDirty('${r.id}')" title="${sttText}">
+                <div class="room-item" onclick="openRoomSettings('${r.id}')" title="Nhấn để mở Cài đặt phòng">
                     <b>${r.id}</b>
-                    <span>${(r.price/1000)}k/đ</span>
-                    <div class="badge-status" style="background:${badgeColor}"></div>
-                    <div class="room-cog" onclick="openRoomSettings('${r.id}', event)">⚙️</div>
+                    <span class="lb-code">${r.lockbox ? 'LB: ' + r.lockbox : 'Chưa có LB'}</span>
+                    <span class="r-price">${(r.price/1000).toLocaleString()}k/đ</span>
+                    <span class="r-notes">${r.notes || '---'}</span>
+                    
+                    <div class="badge-status" style="background:${badgeColor}" onclick="toggleDirty('${r.id}', event)" title="Tình trạng: ${sttText}. Nhấn để đổi trạng thái Dọn dẹp"></div>
                 </div>`;
         });
     }
@@ -337,7 +330,6 @@
         const viewStartStr = dateArr[0];
         const viewEndStr = dateArr[dateArr.length - 1];
 
-        // Dùng chung Logic lọc với Sidebar
         const filteredRooms = rooms.filter(r => {
             if (currentFilter !== 'all' && currentFilter !== 'search' && r.status !== currentFilter) return false;
             if (currentFilter === 'search' && searchCriteria) {
@@ -385,10 +377,9 @@
         });
     }
 
-    // --- TÍNH NĂNG MỚI: TÌM PHÒNG TRỐNG THEO NGÀY ---
+    // --- TÍNH NĂNG TÌM PHÒNG TRỐNG THEO NGÀY ---
     function openSearchModal() {
         document.getElementById('mTitle').innerText = `Bộ lọc Tìm phòng trống`;
-        
         let tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
         const defaultOut = getLocalISODate(tmr);
 
@@ -409,14 +400,10 @@
     function executeSearch() {
         const sStart = document.getElementById('sStart').value;
         const sEnd = document.getElementById('sEnd').value;
-        
-        if (!sStart || !sEnd || sStart >= sEnd) {
-            return alert("Ngày đi phải lớn hơn ngày đến!");
-        }
+        if (!sStart || !sEnd || sStart >= sEnd) return alert("Ngày đi phải lớn hơn ngày đến!");
 
         searchCriteria = { start: sStart, end: sEnd };
 
-        // Tạo/Cập nhật Option "Kết quả tìm kiếm" trong Dropdown
         let opt = document.getElementById('optSearch');
         if (!opt) {
             opt = document.createElement('option');
@@ -424,28 +411,29 @@
             opt.value = 'search';
             document.getElementById('roomFilter').appendChild(opt);
         }
-        opt.text = `Đang lọc phòng trống: ${sStart.split('-').reverse().join('/')} ➔ ${sEnd.split('-').reverse().join('/')}`;
+        opt.text = `Đang lọc: ${sStart.split('-').reverse().join('/')} ➔ ${sEnd.split('-').reverse().join('/')}`;
         opt.style.display = 'block';
         
         document.getElementById('roomFilter').value = 'search';
         currentFilter = 'search';
 
-        closeModal();
-        render();
+        closeModal(); render();
     }
 
-    // --- TÍNH NĂNG QUẢN LÝ PHÒNG (CHỈNH SỬA / XÓA) ---
-    function openRoomSettings(rid, event) {
-        if(event) event.stopPropagation(); 
+    // --- TÍNH NĂNG QUẢN LÝ PHÒNG (ĐÃ BỔ SUNG LOCKBOX & GHI CHÚ) ---
+    function openRoomSettings(rid) {
         const r = rooms.find(x => x.id === rid);
         document.getElementById('mTitle').innerText = `Cài đặt phòng`;
         document.getElementById('mContent').innerHTML = `
-            <div class="f-group"><label>Tên / Số phòng</label><input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, VIP 1"></div>
-            <div class="f-group"><label>Loại phòng</label><input id="fRoomCat" type="text" value="${r.cat || 'Standard'}" placeholder="VD: Single, Double, VIP"></div>
-            <div class="f-group"><label>Giá gốc mỗi đêm (VNĐ)</label><input id="fRoomPrice" type="number" value="${r.price}"></div>
+            <div class="f-group"><label>Tên / Số phòng</label><input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, P201 (P1)"></div>
+            <div style="display:flex; gap:10px;">
+                <div class="f-group" style="flex:1;"><label>Mã Lockbox</label><input id="fRoomLockbox" type="text" value="${r.lockbox || ''}" placeholder="VD: 9138"></div>
+                <div class="f-group" style="flex:1;"><label>Giá gốc / đêm</label><input id="fRoomPrice" type="number" value="${r.price}"></div>
+            </div>
+            <div class="f-group"><label>Ghi chú / Tính chất phòng</label><input id="fRoomNotes" type="text" value="${r.notes || ''}" placeholder="VD: Quạt trần, ban công, 2 giường..."></div>
             <div class="btn-row" style="margin-top: 25px;">
                 <button class="btn btn-p" onclick="saveRoomSettings('${rid}')">LƯU THAY ĐỔI</button>
-                <button class="btn btn-d" onclick="deleteRoom('${rid}')">XÓA PHÒNG NÀY</button>
+                <button class="btn btn-d" onclick="deleteRoom('${rid}')">XÓA PHÒNG</button>
                 <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
             </div>
         `;
@@ -454,14 +442,15 @@
 
     function saveRoomSettings(oldRid) {
         const newId = document.getElementById('fRoomId').value.trim();
-        const newCat = document.getElementById('fRoomCat').value.trim();
         const newPrice = parseInt(document.getElementById('fRoomPrice').value) || 0;
+        const newLockbox = document.getElementById('fRoomLockbox').value.trim();
+        const newNotes = document.getElementById('fRoomNotes').value.trim();
 
         if(!newId) return alert("Tên phòng không được để trống!");
         if(newId !== oldRid && rooms.some(x => x.id === newId)) return alert("Tên phòng này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.");
 
         const r = rooms.find(x => x.id === oldRid);
-        r.id = newId; r.cat = newCat; r.price = newPrice;
+        r.id = newId; r.price = newPrice; r.lockbox = newLockbox; r.notes = newNotes;
 
         if(newId !== oldRid) {
             bookings.forEach(b => { if(b.roomId === oldRid) b.roomId = newId; });
@@ -478,6 +467,16 @@
             rooms = rooms.filter(x => x.id !== rid);
             bookings = bookings.filter(x => x.roomId !== rid); 
             closeModal(); save();
+        }
+    }
+
+    function toggleDirty(rid, event) {
+        if(event) event.stopPropagation(); // Ngăn việc click vào đèn báo làm mở Form cài đặt phòng
+        const r = rooms.find(x => x.id === rid);
+        if(r.status === 'dirty') {
+            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { r.status = 'clean'; save(); }
+        } else {
+            if(confirm("Đánh dấu phòng " + rid + " cần dọn dẹp?")) { r.status = 'dirty'; save(); }
         }
     }
 
@@ -563,10 +562,13 @@
             `;
         }
 
+        // Hiện mã lockbox trong chi tiết khách để dễ copy gửi
+        const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px;">LB: ${r.lockbox}</b>` : '';
+
         document.getElementById('mContent').innerHTML = `
             <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
                 <h2 style="margin:0">${b.guest} ${isCompleted ? '<span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span>' : ''}</h2>
-                <p style="margin: 8px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
+                <p style="margin: 8px 0; color: #555;">Phòng: <b>${b.roomId}</b> ${lbDisplay} <br> Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
             </div>
             <div class="bill-box">
                 <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
@@ -591,20 +593,10 @@
     function updateBK(bid, type) { bookings.find(x => x.id === bid).type = type; closeModal(); save(); }
     function delBK(bid) { if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) { bookings = bookings.filter(x => x.id !== bid); closeModal(); save(); } }
 
-    function toggleDirty(rid) {
-        const r = rooms.find(x => x.id === rid);
-        if(r.status === 'dirty') {
-            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { r.status = 'clean'; save(); }
-        } else {
-            const newPrice = prompt(`Phòng ${rid} đang Sạch.\nNhập giá gốc mới cho phòng này (hoặc để trống để Hủy):`, r.price);
-            if(newPrice && !isNaN(newPrice)) { r.price = parseInt(newPrice); save(); }
-        }
-    }
-
     function addRoom() {
-        const id = prompt("Nhập Số/Tên phòng mới (VD: 301, VIP2):");
+        const id = prompt("Nhập Số/Tên phòng mới (VD: 301, P201):");
         const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
-        if(id && price) { rooms.push({ id, price: parseInt(price), cat: "Phòng mới", status: "clean" }); save(); }
+        if(id && price) { rooms.push({ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }); save(); }
     }
 
     function exportCSV() {
@@ -630,4 +622,4 @@
     render();
 </script>
 </body>
-</html>vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+</html>
