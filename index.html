@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>PMS ENTERPRISE - Hotel Management System</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --p-blue: #00459e; --p-gold: #feba02; --p-red: #d4111e;
@@ -183,6 +184,11 @@
 </div>
 
 <script>
+    // --- KHỞI TẠO SUPABASE ---
+    const supabaseUrl = 'https://awxkvzkigfxoidnvmxew.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A';
+    const _supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
     // --- HÀM HỖ TRỢ NGÀY GIỜ CHUẨN ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
@@ -190,8 +196,8 @@
     }
 
     // --- DATA ENGINE ---
-    let rooms = JSON.parse(localStorage.getItem('pms_rooms')) || [];
-    let bookings = JSON.parse(localStorage.getItem('pms_bookings')) || [];
+    let rooms = [];
+    let bookings = [];
     
     let currentFilter = 'all';
     let searchCriteria = null; 
@@ -200,10 +206,20 @@
     let currentViewDate = new Date();
     currentViewDate.setHours(12, 0, 0, 0); 
 
-    function save() {
-        localStorage.setItem('pms_rooms', JSON.stringify(rooms));
-        localStorage.setItem('pms_bookings', JSON.stringify(bookings));
-        render();
+    // --- HÀM TẢI VÀ ĐỒNG BỘ DỮ LIỆU TỪ SUPABASE ---
+    async function loadData() {
+        // Tải dữ liệu phòng
+        const { data: rms, error: e1 } = await _supabase.from('rooms').select('*').order('id', { ascending: true });
+        // Tải dữ liệu đặt phòng
+        const { data: bks, error: e2 } = await _supabase.from('bookings').select('*');
+        
+        if (e1 || e2) {
+            console.error("Lỗi tải dữ liệu Supabase:", e1 || e2);
+        } else {
+            rooms = rms || [];
+            bookings = bks || [];
+            render();
+        }
     }
 
     // --- HÀM ĐIỀU HƯỚNG THÁNG ---
@@ -412,7 +428,7 @@
         closeModal(); render();
     }
 
-    // --- TÍNH NĂNG QUẢN LÝ PHÒNG ---
+    // --- TÍNH NĂNG QUẢN LÝ PHÒNG (SUPABASE) ---
     function openRoomSettings(rid) {
         const r = rooms.find(x => x.id === rid);
         document.getElementById('mTitle').innerText = `Cài đặt phòng`;
@@ -432,7 +448,7 @@
         document.getElementById('pmsModal').style.display = 'flex';
     }
 
-    function saveRoomSettings(oldRid) {
+    async function saveRoomSettings(oldRid) {
         const newId = document.getElementById('fRoomId').value.trim();
         const newPrice = parseInt(document.getElementById('fRoomPrice').value) || 0;
         const newLockbox = document.getElementById('fRoomLockbox').value.trim();
@@ -441,39 +457,52 @@
         if(!newId) return alert("Tên phòng không được để trống!");
         if(newId !== oldRid && rooms.some(x => x.id === newId)) return alert("Tên phòng này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.");
 
-        const r = rooms.find(x => x.id === oldRid);
-        r.id = newId; r.price = newPrice; r.lockbox = newLockbox; r.notes = newNotes;
-
         if(newId !== oldRid) {
-            bookings.forEach(b => { if(b.roomId === oldRid) b.roomId = newId; });
+            // Thay đổi ID phòng: Tạo phòng mới -> Chuyển Bookings sang phòng mới -> Xóa phòng cũ
+            const r = rooms.find(x => x.id === oldRid);
+            await _supabase.from('rooms').insert([{ id: newId, price: newPrice, cat: r.cat || "", status: r.status, lockbox: newLockbox, notes: newNotes }]);
+            await _supabase.from('bookings').update({ roomId: newId }).eq('roomId', oldRid);
+            await _supabase.from('rooms').delete().eq('id', oldRid);
+        } else {
+            // Chỉ cập nhật thông tin
+            await _supabase.from('rooms').update({ price: newPrice, lockbox: newLockbox, notes: newNotes }).eq('id', oldRid);
         }
-        closeModal(); save();
+        
+        closeModal(); 
+        await loadData();
     }
 
-    function deleteRoom(rid) {
+    async function deleteRoom(rid) {
         const hasBookings = bookings.some(b => b.roomId === rid);
         let msg = `Bạn có chắc chắn muốn xóa phòng ${rid} khỏi hệ thống không?`;
         if (hasBookings) msg = `CẢNH BÁO NGUY HIỂM:\nPhòng ${rid} đang có lịch sử khách hàng!\nBạn vẫn muốn tiếp tục xóa?`;
 
         if(confirm(msg)) {
-            rooms = rooms.filter(x => x.id !== rid);
-            bookings = bookings.filter(x => x.roomId !== rid); 
-            closeModal(); save();
+            await _supabase.from('bookings').delete().eq('roomId', rid); // Xóa lịch sử phòng trước
+            await _supabase.from('rooms').delete().eq('id', rid); // Xóa phòng sau
+            closeModal(); 
+            await loadData();
         }
     }
 
-    function toggleDirty(rid, event) {
+    async function toggleDirty(rid, event) {
         if(event) event.stopPropagation(); 
         const r = rooms.find(x => x.id === rid);
         if(r.status === 'dirty') {
-            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { r.status = 'clean'; save(); }
+            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { 
+                await _supabase.from('rooms').update({ status: 'clean' }).eq('id', rid);
+                await loadData(); 
+            }
         } else {
-            if(confirm("Đánh dấu phòng " + rid + " cần dọn dẹp?")) { r.status = 'dirty'; save(); }
+            if(confirm("Đánh dấu phòng " + rid + " cần dọn dẹp?")) { 
+                await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', rid);
+                await loadData(); 
+            }
         }
     }
 
 
-    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG TỐI ƯU HÓA ---
+    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG (SUPABASE) ---
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
@@ -516,7 +545,7 @@
         document.getElementById('pmsModal').style.display = 'flex';
     }
 
-    function confirmBooking(roomId) {
+    async function confirmBooking(roomId) {
         const guest = document.getElementById('fName').value;
         const phone = document.getElementById('fPhone').value.trim();
         const start = document.getElementById('fStart').value;
@@ -529,11 +558,14 @@
         const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
         if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
 
-        bookings.push({ 
+        const newBk = { 
             id: 'BK'+Date.now(), roomId, guest, phone, start, end, 
             type: document.getElementById('fType').value, price: price, deposit: deposit 
-        });
-        closeModal(); save();
+        };
+        
+        await _supabase.from('bookings').insert([newBk]);
+        closeModal(); 
+        await loadData();
     }
 
     function openDetail(bid) {
@@ -614,8 +646,7 @@
         document.getElementById('pmsModal').style.display = 'flex';
     }
 
-    // Hàm LƯU thay đổi / GIA HẠN ngày trực tiếp
-    function saveBookingChanges(bid) {
+    async function saveBookingChanges(bid) {
         const b = bookings.find(x => x.id === bid);
         const newName = document.getElementById('dName').value;
         const newPhone = document.getElementById('dPhone').value.trim();
@@ -630,36 +661,49 @@
         const overlap = bookings.some(x => x.id !== bid && x.roomId === b.roomId && (newStart < x.end && newEnd > x.start));
         if(overlap) return alert("Lỗi: Không thể gia hạn vì đã có khách khác đặt phòng trong thời gian này!");
 
-        b.guest = newName;
-        b.phone = newPhone;
-        b.start = newStart;
-        b.end = newEnd;
-        b.price = newPrice;
-        b.deposit = newDeposit;
+        await _supabase.from('bookings').update({ 
+            guest: newName, phone: newPhone, start: newStart, 
+            end: newEnd, price: newPrice, deposit: newDeposit 
+        }).eq('id', bid);
 
-        save();
+        await loadData();
         openDetail(bid); // Mở lại bảng chi tiết để cập nhật hiển thị Bill mới
     }
 
-    function checkOut(bid) {
+    async function checkOut(bid) {
         if(confirm("Xác nhận khách đã thanh toán đủ và trả phòng?")) {
             const b = bookings.find(x => x.id === bid);
-            rooms.find(r => r.id === b.roomId).status = 'dirty';
-            b.type = 'grey'; 
-            closeModal(); save();
+            await _supabase.from('bookings').update({ type: 'grey' }).eq('id', bid);
+            await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
+            closeModal(); 
+            await loadData();
         }
     }
 
-    function updateBK(bid, type) { bookings.find(x => x.id === bid).type = type; closeModal(); save(); }
-    function delBK(bid) { if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) { bookings = bookings.filter(x => x.id !== bid); closeModal(); save(); } }
-
-    function addRoom() {
-        const id = prompt("Nhập Số/Tên phòng mới (VD: 301, P201):");
-        const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
-        if(id && price) { rooms.push({ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }); save(); }
+    async function updateBK(bid, type) { 
+        await _supabase.from('bookings').update({ type: type }).eq('id', bid);
+        closeModal(); 
+        await loadData(); 
     }
 
-    // Cập nhật Xuất File CSV có thêm cột SĐT
+    async function delBK(bid) { 
+        if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) { 
+            await _supabase.from('bookings').delete().eq('id', bid);
+            closeModal(); 
+            await loadData(); 
+        } 
+    }
+
+    async function addRoom() {
+        const id = prompt("Nhập Số/Tên phòng mới (VD: 301, P201):");
+        const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
+        if(id && price) { 
+            await _supabase.from('rooms').insert([{ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }]);
+            await loadData(); 
+        }
+    }
+
+    // Xuất File CSV (giữ nguyên hoạt động trên dữ liệu hiện tại của local)
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
         let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
@@ -680,7 +724,9 @@
     }
 
     function closeModal() { document.getElementById('pmsModal').style.display = 'none'; }
-    render();
+    
+    // Gọi hàm load dữ liệu ngay khi mở app thay vì render() tĩnh
+    loadData();
 </script>
 </body>
 </html>
