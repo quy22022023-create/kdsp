@@ -7,31 +7,43 @@
     <style>
         :root {
             --p-blue: #00459e; --p-gold: #feba02; --p-red: #d4111e;
-            --s-green: #008009; --s-purple: #6c5ce7; --bg: #f4f7f6;
+            --s-green: #008009; --s-purple: #8e44ad; --bg: #f4f7f6;
             --sidebar-w: 120px; --row-h: 85px; --cell-w: 100px;
             --border: #e0e0e0; --shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         * { box-sizing: border-box; -webkit-font-smoothing: antialiased; font-family: 'Inter', -apple-system, sans-serif; }
-        body { margin: 0; background: var(--bg); overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Tối ưu hóa triệt để Viewport cho iOS / Android (Sử dụng 100dvh thay vì 100vh) */
+        body { 
+            margin: 0; background: var(--bg); overflow: hidden; 
+            height: 100vh; /* Fallback cho trình duyệt cũ */
+            height: 100dvh; /* Chuẩn mới chống nhảy layout trên mobile */
+            display: flex; flex-direction: column; 
+            -webkit-text-size-adjust: 100%;
+        }
 
         /* --- HEADER & DASHBOARD --- */
         header {
             background: #fff; height: 75px; display: flex; align-items: center; justify-content: space-between;
-            padding: 0 20px; border-bottom: 2px solid var(--p-blue); z-index: 1000; box-shadow: var(--shadow);
+            padding: 0 15px; border-bottom: 2px solid var(--p-blue); z-index: 1000; box-shadow: var(--shadow);
+            flex-shrink: 0; /* Ép Header không bị co lại khi bật bàn phím */
         }
-        .brand { font-size: 22px; font-weight: 900; color: var(--p-blue); letter-spacing: -1px; }
-        .stats-bar { display: flex; gap: 20px; }
-        .stat-card { background: var(--bg); padding: 8px 15px; border-radius: 10px; border-left: 4px solid var(--p-blue); }
+        .brand { font-size: 22px; font-weight: 900; color: var(--p-blue); letter-spacing: -1px; white-space: nowrap; }
+        .stats-bar { display: flex; gap: 15px; }
+        .stat-card { background: var(--bg); padding: 8px 12px; border-radius: 10px; border-left: 4px solid var(--p-blue); }
         .stat-card small { display: block; font-size: 10px; color: #666; font-weight: bold; }
         .stat-card b { font-size: 16px; color: var(--p-blue); }
-        .header-tools { display: flex; gap: 10px; align-items: center; }
+        
+        /* Chống vỡ layout Header Tool trên mobile nhỏ */
+        .header-tools { display: flex; gap: 8px; align-items: center; overflow-x: auto; white-space: nowrap; padding: 5px 0; scrollbar-width: none; }
+        .header-tools::-webkit-scrollbar { display: none; }
 
         /* Component Đổi Tháng */
-        .month-nav { display: flex; align-items: center; gap: 5px; background: var(--bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
-        .month-nav button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 5px 10px; color: var(--p-blue); font-weight: bold; }
+        .month-nav { display: flex; align-items: center; gap: 2px; background: var(--bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
+        .month-nav button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 5px 8px; color: var(--p-blue); font-weight: bold; }
         .month-nav button:hover { background: #e0e0e0; border-radius: 5px; }
-        .month-nav input[type="month"] { border: none; background: transparent; font-weight: bold; color: #333; outline: none; font-size: 14px; cursor: pointer; }
+        .month-nav input[type="month"] { border: none; background: transparent; font-weight: bold; color: #333; outline: none; font-size: 14px; cursor: pointer; width: 115px; }
 
         /* --- LAYOUT GRID --- */
         .pms-wrapper { display: grid; grid-template-columns: var(--sidebar-w) 1fr; flex: 1; overflow: hidden; }
@@ -48,7 +60,6 @@
         .room-item span { font-size: 11px; color: #888; }
         .badge-status { width: 10px; height: 10px; border-radius: 50%; position: absolute; top: 10px; right: 10px; box-shadow: 0 0 3px rgba(0,0,0,0.3); }
         
-        /* Icon cài đặt phòng */
         .room-cog {
             position: absolute; bottom: 5px; right: 5px; font-size: 14px; 
             color: #999; opacity: 0.4; transition: 0.2s; padding: 4px;
@@ -92,17 +103,19 @@
         }
         .modal-box {
             background: #fff; width: 95%; max-width: 480px; border-radius: 20px;
-            overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto;
+            overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.3); max-height: 85vh; overflow-y: auto;
         }
-        .modal-header { background: var(--p-blue); color: #fff; padding: 18px; font-weight: bold; display: flex; justify-content: space-between; }
+        .modal-header { background: var(--p-blue); color: #fff; padding: 18px; font-weight: bold; display: flex; justify-content: space-between; position: sticky; top: 0; z-index: 10;}
         .modal-content { padding: 20px 25px; }
 
         .f-group { margin-bottom: 15px; }
         .f-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #555; }
+        
+        /* CỰC KỲ QUAN TRỌNG CHO iOS: Ép font-size 16px để chống Zoom khi gõ phím */
         .f-group input, .f-group select {
-            width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 15px; outline: none; transition: 0.3s;
+            width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 16px !important; outline: none; transition: 0.3s; background: #fff;
         }
-        .f-group input:focus { border-color: var(--p-blue); }
+        .f-group input:focus, .f-group select:focus { border-color: var(--p-blue); }
 
         /* Bill Table */
         .bill-box { background: #fdfaf0; border: 1px solid #fcebb6; padding: 15px; border-radius: 12px; margin-top: 15px; }
@@ -110,21 +123,22 @@
         .bill-row.total { border-top: 1px dashed #ccc; padding-top: 8px; font-weight: bold; font-size: 16px; color: var(--p-red); margin-bottom: 0;}
 
         .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
-        .btn { padding: 14px; border: none; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 14px;}
+        .btn { padding: 14px; border: none; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 14px; white-space: nowrap;}
         .btn-p { background: var(--p-blue); color: #fff; }
         .btn-s { background: var(--s-green); color: #fff; }
         .btn-d { background: var(--p-red); color: #fff; }
         .btn-cancel { background: #eee; color: #333; grid-column: span 2; }
 
         @media (max-width: 1024px) {
-            .brand { display: none; } /* Ẩn tên app trên màn hình nhỏ để chừa chỗ cho thanh công cụ */
+            .brand { display: none; } 
         }
         @media (max-width: 768px) {
             :root { --sidebar-w: 80px; --cell-w: 70px; --row-h: 75px; }
             .stats-bar { display: none; }
-            .header-tools { gap: 5px; width: 100%; justify-content: space-between; }
-            .header-tools .btn { padding: 8px 10px !important; font-size: 11px !important; }
-            #roomFilter { display: none; }
+            .header-tools { width: 100%; justify-content: flex-start; padding: 5px; }
+            .header-tools .btn { padding: 10px !important; font-size: 12px !important; }
+            #roomFilter { display: none; } /* Ẩn bớt dropdown cũ để nhường chỗ cho form Tìm phòng */
+            .month-nav input[type="month"] { width: 100px; }
         }
     </style>
 </head>
@@ -145,9 +159,12 @@
             <option value="all">Hiển thị: Tất cả</option>
             <option value="clean">Phòng sạch</option>
             <option value="dirty">Phòng chờ dọn</option>
-        </select>
-        <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 XUẤT CSV</button>
-        <button class="btn btn-p" style="padding: 10px 20px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
+            </select>
+        
+        <button class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
+        
+        <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 CSV</button>
+        <button class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
     </div>
 </header>
 
@@ -170,7 +187,7 @@
 </div>
 
 <script>
-    // --- HÀM HỖ TRỢ NGÀY GIỜ CHUẨN (Chống lỗi múi giờ) ---
+    // --- HÀM HỖ TRỢ NGÀY GIỜ CHUẨN ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - offset).toISOString().split('T')[0];
@@ -183,12 +200,11 @@
         { id: "201", price: 750000, cat: "VIP", status: "dirty" }
     ];
     let bookings = JSON.parse(localStorage.getItem('pms_bookings')) || [];
-    let currentFilter = 'all';
-
-    // realTodayStr luôn luôn lưu ngày thực tế hôm nay (để làm mốc sáng đèn phòng hiện tại)
-    const realTodayStr = getLocalISODate(new Date()); 
     
-    // currentViewDate dùng để điều hướng tháng
+    let currentFilter = 'all';
+    let searchCriteria = null; // Biến lưu thông tin bộ lọc tìm phòng {start, end}
+
+    const realTodayStr = getLocalISODate(new Date()); 
     let currentViewDate = new Date();
     currentViewDate.setHours(12, 0, 0, 0); 
 
@@ -223,11 +239,16 @@
 
     function applyFilter() {
         currentFilter = document.getElementById('roomFilter').value;
+        // Nếu người dùng chọn lại "Tất cả", "Sạch", "Bẩn", ta sẽ xóa bộ lọc ngày tìm kiếm
+        if (currentFilter !== 'search') {
+            searchCriteria = null;
+            let opt = document.getElementById('optSearch');
+            if (opt) opt.style.display = 'none';
+        }
         render();
     }
 
     function renderDashboard() {
-        // Active tính theo ngày hôm nay (thực tế)
         const active = bookings.filter(b => realTodayStr >= b.start && realTodayStr < b.end && b.type === 'red').length;
         
         const totalRev = bookings.reduce((sum, b) => {
@@ -246,21 +267,35 @@
         const sb = document.getElementById('sidebarRooms');
         sb.innerHTML = '<div class="room-head"></div>';
         
-        const filteredRooms = rooms.filter(r => currentFilter === 'all' || r.status === currentFilter);
+        // --- LOGIC LỌC TỔNG HỢP (KẾT HỢP TÌM PHÒNG TRỐNG) ---
+        const filteredRooms = rooms.filter(r => {
+            // Lọc theo trạng thái thông thường
+            if (currentFilter !== 'all' && currentFilter !== 'search' && r.status !== currentFilter) return false;
+            
+            // Lọc theo ngày tìm kiếm (Tìm phòng trống)
+            if (currentFilter === 'search' && searchCriteria) {
+                // Nếu phòng có bất kỳ booking nào đè lên khoảng searchCriteria -> Bỏ qua
+                const isOverlapped = bookings.some(b => 
+                    b.roomId === r.id && 
+                    (searchCriteria.start < b.end && searchCriteria.end > b.start)
+                );
+                if (isOverlapped) return false; 
+            }
+            return true;
+        });
 
         filteredRooms.forEach(r => {
-            // Tính toán trạng thái thực tế ngay lúc này của phòng
             const activeBooking = bookings.find(b => b.roomId === r.id && realTodayStr >= b.start && realTodayStr < b.end && b.type === 'red');
             let isDirty = r.status === 'dirty';
             
-            let badgeColor = 'var(--s-green)'; // Xanh: Sạch / Trống
+            let badgeColor = 'var(--s-green)'; 
             let sttText = 'Sạch - Sẵn sàng';
             
             if (activeBooking) {
-                badgeColor = 'var(--p-red)'; // Đỏ: Đang có khách ở
+                badgeColor = 'var(--p-red)'; 
                 sttText = 'Đang có khách lưu trú';
             } else if (isDirty) {
-                badgeColor = 'var(--p-gold)'; // Vàng: Chờ dọn
+                badgeColor = 'var(--p-gold)'; 
                 sttText = 'Khách đã out - Chờ dọn dẹp';
             }
 
@@ -283,13 +318,11 @@
         const month = currentViewDate.getMonth();
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-        // Cập nhật giá trị UI cho Input Month
         document.getElementById('monthPicker').value = `${year}-${String(month + 1).padStart(2, '0')}`;
 
         let dateArr = [];
-        // Lặp tạo cột cho TẤT CẢ các ngày trong tháng đã chọn
         for(let i = 1; i <= daysInMonth; i++) { 
-            let d = new Date(year, month, i, 12, 0, 0); // set 12h để an toàn múi giờ
+            let d = new Date(year, month, i, 12, 0, 0);
             const ds = getLocalISODate(d);
             dateArr.push(ds);
             
@@ -304,7 +337,15 @@
         const viewStartStr = dateArr[0];
         const viewEndStr = dateArr[dateArr.length - 1];
 
-        const filteredRooms = rooms.filter(r => currentFilter === 'all' || r.status === currentFilter);
+        // Dùng chung Logic lọc với Sidebar
+        const filteredRooms = rooms.filter(r => {
+            if (currentFilter !== 'all' && currentFilter !== 'search' && r.status !== currentFilter) return false;
+            if (currentFilter === 'search' && searchCriteria) {
+                const isOverlapped = bookings.some(b => b.roomId === r.id && (searchCriteria.start < b.end && searchCriteria.end > b.start));
+                if (isOverlapped) return false; 
+            }
+            return true;
+        });
 
         filteredRooms.forEach(r => {
             const row = document.createElement('div');
@@ -314,24 +355,20 @@
                 const cell = document.createElement('div');
                 cell.className = 'grid-cell';
                 
-                // Logic thông minh: Tìm booking bắt đầu vào ngày này HOẶC booking kéo dài từ tháng trước sang tháng này
                 const b = bookings.find(bk => bk.roomId === r.id && 
                     (bk.start === date || (date === viewStartStr && bk.start < viewStartStr && bk.end > viewStartStr))
                 );
 
                 if(b) {
-                    // Tính độ dài thanh màu dựa trên phần hiển thị trong tháng này
                     let startRenderDate = new Date(date);
                     let endRenderDate = new Date(b.end);
                     let durationToRender = (endRenderDate - startRenderDate) / 86400000;
                     
                     const width = (durationToRender * (window.innerWidth <= 768 ? 70 : 100)) - 10;
-                    
                     const totalNights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
                     const label = b.type === 'grey' ? '(Đã xong)' : '';
                     const depositText = (b.deposit && b.deposit > 0) ? ` - Cọc: ${(b.deposit/1000)}k` : '';
 
-                    // Thêm class đặc biệt nếu là booking từ tháng trước vắt sang
                     const isCrossMonth = b.start < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
 
                     cell.innerHTML = `
@@ -348,27 +385,64 @@
         });
     }
 
+    // --- TÍNH NĂNG MỚI: TÌM PHÒNG TRỐNG THEO NGÀY ---
+    function openSearchModal() {
+        document.getElementById('mTitle').innerText = `Bộ lọc Tìm phòng trống`;
+        
+        let tmr = new Date(); tmr.setDate(tmr.getDate() + 1);
+        const defaultOut = getLocalISODate(tmr);
+
+        document.getElementById('mContent').innerHTML = `
+            <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px; font-size:13px; color:#333;">
+                Nhập khoảng thời gian khách muốn ở. Hệ thống sẽ lọc và chỉ hiển thị những phòng <b>chưa có ai đặt</b> trong thời gian này.
+            </div>
+            <div class="f-group"><label>Ngày khách muốn Check-in</label><input id="sStart" type="date" value="${realTodayStr}"></div>
+            <div class="f-group"><label>Ngày khách Check-out</label><input id="sEnd" type="date" value="${defaultOut}"></div>
+            <div class="btn-row" style="margin-top: 25px;">
+                <button class="btn btn-p" onclick="executeSearch()">TÌM PHÒNG TRỐNG</button>
+                <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
+            </div>
+        `;
+        document.getElementById('pmsModal').style.display = 'flex';
+    }
+
+    function executeSearch() {
+        const sStart = document.getElementById('sStart').value;
+        const sEnd = document.getElementById('sEnd').value;
+        
+        if (!sStart || !sEnd || sStart >= sEnd) {
+            return alert("Ngày đi phải lớn hơn ngày đến!");
+        }
+
+        searchCriteria = { start: sStart, end: sEnd };
+
+        // Tạo/Cập nhật Option "Kết quả tìm kiếm" trong Dropdown
+        let opt = document.getElementById('optSearch');
+        if (!opt) {
+            opt = document.createElement('option');
+            opt.id = 'optSearch';
+            opt.value = 'search';
+            document.getElementById('roomFilter').appendChild(opt);
+        }
+        opt.text = `Đang lọc phòng trống: ${sStart.split('-').reverse().join('/')} ➔ ${sEnd.split('-').reverse().join('/')}`;
+        opt.style.display = 'block';
+        
+        document.getElementById('roomFilter').value = 'search';
+        currentFilter = 'search';
+
+        closeModal();
+        render();
+    }
+
     // --- TÍNH NĂNG QUẢN LÝ PHÒNG (CHỈNH SỬA / XÓA) ---
     function openRoomSettings(rid, event) {
         if(event) event.stopPropagation(); 
-        
         const r = rooms.find(x => x.id === rid);
-        
         document.getElementById('mTitle').innerText = `Cài đặt phòng`;
         document.getElementById('mContent').innerHTML = `
-            <div class="f-group">
-                <label>Tên / Số phòng</label>
-                <input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, VIP 1">
-            </div>
-            <div class="f-group">
-                <label>Loại phòng</label>
-                <input id="fRoomCat" type="text" value="${r.cat || 'Standard'}" placeholder="VD: Single, Double, VIP">
-            </div>
-            <div class="f-group">
-                <label>Giá gốc mỗi đêm (VNĐ)</label>
-                <input id="fRoomPrice" type="number" value="${r.price}">
-            </div>
-            
+            <div class="f-group"><label>Tên / Số phòng</label><input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, VIP 1"></div>
+            <div class="f-group"><label>Loại phòng</label><input id="fRoomCat" type="text" value="${r.cat || 'Standard'}" placeholder="VD: Single, Double, VIP"></div>
+            <div class="f-group"><label>Giá gốc mỗi đêm (VNĐ)</label><input id="fRoomPrice" type="number" value="${r.price}"></div>
             <div class="btn-row" style="margin-top: 25px;">
                 <button class="btn btn-p" onclick="saveRoomSettings('${rid}')">LƯU THAY ĐỔI</button>
                 <button class="btn btn-d" onclick="deleteRoom('${rid}')">XÓA PHÒNG NÀY</button>
@@ -384,32 +458,21 @@
         const newPrice = parseInt(document.getElementById('fRoomPrice').value) || 0;
 
         if(!newId) return alert("Tên phòng không được để trống!");
-
-        if(newId !== oldRid && rooms.some(x => x.id === newId)) {
-            return alert("Tên phòng này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.");
-        }
+        if(newId !== oldRid && rooms.some(x => x.id === newId)) return alert("Tên phòng này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.");
 
         const r = rooms.find(x => x.id === oldRid);
-        r.id = newId;
-        r.cat = newCat;
-        r.price = newPrice;
+        r.id = newId; r.cat = newCat; r.price = newPrice;
 
         if(newId !== oldRid) {
-            bookings.forEach(b => {
-                if(b.roomId === oldRid) b.roomId = newId;
-            });
+            bookings.forEach(b => { if(b.roomId === oldRid) b.roomId = newId; });
         }
-
         closeModal(); save();
     }
 
     function deleteRoom(rid) {
         const hasBookings = bookings.some(b => b.roomId === rid);
         let msg = `Bạn có chắc chắn muốn xóa phòng ${rid} khỏi hệ thống không?`;
-        
-        if (hasBookings) {
-            msg = `CẢNH BÁO NGUY HIỂM:\Phòng ${rid} đang có lịch sử khách hàng hoặc đang có khách đặt!\nNếu bạn xóa phòng này, TOÀN BỘ dữ liệu đặt phòng liên quan cũng sẽ bị xóa vĩnh viễn.\n\nBạn vẫn muốn tiếp tục xóa?`;
-        }
+        if (hasBookings) msg = `CẢNH BÁO NGUY HIỂM:\Phòng ${rid} đang có lịch sử khách hàng!\nBạn vẫn muốn tiếp tục xóa?`;
 
         if(confirm(msg)) {
             rooms = rooms.filter(x => x.id !== rid);
@@ -420,44 +483,29 @@
 
 
     // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG ---
-
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
-        if (dep > 0 && typeSelect.value === 'blue') {
-            typeSelect.value = 'purple'; 
-        } else if (dep === 0 && typeSelect.value === 'purple') {
-            typeSelect.value = 'blue'; 
-        }
+        if (dep > 0 && typeSelect.value === 'blue') typeSelect.value = 'purple'; 
+        else if (dep === 0 && typeSelect.value === 'purple') typeSelect.value = 'blue'; 
     };
 
     function openBooking(roomId, date) {
         const r = rooms.find(x => x.id === roomId);
-        
-        let nextDay = new Date(date);
-        nextDay.setDate(nextDay.getDate() + 1);
+        let nextDay = new Date(date); nextDay.setDate(nextDay.getDate() + 1);
         const nextDayStr = getLocalISODate(nextDay);
 
         document.getElementById('mTitle').innerText = `Đặt phòng ${roomId}`;
         document.getElementById('mContent').innerHTML = `
             <div class="f-group"><label>Khách hàng & SĐT</label><input id="fName" type="text" placeholder="VD: Anh Minh - 090xxx"></div>
-            
             <div style="display:flex; gap:10px">
                 <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="fStart" type="date" value="${date}"></div>
                 <div class="f-group" style="flex:1"><label>Đến ngày</label><input id="fEnd" type="date" value="${nextDayStr}"></div>
             </div>
-
             <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1">
-                    <label>Giá thỏa thuận / Đêm</label>
-                    <input id="fPrice" type="number" value="${r.price}">
-                </div>
-                <div class="f-group" style="flex:1">
-                    <label>Tiền đã cọc (VNĐ)</label>
-                    <input id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0">
-                </div>
+                <div class="f-group" style="flex:1"><label>Giá thỏa thuận / Đêm</label><input id="fPrice" type="number" value="${r.price}"></div>
+                <div class="f-group" style="flex:1"><label>Tiền đã cọc (VNĐ)</label><input id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0"></div>
             </div>
-
             <div class="f-group">
                 <label>Trạng thái đặt phòng</label>
                 <select id="fType">
@@ -483,14 +531,7 @@
         const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
         if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
 
-        bookings.push({ 
-            id: 'BK'+Date.now(), 
-            roomId, guest, start, end, 
-            type: document.getElementById('fType').value,
-            price: price,     
-            deposit: deposit  
-        });
-        
+        bookings.push({ id: 'BK'+Date.now(), roomId, guest, start, end, type: document.getElementById('fType').value, price: price, deposit: deposit });
         closeModal(); save();
     }
 
@@ -501,10 +542,8 @@
         const nights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
         const appliedPrice = b.price !== undefined ? b.price : r.price;
         const deposit = b.deposit || 0;
-        
         const totalCost = nights * appliedPrice;
         const remaining = totalCost - deposit;
-        
         const isCompleted = b.type === 'grey';
 
         document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Quản lý lưu trú";
@@ -529,29 +568,13 @@
                 <h2 style="margin:0">${b.guest} ${isCompleted ? '<span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span>' : ''}</h2>
                 <p style="margin: 8px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
             </div>
-
             <div class="bill-box">
-                <div class="bill-row">
-                    <span>Đơn giá phòng (${nights} đêm):</span>
-                    <span>${appliedPrice.toLocaleString()}đ / đêm</span>
-                </div>
-                <div class="bill-row">
-                    <span>Thành tiền:</span>
-                    <span>${totalCost.toLocaleString()}đ</span>
-                </div>
-                <div class="bill-row" style="color: var(--s-green);">
-                    <span>Đã đặt cọc:</span>
-                    <span>- ${deposit.toLocaleString()}đ</span>
-                </div>
-                <div class="bill-row total">
-                    <span>CÒN LẠI CẦN THU:</span>
-                    <span>${remaining.toLocaleString()}đ</span>
-                </div>
+                <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
+                <div class="bill-row"><span>Thành tiền:</span><span>${totalCost.toLocaleString()}đ</span></div>
+                <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
+                <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
             </div>
-
-            <div class="btn-row">
-                ${actionButtons}
-            </div>
+            <div class="btn-row">${actionButtons}</div>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
     }
@@ -565,84 +588,46 @@
         }
     }
 
-    function updateBK(bid, type) {
-        bookings.find(x => x.id === bid).type = type;
-        closeModal(); save();
-    }
-
-    function delBK(bid) {
-        if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) {
-            bookings = bookings.filter(x => x.id !== bid);
-            closeModal(); save();
-        }
-    }
+    function updateBK(bid, type) { bookings.find(x => x.id === bid).type = type; closeModal(); save(); }
+    function delBK(bid) { if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) { bookings = bookings.filter(x => x.id !== bid); closeModal(); save(); } }
 
     function toggleDirty(rid) {
         const r = rooms.find(x => x.id === rid);
         if(r.status === 'dirty') {
-            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) {
-                r.status = 'clean'; save();
-            }
+            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { r.status = 'clean'; save(); }
         } else {
             const newPrice = prompt(`Phòng ${rid} đang Sạch.\nNhập giá gốc mới cho phòng này (hoặc để trống để Hủy):`, r.price);
-            if(newPrice && !isNaN(newPrice)) {
-                r.price = parseInt(newPrice);
-                save();
-            }
+            if(newPrice && !isNaN(newPrice)) { r.price = parseInt(newPrice); save(); }
         }
     }
 
     function addRoom() {
         const id = prompt("Nhập Số/Tên phòng mới (VD: 301, VIP2):");
         const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
-        if(id && price) {
-            rooms.push({ id, price: parseInt(price), cat: "Phòng mới", status: "clean" });
-            save();
-        }
+        if(id && price) { rooms.push({ id, price: parseInt(price), cat: "Phòng mới", status: "clean" }); save(); }
     }
 
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
-
-        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
-        csvContent += "Ma Dat Phong,Ten Khach,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
-
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
         bookings.forEach(b => {
             const r = rooms.find(rm => rm.id === b.roomId);
             const nights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
             const appliedPrice = b.price !== undefined ? b.price : (r ? r.price : 0);
             const total = nights * appliedPrice;
             const deposit = b.deposit || 0;
-            
             let statusVN = "Lỗi";
-            if(b.type === 'blue') statusVN = "Chưa cọc";
-            if(b.type === 'purple') statusVN = "Đã cọc";
-            if(b.type === 'red') statusVN = "Đang ở";
-            if(b.type === 'grey') statusVN = "Đã trả phòng";
-
-            const cleanGuest = b.guest.replace(/,/g, " ");
-
-            const row = [
-                b.id, cleanGuest, b.roomId, b.start, b.end, nights, 
-                appliedPrice, deposit, total, statusVN
-            ].join(",");
-
-            csvContent += row + "\r\n";
+            if(b.type === 'blue') statusVN = "Chưa cọc"; if(b.type === 'purple') statusVN = "Đã cọc";
+            if(b.type === 'red') statusVN = "Đang ở"; if(b.type === 'grey') statusVN = "Đã trả phòng";
+            csvContent += [b.id, b.guest.replace(/,/g, " "), b.roomId, b.start, b.end, nights, appliedPrice, deposit, total, statusVN].join(",") + "\r\n";
         });
-
-        const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "Bao_Cao_Doanh_Thu_PMS.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        link.setAttribute("href", encodeURI(csvContent)); link.setAttribute("download", "Bao_Cao_Doanh_Thu_PMS.csv");
+        document.body.appendChild(link); link.click(); document.body.removeChild(link);
     }
 
     function closeModal() { document.getElementById('pmsModal').style.display = 'none'; }
-    
-    // Khởi động
     render();
 </script>
 </body>
-</html>
+</html>vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
