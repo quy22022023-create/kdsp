@@ -16,6 +16,14 @@
 
         * { box-sizing: border-box; -webkit-font-smoothing: antialiased; font-family: 'Inter', -apple-system, sans-serif; }
         
+        /* Tối ưu hóa UI cho iOS/Android: Khử bóng mờ và viền mặc định */
+        input, select, button, textarea {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            margin: 0;
+        }
+
         body { 
             margin: 0; background: var(--bg); overflow: hidden; 
             height: 100vh; height: 100dvh; display: flex; flex-direction: column; 
@@ -110,20 +118,25 @@
         .modal-box {
             background: #fff; width: 95%; max-width: 480px; border-radius: 20px;
             overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.3); max-height: 88vh; overflow-y: auto;
+            display: flex; flex-direction: column;
         }
-        .modal-header { background: var(--p-blue); color: #fff; padding: 18px; font-weight: bold; display: flex; justify-content: space-between; position: sticky; top: 0; z-index: 10;}
-        .modal-content { padding: 20px 25px; }
+        .modal-header { background: var(--p-blue); color: #fff; padding: 18px; font-weight: bold; display: flex; justify-content: space-between; flex-shrink: 0; }
+        .modal-content { padding: 20px 20px; overflow-y: auto; }
 
         .f-group { margin-bottom: 15px; }
         .f-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #555; }
         
         .f-group input[type="text"], .f-group input[type="number"], .f-group input[type="tel"], .f-group select {
-            width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 16px !important; outline: none; transition: 0.3s; background: #fff;
+            width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 16px !important; outline: none; transition: 0.3s; background: #fff; box-sizing: border-box;
         }
         .f-group input:focus, .f-group select:focus { border-color: var(--p-blue); }
 
+        /* Flex Container chống tràn (Chữa lỗi iPhone) */
+        .flex-row { display: flex; gap: 10px; width: 100%; }
+        .flex-col { flex: 1; min-width: 0; } /* min-width: 0; là key để flexbox không bị bung viền */
+
         /* Fix Date Input for iOS Safari */
-        .date-wrapper { position: relative; width: 100%; height: 47px; border: 2px solid #eee; border-radius: 10px; background: #fff; display: flex; align-items: center; padding: 0 12px; transition: 0.3s; }
+        .date-wrapper { position: relative; width: 100%; height: 47px; border: 2px solid #eee; border-radius: 10px; background: #fff; display: flex; align-items: center; padding: 0 12px; transition: 0.3s; box-sizing: border-box; }
         .date-wrapper:focus-within { border-color: var(--p-blue); }
         .date-label { font-size: 16px; color: #000; pointer-events: none; }
         .date-wrapper input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0;}
@@ -134,7 +147,8 @@
         .bill-row.total { border-top: 1px dashed #ccc; padding-top: 8px; font-weight: bold; font-size: 16px; color: var(--p-red); margin-bottom: 0;}
 
         .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
-        .btn { padding: 14px; border: none; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 14px; white-space: nowrap;}
+        .btn { padding: 14px; border: none; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 14px; white-space: nowrap; text-align: center; display: inline-block; box-sizing: border-box; }
+        .btn:active { transform: scale(0.98); }
         .btn-p { background: var(--p-blue); color: #fff; }
         .btn-s { background: var(--s-green); color: #fff; }
         .btn-d { background: var(--p-red); color: #fff; }
@@ -144,9 +158,14 @@
         .excel-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 15px;}
         .excel-table th { background: #f3f2f1; border: 1px solid #c8c6c4; padding: 10px; font-weight: 600; color: #323130; text-align: left; }
         .excel-table td { border: 1px solid #c8c6c4; padding: 0; background: #fff; position: relative; }
-        .excel-table input { width: 100%; height: 100%; border: none; padding: 10px; outline: none; background: transparent; font-size: 16px !important; }
+        .excel-table input { width: 100%; height: 100%; border: none; padding: 10px; outline: none; background: transparent; font-size: 16px !important; box-sizing: border-box; }
         .excel-table input:focus { box-shadow: inset 0 0 0 2px var(--p-blue); }
-        .excel-table button { width: 100%; height: 100%; border: none; padding: 10px; cursor: pointer; font-size: 14px; }
+        .excel-table button { width: 100%; height: 100%; border: none; padding: 10px; cursor: pointer; font-size: 14px; box-sizing: border-box;}
+
+        /* Dropdown Minibar đặc chế không tràn */
+        .mb-select { flex: 2; min-width: 0; padding: 12px; border: 2px solid #eee; border-radius: 8px; font-size: 16px !important; background: #fff; outline:none; text-overflow: ellipsis; }
+        .mb-qty { flex: 1; min-width: 0; padding: 12px; border: 2px solid #eee; border-radius: 8px; font-size: 16px !important; text-align: center; outline:none; background:#fff; }
+        .mb-add-btn { padding: 0 15px; font-size: 18px; font-weight:bold; flex-shrink: 0; border-radius: 8px; background: var(--s-green); color: #fff; border: none; cursor: pointer; }
 
         @media (max-width: 1024px) {
             .brand { display: none; } 
@@ -158,6 +177,12 @@
             .header-tools .btn { padding: 10px !important; font-size: 12px !important; }
             #roomFilter { display: none; } 
             .month-nav input[type="month"] { width: 100px; }
+            .modal-content { padding: 15px; } /* Thu nhỏ lề cho đt nhỏ */
+        }
+        /* Phân luồng Grid 1 cột nếu màn hình quá hẹp để nút bấm không đè nhau */
+        @media (max-width: 380px) {
+            .btn-row { grid-template-columns: 1fr; }
+            .btn-cancel { grid-column: 1; }
         }
     </style>
 </head>
@@ -182,9 +207,7 @@
         </select>
         
         <button class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
-        
         <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="openMinibarCatalog()">📦 DỊCH VỤ</button>
-        
         <button class="btn btn-s" style="background: #27ae60; padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 CSV</button>
         <button class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
     </div>
@@ -214,7 +237,7 @@
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A';
     const _supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-    // --- CÁC HÀM HỖ TRỢ XỬ LÝ NGÀY GIỜ CHỐNG LỖI TIMEZONE ---
+    // --- CÁC HÀM HỖ TRỢ XỬ LÝ NGÀY GIỜ ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - offset).toISOString().substring(0, 10);
@@ -258,6 +281,7 @@
     // --- DATA ENGINE ---
     let rooms = [];
     let bookings = [];
+    let services = []; 
     
     let currentFilter = 'all';
     let searchCriteria = null; 
@@ -266,17 +290,30 @@
     let currentViewDate = new Date();
     currentViewDate.setHours(12, 0, 0, 0); 
 
-    // --- QUẢN LÝ MINIBAR CATALOG (EXCEL-LIKE) ---
-    function getMinibarCatalog() {
-        return JSON.parse(localStorage.getItem('pms_minibar_catalog')) || [
-            {name: 'Nước suối', price: 10000}, {name: 'Mì ly', price: 15000}, {name: 'Bò húc', price: 20000}
-        ];
+    // --- HÀM TẢI VÀ ĐỒNG BỘ DỮ LIỆU TỪ SUPABASE ---
+    async function loadData() {
+        const { data: rms, error: e1 } = await _supabase.from('rooms').select('*').order('id', { ascending: true });
+        const { data: bks, error: e2 } = await _supabase.from('bookings').select('*');
+        const { data: svs, error: e3 } = await _supabase.from('services').select('*').order('name', { ascending: true });
+        
+        if (e1 || e2 || e3) {
+            console.error("Lỗi tải dữ liệu Supabase:", e1 || e2 || e3);
+        } else {
+            rooms = rms || [];
+            services = svs || []; 
+            bookings = (bks || []).map(b => {
+                if (b.start && b.start.includes(' ')) b.start = b.start.replace(' ', 'T');
+                if (b.end && b.end.includes(' ')) b.end = b.end.replace(' ', 'T');
+                return b;
+            });
+            render();
+        }
     }
 
+    // --- QUẢN LÝ MINIBAR CATALOG ĐỒNG BỘ SUPABASE ---
     window.openMinibarCatalog = function() {
-        let catalog = getMinibarCatalog();
         let html = `
-            <div style="margin-bottom: 10px; font-size: 13px; color: #444;">Nhập trực tiếp vào ô để sửa dữ liệu (giao diện giống Excel). Hệ thống sẽ tự động lưu lại.</div>
+            <div style="margin-bottom: 10px; font-size: 13px; color: #444;">Nhập trực tiếp vào ô để sửa dữ liệu. Hệ thống sẽ tự động đồng bộ lên Database.</div>
             <div style="overflow-x:auto;">
             <table class="excel-table">
                 <tr>
@@ -284,11 +321,11 @@
                     <th>Giá bán (VNĐ)</th>
                     <th style="width: 50px; text-align:center;">Xóa</th>
                 </tr>`;
-        catalog.forEach((item, idx) => {
+        services.forEach((item) => {
             html += `<tr>
-                <td><input type="text" value="${item.name}" onchange="updateCatalog(${idx}, 'name', this.value)"></td>
-                <td><input type="number" value="${item.price}" onchange="updateCatalog(${idx}, 'price', this.value)"></td>
-                <td style="text-align: center;"><button style="background: #ffebee; color: var(--p-red);" onclick="deleteCatalog(${idx})">✕</button></td>
+                <td><input type="text" value="${item.name}" onchange="updateCatalog('${item.id}', 'name', this.value)"></td>
+                <td><input type="number" value="${item.price}" onchange="updateCatalog('${item.id}', 'price', this.value)"></td>
+                <td style="text-align: center;"><button style="background: #ffebee; color: var(--p-red);" onclick="deleteCatalog('${item.id}')">✕</button></td>
             </tr>`;
         });
         html += `<tr>
@@ -304,44 +341,33 @@
         document.getElementById('pmsModal').style.display = 'flex';
     }
 
-    window.updateCatalog = function(idx, field, val) {
-        let cat = getMinibarCatalog();
+    window.updateCatalog = async function(id, field, val) {
         if(field === 'price') val = parseInt(val) || 0;
-        cat[idx][field] = val;
-        localStorage.setItem('pms_minibar_catalog', JSON.stringify(cat));
+        const { error } = await _supabase.from('services').update({ [field]: val }).eq('id', id);
+        if(error) alert("Lỗi khi cập nhật món hàng!");
+        else await loadData();
     }
-    window.deleteCatalog = function(idx) {
-        let cat = getMinibarCatalog();
-        cat.splice(idx, 1);
-        localStorage.setItem('pms_minibar_catalog', JSON.stringify(cat));
-        openMinibarCatalog();
+    
+    window.deleteCatalog = async function(id) {
+        if(confirm("Bạn có chắc muốn xóa dịch vụ này? (Không ảnh hưởng đến hóa đơn cũ)")) {
+            await _supabase.from('services').delete().eq('id', id);
+            await loadData();
+            openMinibarCatalog();
+        }
     }
-    window.addCatalog = function() {
+
+    window.addCatalog = async function() {
         let name = document.getElementById('newCatName').value.trim();
         let price = parseInt(document.getElementById('newCatPrice').value) || 0;
         if(!name) return;
-        let cat = getMinibarCatalog();
-        cat.push({name, price});
-        localStorage.setItem('pms_minibar_catalog', JSON.stringify(cat));
-        openMinibarCatalog();
-    }
-
-
-    // --- HÀM TẢI VÀ ĐỒNG BỘ DỮ LIỆU TỪ SUPABASE ---
-    async function loadData() {
-        const { data: rms, error: e1 } = await _supabase.from('rooms').select('*').order('id', { ascending: true });
-        const { data: bks, error: e2 } = await _supabase.from('bookings').select('*');
         
-        if (e1 || e2) {
-            console.error("Lỗi tải dữ liệu Supabase:", e1 || e2);
+        let newId = 'SV' + Date.now();
+        const { error } = await _supabase.from('services').insert([{ id: newId, name: name, price: price }]);
+        if(error) {
+            alert("Lỗi! Cần đảm bảo đã tạo bảng 'services' trên Supabase.");
         } else {
-            rooms = rms || [];
-            bookings = (bks || []).map(b => {
-                if (b.start && b.start.includes(' ')) b.start = b.start.replace(' ', 'T');
-                if (b.end && b.end.includes(' ')) b.end = b.end.replace(' ', 'T');
-                return b;
-            });
-            render();
+            await loadData();
+            openMinibarCatalog();
         }
     }
 
@@ -390,7 +416,7 @@
             const endCal = new Date((b.end ? b.end.substring(0, 10) : realTodayStr) + 'T00:00:00');
             const nights = Math.max((endCal - startCal) / 86400000, 1);
             const appliedPrice = b.price !== undefined ? b.price : (rooms.find(rm => rm.id === b.roomId)?.price || 0);
-            const miniTotal = parseInt(b.minibar_total) || 0; // Cộng doanh thu minibar
+            const miniTotal = parseInt(b.minibar_total) || 0; 
             return sum + (nights * appliedPrice) + miniTotal; 
         }, 0);
 
@@ -594,9 +620,9 @@
         document.getElementById('mTitle').innerText = `Cài đặt phòng`;
         document.getElementById('mContent').innerHTML = `
             <div class="f-group"><label>Tên / Số phòng</label><input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, P201 (P1)"></div>
-            <div style="display:flex; gap:10px;">
-                <div class="f-group" style="flex:1;"><label>Mã Lockbox</label><input id="fRoomLockbox" type="text" value="${r.lockbox || ''}" placeholder="VD: 9138"></div>
-                <div class="f-group" style="flex:1;"><label>Giá gốc / đêm</label><input id="fRoomPrice" type="number" value="${r.price}"></div>
+            <div class="flex-row" style="margin-bottom: 15px;">
+                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Mã Lockbox</label><input class="f-group" style="margin-bottom:0;" id="fRoomLockbox" type="text" value="${r.lockbox || ''}" placeholder="VD: 9138"></div>
+                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá gốc / đêm</label><input class="f-group" style="margin-bottom:0;" id="fRoomPrice" type="number" value="${r.price}"></div>
             </div>
             <div class="f-group"><label>Ghi chú / Tính chất phòng</label><input id="fRoomNotes" type="text" value="${r.notes || ''}" placeholder="VD: Quạt trần, ban công, 2 giường..."></div>
             <div class="btn-row" style="margin-top: 25px;">
@@ -683,25 +709,26 @@
                 <input id="fPhone" type="tel" placeholder="Dán thông tin chứa SĐT vào đây..." oninput="this.value = this.value.replace(/[^0-9+]/g, '')">
             </div>
 
-            <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1">
-                    <label>Ngày đến</label>
+            <div class="flex-row" style="margin-bottom: 15px;">
+                <div class="flex-col">
+                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Ngày đến</label>
                     <div class="date-wrapper">
                         <span class="date-label" id="lblBkStart">${fmt(date)}</span>
                         <input id="fStart" type="date" value="${date}" onchange="document.getElementById('lblBkStart').innerText = fmt(this.value)">
                     </div>
                 </div>
-                <div class="f-group" style="flex:1">
-                    <label>Ngày đi</label>
+                <div class="flex-col">
+                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Ngày đi</label>
                     <div class="date-wrapper">
                         <span class="date-label" id="lblBkEnd">${fmt(endD)}</span>
                         <input id="fEnd" type="date" value="${endD}" onchange="document.getElementById('lblBkEnd').innerText = fmt(this.value)">
                     </div>
                 </div>
             </div>
-            <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1"><label>Giá thỏa thuận / Đêm</label><input id="fPrice" type="number" value="${r.price}"></div>
-                <div class="f-group" style="flex:1"><label>Tiền đã cọc (VNĐ)</label><input id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0"></div>
+            
+            <div class="flex-row" style="margin-bottom: 15px;">
+                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá thỏa thuận / Đêm</label><input class="f-group" style="margin-bottom:0;" id="fPrice" type="number" value="${r.price}"></div>
+                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tiền đã cọc (VNĐ)</label><input class="f-group" style="margin-bottom:0;" id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0"></div>
             </div>
             <div class="f-group">
                 <label>Trạng thái ban đầu</label>
@@ -744,6 +771,14 @@
         await loadData();
     }
 
+    // --- Cập nhật giá động khi chọn đổi phòng ---
+    window.updatePriceOnChange = function(newRid) {
+        const rm = rooms.find(x => x.id === newRid);
+        if (rm) {
+            document.getElementById('dPrice').value = rm.price;
+        }
+    };
+
     window.openDetail = function(bid) {
         const b = bookings.find(x => x.id === bid);
         if(!b) return; 
@@ -774,19 +809,18 @@
 
         document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Chi tiết & Gia hạn phòng";
         
-        // --- HTML CHO MINIBAR ---
-        const catalog = getMinibarCatalog();
+        // --- HTML CHO MINIBAR (FIX TRÀN VIỀN BẰNG FLEX-CONTAINER CHUẨN) ---
         let miniHtml = '';
         if (!isCompleted) {
             miniHtml = `
             <div style="background:#fdfaf0; border: 1px solid #fcebb6; padding:15px; border-radius:12px; margin-bottom:15px;">
                 <h4 style="margin: 0 0 10px 0; color: var(--p-blue); font-size: 14px;">🛒 Gọi Dịch vụ / Minibar</h4>
-                <div style="display:flex; gap:8px; margin-bottom: 12px;">
-                    <select id="mbItem" style="flex:2; padding: 12px; border: 2px solid #eee; border-radius: 8px; font-size: 16px !important; background: #fff; outline:none;">
-                        ${catalog.map(c => `<option value="${c.name}|${c.price}">${c.name} - ${(c.price/1000)}k</option>`).join('')}
+                <div style="display:flex; gap:8px; margin-bottom: 12px; width: 100%;">
+                    <select id="mbItem" class="mb-select">
+                        ${services.map(c => `<option value="${c.name}|${c.price}">${c.name} - ${(c.price/1000)}k</option>`).join('')}
                     </select>
-                    <input type="number" id="mbQty" value="1" min="1" style="flex:1; padding: 12px; border: 2px solid #eee; border-radius: 8px; font-size: 16px !important; text-align: center; outline:none; background:#fff;">
-                    <button class="btn btn-s" style="padding: 10px 15px; font-size: 16px; font-weight:bold;" onclick="addMbToBooking('${bid}')">+</button>
+                    <input type="number" id="mbQty" class="mb-qty" value="1" min="1">
+                    <button class="mb-add-btn" onclick="addMbToBooking('${bid}')">+</button>
                 </div>
                 <div id="mbList" style="font-size: 14px; color: #444;">
                     ${miniItems.map((m, i) => `<div style="display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px dashed #e0e0e0;">
@@ -831,9 +865,9 @@
             const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
 
             const roomSelectHtml = `
-                <div style="flex:1;">
+                <div style="flex:1; min-width: 0;">
                     <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px; color:var(--p-blue);">Phòng (Đổi phòng)</label>
-                    <select id="dRoomId" style="padding: 8px; font-size: 16px !important; font-weight: bold; color: var(--p-blue); border: 2px solid var(--p-blue); border-radius: 8px; outline: none; width: 100%; max-width: 140px; background: white;">
+                    <select id="dRoomId" onchange="updatePriceOnChange(this.value)" style="padding: 8px; font-size: 16px !important; font-weight: bold; color: var(--p-blue); border: 2px solid var(--p-blue); border-radius: 8px; outline: none; width: 100%; background: white;">
                         ${rooms.map(rm => `<option value="${rm.id}" ${rm.id === b.roomId ? 'selected' : ''}>Phòng ${rm.id}</option>`).join('')}
                     </select>
                 </div>
@@ -844,35 +878,38 @@
             document.getElementById('mContent').innerHTML = `
                 ${overdueWarningHtml}
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px;">
-                    <div style="display:flex; justify-content:space-between; align-items: flex-end; margin-bottom: 15px;">
+                    <div style="display:flex; justify-content:space-between; align-items: flex-end; margin-bottom: 15px; gap: 10px;">
                         ${roomSelectHtml}
-                        ${lbDisplay}
+                        <div style="flex-shrink:0;">${lbDisplay}</div>
                     </div>
-                    <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>Tên khách</label><input id="dName" type="text" value="${b.guest}"></div>
-                        <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
+                    
+                    <div class="flex-row" style="margin-bottom: 15px;">
+                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tên khách</label><input class="f-group" style="margin-bottom:0;" id="dName" type="text" value="${b.guest}"></div>
+                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">SĐT (Dán SĐT)</label><input class="f-group" style="margin-bottom:0;" id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
                     </div>
-                    <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1">
-                            <label>Ngày đến</label>
+                    
+                    <div class="flex-row" style="margin-bottom: 15px;">
+                        <div class="flex-col">
+                            <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Ngày đến</label>
                             <div class="date-wrapper">
                                 <span class="date-label" id="lblDetStart">${fmt(dStartInput)}</span>
                                 <input id="dStart" type="date" value="${dStartInput}" onchange="document.getElementById('lblDetStart').innerText = fmt(this.value)">
                             </div>
                         </div>
-                        <div class="f-group" style="flex:1">
-                            <label>Ngày đi (Gia hạn)</label>
+                        <div class="flex-col">
+                            <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Ngày đi</label>
                             <div class="date-wrapper">
                                 <span class="date-label" id="lblDetEnd">${fmt(dEndInput)}</span>
                                 <input id="dEnd" type="date" value="${dEndInput}" onchange="document.getElementById('lblDetEnd').innerText = fmt(this.value)">
                             </div>
                         </div>
                     </div>
-                    <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
-                        <div class="f-group" style="flex:1"><label>Tiền cọc</label><input id="dDeposit" type="number" value="${deposit}"></div>
+                    
+                    <div class="flex-row">
+                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá / Đêm</label><input class="f-group" style="margin-bottom:0;" id="dPrice" type="number" value="${appliedPrice}"></div>
+                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tiền cọc</label><input class="f-group" style="margin-bottom:0;" id="dDeposit" type="number" value="${deposit}"></div>
                     </div>
-                    <button class="btn btn-p" style="width:100%; padding: 10px; font-size: 13px; margin-top:5px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / ĐỔI PHÒNG</button>
+                    <button class="btn btn-p" style="width:100%; padding: 12px; font-size: 14px; margin-top:15px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / ĐỔI PHÒNG</button>
                 </div>
                 
                 ${miniHtml}
@@ -913,7 +950,7 @@
         }).eq('id', bid);
 
         if(error) {
-            alert("Lưu thất bại! Bạn đã tạo 2 cột minibar_total và minibar_items trên Supabase chưa?");
+            alert("Lưu thất bại! Bạn đã tạo bảng 'services' trên Supabase chưa?");
             return;
         }
         await loadData();
@@ -940,7 +977,7 @@
         }
     }
 
-    // --- LƯU THAY ĐỔI & LOGIC ĐỔI PHÒNG (CẮT ĐÔI) ---
+    // --- LƯU THAY ĐỔI & LOGIC ĐỔI PHÒNG (BẾ TOÀN BỘ KHÁCH) ---
     async function saveBookingChanges(bid) {
         const b = bookings.find(x => x.id === bid);
         const newRoomId = document.getElementById('dRoomId').value; 
@@ -959,61 +996,20 @@
         const newStart = `${newStartD}T${oldStartTime}`;
         const newEnd = `${newEndD}T${oldEndTime}`;
 
+        // Kiểm tra xem phòng dự kiến Đổi/Gia hạn có đang bị kẹt lịch bởi khách nào khác không
         const overlap = bookings.some(x => x.id !== bid && x.roomId === newRoomId && (newStart < x.end && newEnd > x.start));
         if(overlap) return alert(`Lỗi: Không thể thực hiện vì Phòng ${newRoomId} đã có khách đặt trong khoảng thời gian này!`);
 
-        // NẾU ĐANG LƯU TRÚ MÀ ĐỔI PHÒNG (Thực hiện Cắt đôi booking)
+        // Update dữ liệu thẳng thừng (Nếu là đổi phòng, giá tiền mới đã được tự động thay bằng giá phòng mới)
+        await _supabase.from('bookings').update({ 
+            roomId: newRoomId, 
+            guest: newName, phone: newPhone, start: newStart, 
+            end: newEnd, price: newPrice, deposit: newDeposit 
+        }).eq('id', bid);
+
+        // NẾU LÀ ĐỔI PHÒNG: Đánh dấu phòng cũ là "Chờ dọn dẹp" nếu khách đã check-in
         if (b.roomId !== newRoomId && b.type === 'red') {
-            
-            // 1. Tính toán nhẩm tiền phòng cũ để nhắc nhở
-            const startCal = new Date((b.start ? b.start.substring(0, 10) : realTodayStr) + 'T00:00:00');
-            const actualOutDateStr = realTodayStr; 
-            const endCal = new Date(actualOutDateStr + 'T00:00:00');
-            let nightsOld = Math.max((endCal - startCal) / 86400000, 0); 
-            if (nightsOld === 0) nightsOld = 1; 
-            const appliedPriceOld = b.price !== undefined ? b.price : rooms.find(r => r.id === b.roomId).price;
-            const oldTotalCost = nightsOld * appliedPriceOld + (parseInt(b.minibar_total) || 0);
-            
-            const actualOut = `${actualOutDateStr}T${getCurrentTimeStr()}`;
-
-            // 2. Chốt sổ phòng cũ
-            await _supabase.from('bookings').update({ 
-                end: actualOut,
-                deposit: 0, // Bưng toàn bộ cọc sang phòng mới
-                type: 'grey',
-                guest: b.guest + ` (Đã chuyển sang P.${newRoomId})`
-            }).eq('id', bid);
-
-            // 3. Đẻ ra Booking ở phòng mới nối tiếp thời gian
-            const newBk = {
-                id: 'BK' + Date.now(),
-                roomId: newRoomId,
-                guest: newName + ` (Từ P.${b.roomId} - Nhớ thu ${oldTotalCost.toLocaleString()}đ phòng cũ)`,
-                phone: newPhone,
-                start: `${actualOutDateStr}T${getCurrentTimeStr()}`,
-                end: newEnd,
-                type: 'red',
-                price: newPrice,
-                deposit: newDeposit, 
-                minibar_total: 0, 
-                minibar_items: JSON.stringify([])
-            };
-            await _supabase.from('bookings').insert([newBk]);
-
-            // 4. Bật cờ dọn dẹp cho phòng cũ
             await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
-
-        } else {
-            // CẬP NHẬT BÌNH THƯỜNG (Cùng phòng hoặc chưa check-in)
-            await _supabase.from('bookings').update({ 
-                roomId: newRoomId, 
-                guest: newName, phone: newPhone, start: newStart, 
-                end: newEnd, price: newPrice, deposit: newDeposit 
-            }).eq('id', bid);
-
-            if (b.roomId !== newRoomId && b.type === 'red') {
-                await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
-            }
         }
 
         await loadData();
