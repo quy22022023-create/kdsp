@@ -236,6 +236,10 @@
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A';
     const _supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
+    // --- BIẾN TRẠNG THÁI QUẢN LÝ REALTIME MODAL ---
+    let isModalOpen = false;
+    let needRefresh = false;
+
     // --- CÁC HÀM HỖ TRỢ XỬ LÝ NGÀY GIỜ ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
@@ -289,6 +293,18 @@
     let currentViewDate = new Date();
     currentViewDate.setHours(12, 0, 0, 0); 
 
+    // --- ĐỒNG BỘ THỜI GIAN THỰC (REALTIME SYNC) ---
+    _supabase.channel('public-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+          console.log('Phát hiện dữ liệu thay đổi:', payload);
+          if (isModalOpen) {
+              needRefresh = true; // Đang mở Modal -> Đánh dấu chờ
+          } else {
+              loadData(); // Đang xem lưới -> Tải lại ngay lập tức
+          }
+      })
+      .subscribe();
+
     // --- HÀM TẢI VÀ ĐỒNG BỘ DỮ LIỆU TỪ SUPABASE ---
     async function loadData() {
         const { data: rms, error: e1 } = await _supabase.from('rooms').select('*').order('id', { ascending: true });
@@ -338,19 +354,20 @@
         document.getElementById('mTitle').innerText = `Quản lý Danh mục Dịch vụ`;
         document.getElementById('mContent').innerHTML = html;
         document.getElementById('pmsModal').style.display = 'flex';
+        isModalOpen = true; // Đánh dấu Modal đang mở
     }
 
     window.updateCatalog = async function(id, field, val) {
         if(field === 'price') val = parseInt(val) || 0;
         const { error } = await _supabase.from('services').update({ [field]: val }).eq('id', id);
         if(error) alert("Lỗi khi cập nhật món hàng!");
-        else await loadData();
+        // Không gọi loadData() ở đây nữa vì Realtime sẽ tự bắt
     }
     
     window.deleteCatalog = async function(id) {
         if(confirm("Bạn có chắc muốn xóa dịch vụ này? (Không ảnh hưởng đến hóa đơn cũ)")) {
             await _supabase.from('services').delete().eq('id', id);
-            await loadData();
+            // Không gọi loadData() ở đây nữa vì Realtime sẽ tự bắt
             openMinibarCatalog();
         }
     }
@@ -365,6 +382,7 @@
         if(error) {
             alert("Lỗi! Cần đảm bảo đã tạo bảng 'services' trên Supabase.");
         } else {
+            // Cập nhật giao diện thủ công 1 xíu để mượt hơn trong lúc mở Modal
             await loadData();
             openMinibarCatalog();
         }
@@ -588,6 +606,7 @@
             </div>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
+        isModalOpen = true;
     }
 
     function executeSearch() {
@@ -631,6 +650,7 @@
             </div>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
+        isModalOpen = true;
     }
 
     async function saveRoomSettings(oldRid) {
@@ -652,7 +672,6 @@
         }
         
         closeModal(); 
-        await loadData();
     }
 
     async function deleteRoom(rid) {
@@ -664,7 +683,6 @@
             await _supabase.from('bookings').delete().eq('roomId', rid); 
             await _supabase.from('rooms').delete().eq('id', rid); 
             closeModal(); 
-            await loadData();
         }
     }
 
@@ -674,12 +692,10 @@
         if(r.status === 'dirty') {
             if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { 
                 await _supabase.from('rooms').update({ status: 'clean' }).eq('id', rid);
-                await loadData(); 
             }
         } else {
             if(confirm("Đánh dấu phòng " + rid + " cần dọn dẹp?")) { 
                 await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', rid);
-                await loadData(); 
             }
         }
     }
@@ -739,6 +755,7 @@
             <button class="btn btn-p" style="width:100%; margin-top: 10px;" onclick="confirmBooking('${roomId}')">XÁC NHẬN ĐẶT PHÒNG</button>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
+        isModalOpen = true;
     }
 
     async function confirmBooking(roomId) {
@@ -766,7 +783,6 @@
         
         await _supabase.from('bookings').insert([newBk]);
         closeModal(); 
-        await loadData();
     }
 
     // --- Cập nhật giá động khi chọn đổi phòng ---
@@ -923,6 +939,7 @@
             `;
         }
         document.getElementById('pmsModal').style.display = 'flex';
+        isModalOpen = true;
     }
 
     // --- CÁC HÀM XỬ LÝ MINIBAR THÊM/XÓA ---
@@ -974,7 +991,7 @@
         }
     }
 
-    // --- LƯU THAY ĐỔI & LOGIC ĐỔI PHÒNG (BẾ TOÀN BỘ KHÁCH) ---
+    // --- LƯU THAY ĐỔI & LOGIC ĐỔI PHÒNG ---
     async function saveBookingChanges(bid) {
         const b = bookings.find(x => x.id === bid);
         const newRoomId = document.getElementById('dRoomId').value; 
@@ -1006,7 +1023,6 @@
             await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
         }
 
-        await loadData();
         closeModal(); 
     }
 
@@ -1019,7 +1035,6 @@
             await _supabase.from('bookings').update({ type: 'grey', end: actualOut }).eq('id', bid);
             await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
             closeModal(); 
-            await loadData();
         }
     }
 
@@ -1034,14 +1049,12 @@
         
         await _supabase.from('bookings').update(updateData).eq('id', bid);
         closeModal(); 
-        await loadData(); 
     }
 
     async function delBK(bid) { 
         if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) { 
             await _supabase.from('bookings').delete().eq('id', bid);
             closeModal(); 
-            await loadData(); 
         } 
     }
 
@@ -1050,7 +1063,6 @@
         const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
         if(id && price) { 
             await _supabase.from('rooms').insert([{ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }]);
-            await loadData(); 
         }
     }
 
@@ -1161,7 +1173,15 @@
         document.body.removeChild(link);
     }
 
-    function closeModal() { document.getElementById('pmsModal').style.display = 'none'; }
+    // Hàm đóng Modal thông minh (Tự động tải lại dữ liệu nếu bị lỡ nhịp Realtime)
+    function closeModal() { 
+        document.getElementById('pmsModal').style.display = 'none'; 
+        isModalOpen = false;
+        if (needRefresh) {
+            needRefresh = false;
+            loadData(); // Cập nhật bù lại những gì bị lỡ khi đang mở Modal
+        }
+    }
     
     // Gọi hàm load dữ liệu ngay khi mở app
     loadData();
