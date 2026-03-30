@@ -111,10 +111,16 @@
         .f-group { margin-bottom: 15px; }
         .f-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #555; }
         
-        .f-group input, .f-group select {
+        .f-group input[type="text"], .f-group input[type="number"], .f-group input[type="tel"], .f-group select {
             width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 16px !important; outline: none; transition: 0.3s; background: #fff;
         }
         .f-group input:focus, .f-group select:focus { border-color: var(--p-blue); }
+
+        /* Fix Date Input for iOS Safari */
+        .date-wrapper { position: relative; width: 100%; height: 47px; border: 2px solid #eee; border-radius: 10px; background: #fff; display: flex; align-items: center; padding: 0 12px; transition: 0.3s; }
+        .date-wrapper:focus-within { border-color: var(--p-blue); }
+        .date-label { font-size: 16px; color: #000; pointer-events: none; }
+        .date-wrapper input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; padding: 0;}
 
         /* Bill Table */
         .bill-box { background: #fdfaf0; border: 1px solid #fcebb6; padding: 15px; border-radius: 12px; margin-top: 15px; }
@@ -444,8 +450,20 @@
             <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px; font-size:13px; color:#333;">
                 Nhập khoảng ngày khách muốn ở. Hệ thống sẽ lọc những phòng <b>chưa có người đặt</b>.
             </div>
-            <div class="f-group"><label>Ngày khách Check-in</label><input id="sStart" type="date" value="${defaultIn}"></div>
-            <div class="f-group"><label>Ngày khách Check-out</label><input id="sEnd" type="date" value="${defaultOut}"></div>
+            <div class="f-group">
+                <label>Ngày khách Check-in</label>
+                <div class="date-wrapper">
+                    <span class="date-label" id="lblSearchIn">${fmt(defaultIn)}</span>
+                    <input id="sStart" type="date" value="${defaultIn}" onchange="document.getElementById('lblSearchIn').innerText = fmt(this.value)">
+                </div>
+            </div>
+            <div class="f-group">
+                <label>Ngày khách Check-out</label>
+                <div class="date-wrapper">
+                    <span class="date-label" id="lblSearchOut">${fmt(defaultOut)}</span>
+                    <input id="sEnd" type="date" value="${defaultOut}" onchange="document.getElementById('lblSearchOut').innerText = fmt(this.value)">
+                </div>
+            </div>
             <div class="btn-row" style="margin-top: 25px;">
                 <button class="btn btn-p" onclick="executeSearch()">TÌM PHÒNG TRỐNG</button>
                 <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
@@ -554,7 +572,7 @@
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
         if (dep > 0 && typeSelect.value === 'blue') typeSelect.value = 'purple'; 
-        else if (dep === 0 && typeSelect.value === 'purple') typeSelect.value = 'blue'; 
+        else if (dep === 0 && typeSelect.value === 'purple') typeSelect.value === 'blue'; 
     };
 
     function openBooking(roomId, date) {
@@ -573,8 +591,20 @@
             </div>
 
             <div style="display:flex; gap:10px">
-                <div class="f-group" style="flex:1"><label>Ngày đến</label><input id="fStart" type="date" value="${date}"></div>
-                <div class="f-group" style="flex:1"><label>Ngày đi</label><input id="fEnd" type="date" value="${endD}"></div>
+                <div class="f-group" style="flex:1">
+                    <label>Ngày đến</label>
+                    <div class="date-wrapper">
+                        <span class="date-label" id="lblBkStart">${fmt(date)}</span>
+                        <input id="fStart" type="date" value="${date}" onchange="document.getElementById('lblBkStart').innerText = fmt(this.value)">
+                    </div>
+                </div>
+                <div class="f-group" style="flex:1">
+                    <label>Ngày đi</label>
+                    <div class="date-wrapper">
+                        <span class="date-label" id="lblBkEnd">${fmt(endD)}</span>
+                        <input id="fEnd" type="date" value="${endD}" onchange="document.getElementById('lblBkEnd').innerText = fmt(this.value)">
+                    </div>
+                </div>
             </div>
             <div style="display:flex; gap:10px">
                 <div class="f-group" style="flex:1"><label>Giá thỏa thuận / Đêm</label><input id="fPrice" type="number" value="${r.price}"></div>
@@ -687,8 +717,20 @@
                         <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
                     </div>
                     <div style="display:flex; gap:10px">
-                        <div class="f-group" style="flex:1"><label>Ngày đến</label><input id="dStart" type="date" value="${dStartInput}"></div>
-                        <div class="f-group" style="flex:1"><label>Ngày đi (Gia hạn)</label><input id="dEnd" type="date" value="${dEndInput}"></div>
+                        <div class="f-group" style="flex:1">
+                            <label>Ngày đến</label>
+                            <div class="date-wrapper">
+                                <span class="date-label" id="lblDetStart">${fmt(dStartInput)}</span>
+                                <input id="dStart" type="date" value="${dStartInput}" onchange="document.getElementById('lblDetStart').innerText = fmt(this.value)">
+                            </div>
+                        </div>
+                        <div class="f-group" style="flex:1">
+                            <label>Ngày đi (Gia hạn)</label>
+                            <div class="date-wrapper">
+                                <span class="date-label" id="lblDetEnd">${fmt(dEndInput)}</span>
+                                <input id="dEnd" type="date" value="${dEndInput}" onchange="document.getElementById('lblDetEnd').innerText = fmt(this.value)">
+                            </div>
+                        </div>
                     </div>
                     <div style="display:flex; gap:10px">
                         <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
@@ -721,6 +763,7 @@
 
         if(!newName || newStartD >= newEndD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
 
+        // Lấy lại phần thời gian cũ đã lưu để nối vào ngày mới
         const oldStartTime = (b.start && b.start.includes('T')) ? b.start.substring(11, 16) : '14:00';
         const oldEndTime = (b.end && b.end.includes('T')) ? b.end.substring(11, 16) : '12:00';
 
