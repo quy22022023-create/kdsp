@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>PMS ENTERPRISE - Hotel Management System</title>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
     <style>
         :root {
             --p-blue: #00459e; --p-gold: #feba02; --p-red: #d4111e;
@@ -146,13 +143,7 @@
 
 <header>
     <div class="brand">ULTIMATE PMS</div>
-    <div class="stats-bar" id="topStats">
-        <div class="stat-card" style="border-left-color: var(--p-gold); background: #fff9db;">
-            <small>TRẠNG THÁI DB</small>
-            <b id="dbStatus" style="color:var(--p-gold)">Đang kết nối Supabase...</b>
-        </div>
-        <span id="dynamicStats" style="display:flex; gap:15px"></span>
-    </div>
+    <div class="stats-bar" id="topStats"></div>
     <div class="header-tools">
         
         <div class="month-nav">
@@ -192,86 +183,32 @@
 </div>
 
 <script>
-    // ==========================================
-    // CẤU HÌNH API SUPABASE TỪ USER
-    // ==========================================
-    const supabaseUrl = 'https://awxkvzkigfxoidnvmxew.supabase.co'; 
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3eGt2emtpZ2Z4b2lkbnZteGV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyNzUwNTcsImV4cCI6MjA4NTg1MTA1N30.eBGQc3rp9-H4ipsCDhUdLTC7aJB6HHDh6CKwsvV9b3A'; 
-    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-
-    // --- DATA ENGINE ---
-    let rooms = [];
-    let bookings = [];
-    
-    let currentFilter = 'all';
-    let searchCriteria = null; 
-
+    // --- HÀM HỖ TRỢ NGÀY GIỜ CHUẨN ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
         return new Date(d.getTime() - offset).toISOString().split('T')[0];
     }
 
+    // --- DATA ENGINE ---
+    let rooms = JSON.parse(localStorage.getItem('pms_rooms')) || [
+        { id: "301 (P4)", price: 710000, cat: "Phòng Lớn", status: "clean", lockbox: "9138", notes: "" },
+        { id: "P201 (P1)", price: 350000, cat: "Phòng Đơn", status: "clean", lockbox: "6138", notes: "Ban công, ánh sáng tốt" },
+        { id: "P102 (P2)", price: 350000, cat: "Phòng Đôi", status: "dirty", lockbox: "3168", notes: "Cửa sổ, view đường phố" }
+    ];
+    let bookings = JSON.parse(localStorage.getItem('pms_bookings')) || [];
+    
+    let currentFilter = 'all';
+    let searchCriteria = null; 
+
     const realTodayStr = getLocalISODate(new Date()); 
     let currentViewDate = new Date();
     currentViewDate.setHours(12, 0, 0, 0); 
 
-    // Cập nhật trạng thái kết nối UI
-    function updateConnectionStatus(status) {
-        const statusEl = document.getElementById('dbStatus');
-        if (status === 'SUBSCRIBED') {
-            statusEl.innerText = "Supabase Realtime (Mượt)";
-            statusEl.style.color = "var(--s-green)";
-            statusEl.parentElement.style.borderLeftColor = "var(--s-green)";
-            statusEl.parentElement.style.background = "#e6f4ea";
-        } else {
-            statusEl.innerText = "Đang mất mạng / Mất kết nối...";
-            statusEl.style.color = "var(--p-red)";
-            statusEl.parentElement.style.borderLeftColor = "var(--p-red)";
-            statusEl.parentElement.style.background = "#fce8e6";
-        }
-    }
-
-    // ==========================================
-    // KHỞI TẠO VÀ LẮNG NGHE SUPABASE REALTIME
-    // ==========================================
-    async function initDatabase() {
-        // 1. Tải dữ liệu lần đầu tiên khi mở app
-        const { data, error } = await supabase.from('pms_state').select('*').eq('id', 1).single();
-        
-        if (data) {
-            rooms = data.rooms || [];
-            bookings = data.bookings || [];
-        } else {
-            // Nạp dữ liệu mặc định nếu bảng trống
-            rooms = [
-                { id: "301 (P4)", price: 710000, cat: "Phòng Lớn", status: "clean", lockbox: "9138", notes: "" },
-                { id: "P201 (P1)", price: 350000, cat: "Phòng Đơn", status: "clean", lockbox: "6138", notes: "Ban công, ánh sáng tốt" },
-                { id: "P102 (P2)", price: 350000, cat: "Phòng Đôi", status: "dirty", lockbox: "3168", notes: "Cửa sổ, view đường phố" }
-            ];
-            await supabase.from('pms_state').insert([{ id: 1, rooms: rooms, bookings: bookings }]);
-        }
+    function save() {
+        localStorage.setItem('pms_rooms', JSON.stringify(rooms));
+        localStorage.setItem('pms_bookings', JSON.stringify(bookings));
         render();
-
-        // 2. Lắng nghe thay đổi Realtime (Ai đó sửa trên máy khác thì máy này tự động cập nhật)
-        supabase.channel('custom-all-channel')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'pms_state' }, (payload) => {
-                if (payload.new && payload.new.id === 1) {
-                    rooms = payload.new.rooms || [];
-                    bookings = payload.new.bookings || [];
-                    render(); // Cập nhật lại giao diện ngay lập tức
-                }
-            })
-            .subscribe((status) => {
-                updateConnectionStatus(status);
-            });
     }
-
-    // Hàm LƯU: Đẩy dữ liệu lên Supabase (Gắn đè vào id=1)
-    async function save() {
-        await supabase.from('pms_state').upsert({ id: 1, rooms: rooms, bookings: bookings });
-        // Lệnh upsert sẽ kích hoạt realtime payload ở trên, tự động gọi render()
-    }
-
 
     // --- HÀM ĐIỀU HƯỚNG THÁNG ---
     function changeMonth(delta) {
@@ -315,7 +252,7 @@
             return sum + (days * appliedPrice);
         }, 0);
 
-        document.getElementById('dynamicStats').innerHTML = `
+        document.getElementById('topStats').innerHTML = `
             <div class="stat-card"><small>ĐANG Ở</small><b>${active}</b></div>
             <div class="stat-card"><small>TỔNG DOANH THU</small><b>${(totalRev/1000).toLocaleString()}k</b></div>
         `;
@@ -540,7 +477,7 @@
     }
 
 
-    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG ---
+    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG TỐI ƯU HÓA ---
     window.checkDepositStatus = function() {
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
@@ -622,6 +559,7 @@
                 <button class="btn btn-d" style="grid-column: span 2" onclick="delBK('${bid}')">XÓA HẲN LỊCH SỬ NÀY</button>
                 <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
             `;
+            // Giao diện chỉ đọc cho lịch sử
             document.getElementById('mContent').innerHTML = `
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
                     <h2 style="margin:0">${b.guest} <span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span></h2>
@@ -646,6 +584,7 @@
             
             const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
 
+            // Giao diện có thể Chỉnh sửa/Gia hạn trực tiếp
             document.getElementById('mContent').innerHTML = `
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
@@ -654,7 +593,7 @@
                     </div>
                     <div style="display:flex; gap:10px">
                         <div class="f-group" style="flex:1"><label>Tên khách</label><input id="dName" type="text" value="${b.guest}"></div>
-                        <div class="f-group" style="flex:1"><label>SĐT (Dán tự lọc chữ)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
+                        <div class="f-group" style="flex:1"><label>SĐT (Dán SĐT)</label><input id="dPhone" type="tel" value="${b.phone || ''}" oninput="this.value = this.value.replace(/[^0-9+]/g, '')"></div>
                     </div>
                     <div style="display:flex; gap:10px">
                         <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="dStart" type="date" value="${b.start}"></div>
@@ -679,6 +618,7 @@
         document.getElementById('pmsModal').style.display = 'flex';
     }
 
+    // Hàm LƯU thay đổi / GIA HẠN ngày trực tiếp
     function saveBookingChanges(bid) {
         const b = bookings.find(x => x.id === bid);
         const newName = document.getElementById('dName').value;
@@ -690,6 +630,7 @@
 
         if(!newName || newStart >= newEnd) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
 
+        // Kiểm tra trùng lịch (loại trừ chính booking đang sửa)
         const overlap = bookings.some(x => x.id !== bid && x.roomId === b.roomId && (newStart < x.end && newEnd > x.start));
         if(overlap) return alert("Lỗi: Không thể gia hạn vì đã có khách khác đặt phòng trong thời gian này!");
 
@@ -701,7 +642,7 @@
         b.deposit = newDeposit;
 
         save();
-        openDetail(bid); 
+        openDetail(bid); // Mở lại bảng chi tiết để cập nhật hiển thị Bill mới
     }
 
     function checkOut(bid) {
@@ -722,6 +663,7 @@
         if(id && price) { rooms.push({ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }); save(); }
     }
 
+    // Cập nhật Xuất File CSV có thêm cột SĐT
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
         let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
@@ -742,9 +684,7 @@
     }
 
     function closeModal() { document.getElementById('pmsModal').style.display = 'none'; }
-    
-    // Khởi chạy App & Kết nối DB
-    initDatabase();
+    render();
 </script>
 </body>
 </html>
