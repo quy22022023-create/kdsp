@@ -3,214 +3,274 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>PMS Ultimate V6 - Pro Management</title>
+    <title>PMS ENTERPRISE - Hotel Management System</title>
     <style>
         :root {
-            --primary: #1a73e8; --primary-dark: #1557b0;
-            --secondary: #fabd05; --success: #34a853; --danger: #ea4335;
-            --bg-main: #f8f9fa; --sidebar-w: 100px; --row-h: 80px;
-            --border: #dadce0; --text-main: #3c4043;
+            --p-blue: #00459e; --p-gold: #feba02; --p-red: #d4111e;
+            --s-green: #008009; --s-purple: #6c5ce7; --bg: #f4f7f6;
+            --sidebar-w: 120px; --row-h: 85px; --cell-w: 100px;
+            --border: #e0e0e0; --shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
-        /* Reset & Base */
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            margin: 0; background: var(--bg-main); color: var(--text-main);
-            overflow: hidden; height: 100vh; display: flex; flex-direction: column;
-        }
+        * { box-sizing: border-box; -webkit-font-smoothing: antialiased; font-family: 'Inter', -apple-system, sans-serif; }
+        body { margin: 0; background: var(--bg); overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
 
-        /* Header */
+        /* --- HEADER & DASHBOARD --- */
         header {
-            background: #fff; height: 65px; display: flex; align-items: center;
-            justify-content: space-between; padding: 0 20px;
-            border-bottom: 1px solid var(--border); z-index: 100;
+            background: #fff; height: 75px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; border-bottom: 2px solid var(--p-blue); z-index: 1000; box-shadow: var(--shadow);
         }
-        .logo { font-size: 20px; font-weight: 800; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+        .brand { font-size: 22px; font-weight: 900; color: var(--p-blue); letter-spacing: -1px; }
+        .stats-bar { display: flex; gap: 20px; }
+        .stat-card { background: var(--bg); padding: 8px 15px; border-radius: 10px; border-left: 4px solid var(--p-blue); }
+        .stat-card small { display: block; font-size: 10px; color: #666; font-weight: bold; }
+        .stat-card b { font-size: 16px; color: var(--p-blue); }
         .header-tools { display: flex; gap: 10px; align-items: center; }
 
-        /* Stats Dashboard */
-        .dash-chips { display: flex; gap: 8px; overflow-x: auto; padding: 5px; scrollbar-width: none; }
-        .chip { 
-            background: #fff; border: 1px solid var(--border); padding: 6px 12px; 
-            border-radius: 20px; font-size: 12px; white-space: nowrap;
-            display: flex; align-items: center; gap: 6px;
-        }
-        .chip b { color: var(--primary); }
+        /* Component Đổi Tháng */
+        .month-nav { display: flex; align-items: center; gap: 5px; background: var(--bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
+        .month-nav button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 5px 10px; color: var(--p-blue); font-weight: bold; }
+        .month-nav button:hover { background: #e0e0e0; border-radius: 5px; }
+        .month-nav input[type="month"] { border: none; background: transparent; font-weight: bold; color: #333; outline: none; font-size: 14px; cursor: pointer; }
 
-        /* Main Layout */
-        .app-container { display: grid; grid-template-columns: var(--sidebar-w) 1fr; flex: 1; overflow: hidden; }
+        /* --- LAYOUT GRID --- */
+        .pms-wrapper { display: grid; grid-template-columns: var(--sidebar-w) 1fr; flex: 1; overflow: hidden; }
 
         /* Sidebar Phòng */
-        .room-sidebar { 
-            background: #fff; border-right: 1px solid var(--border); 
-            display: flex; flex-direction: column; overflow-y: auto;
+        .rooms-aside { background: #fff; border-right: 1px solid var(--border); overflow-y: auto; scroll-behavior: smooth; }
+        .room-head { height: 50px; background: #fafafa; border-bottom: 1px solid var(--border); position: sticky; top:0; z-index: 10; }
+        .room-item {
+            height: var(--row-h); border-bottom: 1px solid #eee; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; position: relative; cursor: pointer; transition: 0.3s;
         }
-        .sb-top { height: 50px; background: #f1f3f4; border-bottom: 1px solid var(--border); position: sticky; top:0; z-index:10; }
-        .room-node {
-            height: var(--row-h); border-bottom: 1px solid #eee;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding: 10px; transition: 0.2s; cursor: pointer;
+        .room-item:hover { background: #f0f7ff; }
+        .room-item b { font-size: 18px; }
+        .room-item span { font-size: 11px; color: #888; }
+        .badge-status { width: 10px; height: 10px; border-radius: 50%; position: absolute; top: 10px; right: 10px; box-shadow: 0 0 3px rgba(0,0,0,0.3); }
+        
+        /* Icon cài đặt phòng */
+        .room-cog {
+            position: absolute; bottom: 5px; right: 5px; font-size: 14px; 
+            color: #999; opacity: 0.4; transition: 0.2s; padding: 4px;
         }
-        .room-node:hover { background: #f8f9fa; }
-        .room-node b { font-size: 16px; margin-bottom: 2px; }
-        .room-node span { font-size: 11px; opacity: 0.6; }
+        .room-item:hover .room-cog { opacity: 1; transform: scale(1.1); }
+        .room-cog:hover { color: var(--p-blue); }
 
-        /* Timeline Grid */
-        .timeline-scroll { overflow: auto; position: relative; background: #fff; }
-        .timeline-header { 
-            display: flex; height: 50px; position: sticky; top: 0; 
-            z-index: 20; background: #f1f3f4; border-bottom: 1px solid var(--border);
+        /* Timeline & Grid */
+        .timeline-view { overflow: auto; background: white; position: relative; }
+        .grid-header { display: flex; height: 50px; position: sticky; top: 0; z-index: 50; background: #fff; border-bottom: 1px solid var(--border); }
+        .date-unit {
+            min-width: var(--cell-w); border-right: 1px solid #eee; flex-shrink: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 12px;
         }
-        .date-cell {
-            min-width: 80px; flex-shrink: 0; border-right: 1px solid var(--border);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            font-size: 12px; transition: 0.3s;
-        }
-        .date-cell.today { background: #e8f0fe; border-bottom: 3px solid var(--primary); font-weight: bold; }
+        .date-unit.today { background: #fff9db; border-bottom: 3px solid var(--p-gold); }
 
-        .grid-canvas { display: inline-block; min-width: 100%; }
+        .grid-body { display: inline-block; min-width: 100%; }
         .grid-row { display: flex; height: var(--row-h); }
-        .grid-cell {
-            min-width: 80px; flex-shrink: 0; border-right: 1px solid #f1f1f1; 
-            border-bottom: 1px solid #f1f1f1; position: relative; padding: 4px;
+        .grid-cell { 
+            min-width: var(--cell-w); border-right: 1px solid #f8f8f8; border-bottom: 1px solid #f8f8f8;
+            position: relative; flex-shrink: 0; transition: 0.2s;
         }
+        .grid-cell:hover { background: #fdfdfd; }
 
         /* Booking Bars */
-        .booking-bar {
-            width: 100%; height: 100%; border-radius: 6px; padding: 6px;
-            color: white; font-size: 11px; font-weight: 500;
-            overflow: hidden; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: flex; flex-direction: column; gap: 2px;
+        .booking-tag {
+            position: absolute; height: 80%; top: 10%; border-radius: 8px; z-index: 5;
+            color: white; padding: 8px; font-size: 11px; font-weight: 600; cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; transition: transform 0.2s;
         }
-        .booking-bar.status-blue { background: var(--primary); }
-        .booking-bar.status-purple { background: #8e24aa; }
-        .booking-bar.status-red { background: var(--danger); }
-        .booking-bar.status-dirty { background: #f1c40f; color: #000; }
+        .booking-tag:active { transform: scale(0.95); }
+        .tag-blue { background: linear-gradient(135deg, #0071c2, #00459e); }
+        .tag-purple { background: linear-gradient(135deg, #a332c3, #6c5ce7); }
+        .tag-red { background: linear-gradient(135deg, #d4111e, #b20a15); }
+        .tag-grey { background: linear-gradient(135deg, #7f8c8d, #95a5a6); opacity: 0.85; }
 
-        /* Modals */
-        .modal-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.5); 
-            display: none; align-items: center; justify-content: center; z-index: 1000;
-            backdrop-filter: blur(4px);
+        /* --- MODAL SYSTEM --- */
+        .modal {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px);
+            display: none; align-items: center; justify-content: center; z-index: 2000;
         }
-        .modal-content {
-            background: #fff; width: 90%; max-width: 450px; border-radius: 12px;
-            overflow: hidden; animation: slideUp 0.3s ease-out;
+        .modal-box {
+            background: #fff; width: 95%; max-width: 480px; border-radius: 20px;
+            overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto;
         }
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .modal-header { background: var(--p-blue); color: #fff; padding: 18px; font-weight: bold; display: flex; justify-content: space-between; }
+        .modal-content { padding: 20px 25px; }
 
-        .modal-header { padding: 16px; background: var(--primary); color: #fff; font-weight: bold; display: flex; justify-content: space-between; }
-        .modal-body { padding: 20px; }
-
-        .form-group { margin-bottom: 16px; }
-        .form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 6px; color: #5f6368; }
-        .form-group input, .form-group select {
-            width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px;
+        .f-group { margin-bottom: 15px; }
+        .f-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #555; }
+        .f-group input, .f-group select {
+            width: 100%; padding: 12px; border: 2px solid #eee; border-radius: 10px; font-size: 15px; outline: none; transition: 0.3s;
         }
+        .f-group input:focus { border-color: var(--p-blue); }
 
-        .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .btn { 
-            padding: 14px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; 
-            transition: 0.2s; font-size: 14px;
+        /* Bill Table */
+        .bill-box { background: #fdfaf0; border: 1px solid #fcebb6; padding: 15px; border-radius: 12px; margin-top: 15px; }
+        .bill-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; color: #444; }
+        .bill-row.total { border-top: 1px dashed #ccc; padding-top: 8px; font-weight: bold; font-size: 16px; color: var(--p-red); margin-bottom: 0;}
+
+        .btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+        .btn { padding: 14px; border: none; border-radius: 10px; font-weight: 800; cursor: pointer; transition: 0.2s; font-size: 14px;}
+        .btn-p { background: var(--p-blue); color: #fff; }
+        .btn-s { background: var(--s-green); color: #fff; }
+        .btn-d { background: var(--p-red); color: #fff; }
+        .btn-cancel { background: #eee; color: #333; grid-column: span 2; }
+
+        @media (max-width: 1024px) {
+            .brand { display: none; } /* Ẩn tên app trên màn hình nhỏ để chừa chỗ cho thanh công cụ */
         }
-        .btn-main { background: var(--primary); color: #fff; width: 100%; }
-        .btn-cancel { background: #f1f3f4; color: #3c4043; }
-        .btn-danger { background: var(--danger); color: #fff; }
-
-        /* Desktop specific */
-        @media (min-width: 1024px) {
-            :root { --sidebar-w: 150px; --row-h: 90px; }
-            .date-cell { min-width: 120px; }
-            .grid-cell { min-width: 120px; }
+        @media (max-width: 768px) {
+            :root { --sidebar-w: 80px; --cell-w: 70px; --row-h: 75px; }
+            .stats-bar { display: none; }
+            .header-tools { gap: 5px; width: 100%; justify-content: space-between; }
+            .header-tools .btn { padding: 8px 10px !important; font-size: 11px !important; }
+            #roomFilter { display: none; }
         }
     </style>
 </head>
 <body>
 
 <header>
-    <div class="logo">🏨 PRO PMS <small style="font-size: 10px; opacity: 0.5;">V6</small></div>
-    <div class="dash-chips" id="dashStats">
-        </div>
+    <div class="brand">ULTIMATE PMS</div>
+    <div class="stats-bar" id="topStats"></div>
     <div class="header-tools">
-        <button class="btn" style="background:var(--primary); color:white; padding:8px 15px;" onclick="addRoom()">+ PHÒNG</button>
+        
+        <div class="month-nav">
+            <button onclick="changeMonth(-1)">◀</button>
+            <input type="month" id="monthPicker" onchange="selectMonth()">
+            <button onclick="changeMonth(1)">▶</button>
+        </div>
+
+        <select id="roomFilter" class="btn" style="background:#f4f7f6; color:#333; padding: 10px; border: 1px solid var(--border);" onchange="applyFilter()">
+            <option value="all">Hiển thị: Tất cả</option>
+            <option value="clean">Phòng sạch</option>
+            <option value="dirty">Phòng chờ dọn</option>
+        </select>
+        <button class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="exportCSV()">📥 XUẤT CSV</button>
+        <button class="btn btn-p" style="padding: 10px 20px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
     </div>
 </header>
 
-<div class="app-container">
-    <div class="room-sidebar" id="roomSidebar"></div>
-    <div class="timeline-scroll" id="timelineScroll">
-        <div class="timeline-header" id="dateHeader"></div>
-        <div class="grid-canvas" id="gridCanvas"></div>
-    </div>
+<div class="pms-wrapper">
+    <aside class="rooms-aside" id="sidebarRooms"></aside>
+    <main class="timeline-view" id="mainTimeline">
+        <div class="grid-header" id="dateHeader"></div>
+        <div class="grid-body" id="gridCanvas"></div>
+    </main>
 </div>
 
-<div class="modal-overlay" id="mainModal">
-    <div class="modal-content">
+<div class="modal" id="pmsModal">
+    <div class="modal-box">
         <div class="modal-header">
-            <span id="modalTitle">Đặt phòng</span>
-            <span onclick="closeModal()" style="cursor:pointer">✕</span>
+            <span id="mTitle">Thông tin phòng</span>
+            <span onclick="closeModal()" style="cursor:pointer; font-size: 18px;">✕</span>
         </div>
-        <div class="modal-body" id="modalBody">
-            </div>
+        <div class="modal-content" id="mContent"></div>
     </div>
 </div>
 
 <script>
-    // --- KHỞI TẠO DỮ LIỆU ---
-    // Cố gắng đọc từ LocalStorage, nếu không có thì lấy mặc định
-    let rooms = JSON.parse(localStorage.getItem('v6_rooms')) || [
-        { id: "101", price: 350000, type: "Standard", status: "clean" },
-        { id: "102", price: 350000, type: "Standard", status: "clean" },
-        { id: "201", price: 500000, type: "Deluxe", status: "clean" },
-        { id: "VIP1", price: 1200000, type: "Suite", status: "clean" }
+    // --- HÀM HỖ TRỢ NGÀY GIỜ CHUẨN (Chống lỗi múi giờ) ---
+    function getLocalISODate(d) {
+        const offset = d.getTimezoneOffset() * 60000;
+        return new Date(d.getTime() - offset).toISOString().split('T')[0];
+    }
+
+    // --- DATA ENGINE ---
+    let rooms = JSON.parse(localStorage.getItem('pms_rooms')) || [
+        { id: "101", price: 350000, cat: "Single", status: "clean" },
+        { id: "102", price: 450000, cat: "Double", status: "clean" },
+        { id: "201", price: 750000, cat: "VIP", status: "dirty" }
     ];
+    let bookings = JSON.parse(localStorage.getItem('pms_bookings')) || [];
+    let currentFilter = 'all';
 
-    let bookings = JSON.parse(localStorage.getItem('v6_bookings')) || [];
+    // realTodayStr luôn luôn lưu ngày thực tế hôm nay (để làm mốc sáng đèn phòng hiện tại)
+    const realTodayStr = getLocalISODate(new Date()); 
+    
+    // currentViewDate dùng để điều hướng tháng
+    let currentViewDate = new Date();
+    currentViewDate.setHours(12, 0, 0, 0); 
 
-    const dateRange = 30; // Hiển thị 30 ngày
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    const todayStr = today.toISOString().split('T')[0];
-
-    // --- HÀM LƯU TRỮ ---
-    function saveData() {
-        localStorage.setItem('v6_rooms', JSON.stringify(rooms));
-        localStorage.setItem('v6_bookings', JSON.stringify(bookings));
+    function save() {
+        localStorage.setItem('pms_rooms', JSON.stringify(rooms));
+        localStorage.setItem('pms_bookings', JSON.stringify(bookings));
         render();
     }
 
-    // --- RENDER GIAO DIỆN CHÍNH ---
+    // --- HÀM ĐIỀU HƯỚNG THÁNG ---
+    function changeMonth(delta) {
+        currentViewDate.setMonth(currentViewDate.getMonth() + delta);
+        render();
+    }
+
+    function selectMonth() {
+        const val = document.getElementById('monthPicker').value;
+        if (val) {
+            const parts = val.split('-');
+            currentViewDate.setFullYear(parseInt(parts[0]));
+            currentViewDate.setMonth(parseInt(parts[1]) - 1);
+            render();
+        }
+    }
+
+    // --- RENDERING ---
     function render() {
         renderSidebar();
         renderTimeline();
-        renderStats();
+        renderDashboard();
     }
 
-    function renderStats() {
-        const occupied = bookings.filter(b => todayStr >= b.start && todayStr < b.end && b.status === 'red').length;
-        const dirty = rooms.filter(r => r.status === 'dirty').length;
+    function applyFilter() {
+        currentFilter = document.getElementById('roomFilter').value;
+        render();
+    }
+
+    function renderDashboard() {
+        // Active tính theo ngày hôm nay (thực tế)
+        const active = bookings.filter(b => realTodayStr >= b.start && realTodayStr < b.end && b.type === 'red').length;
         
-        document.getElementById('dashStats').innerHTML = `
-            <div class="chip">Đang ở: <b>${occupied}</b></div>
-            <div class="chip">Cần dọn: <b>${dirty}</b></div>
-            <div class="chip">Hôm nay: <b>${today.toLocaleDateString('vi-VN')}</b></div>
+        const totalRev = bookings.reduce((sum, b) => {
+            const days = (new Date(b.end) - new Date(b.start)) / 86400000;
+            const appliedPrice = b.price !== undefined ? b.price : (rooms.find(rm => rm.id === b.roomId)?.price || 0);
+            return sum + (days * appliedPrice);
+        }, 0);
+
+        document.getElementById('topStats').innerHTML = `
+            <div class="stat-card"><small>ĐANG Ở</small><b>${active}</b></div>
+            <div class="stat-card"><small>TỔNG DOANH THU</small><b>${(totalRev/1000).toLocaleString()}k</b></div>
         `;
     }
 
     function renderSidebar() {
-        const container = document.getElementById('roomSidebar');
-        container.innerHTML = '<div class="sb-top"></div>';
-        rooms.forEach(r => {
-            container.innerHTML += `
-                <div class="room-node" onclick="toggleRoomStatus('${r.id}')">
+        const sb = document.getElementById('sidebarRooms');
+        sb.innerHTML = '<div class="room-head"></div>';
+        
+        const filteredRooms = rooms.filter(r => currentFilter === 'all' || r.status === currentFilter);
+
+        filteredRooms.forEach(r => {
+            // Tính toán trạng thái thực tế ngay lúc này của phòng
+            const activeBooking = bookings.find(b => b.roomId === r.id && realTodayStr >= b.start && realTodayStr < b.end && b.type === 'red');
+            let isDirty = r.status === 'dirty';
+            
+            let badgeColor = 'var(--s-green)'; // Xanh: Sạch / Trống
+            let sttText = 'Sạch - Sẵn sàng';
+            
+            if (activeBooking) {
+                badgeColor = 'var(--p-red)'; // Đỏ: Đang có khách ở
+                sttText = 'Đang có khách lưu trú';
+            } else if (isDirty) {
+                badgeColor = 'var(--p-gold)'; // Vàng: Chờ dọn
+                sttText = 'Khách đã out - Chờ dọn dẹp';
+            }
+
+            sb.innerHTML += `
+                <div class="room-item" onclick="toggleDirty('${r.id}')" title="${sttText}">
                     <b>${r.id}</b>
-                    <span>${r.type}</span>
-                    <span style="color:${r.status==='dirty'?'var(--danger)':'var(--success)'}">
-                        ● ${r.status==='dirty'?'Chờ dọn':'Sẵn sàng'}
-                    </span>
-                </div>
-            `;
+                    <span>${(r.price/1000)}k/đ</span>
+                    <div class="badge-status" style="background:${badgeColor}"></div>
+                    <div class="room-cog" onclick="openRoomSettings('${r.id}', event)">⚙️</div>
+                </div>`;
         });
     }
 
@@ -219,42 +279,68 @@
         const canvas = document.getElementById('gridCanvas');
         header.innerHTML = ''; canvas.innerHTML = '';
 
-        let dates = [];
-        for(let i = -2; i < dateRange; i++) {
-            let d = new Date(); d.setDate(today.getDate() + i);
-            dates.push(d.toISOString().split('T')[0]);
-            const isToday = d.toISOString().split('T')[0] === todayStr ? 'today' : '';
+        const year = currentViewDate.getFullYear();
+        const month = currentViewDate.getMonth();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        // Cập nhật giá trị UI cho Input Month
+        document.getElementById('monthPicker').value = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+        let dateArr = [];
+        // Lặp tạo cột cho TẤT CẢ các ngày trong tháng đã chọn
+        for(let i = 1; i <= daysInMonth; i++) { 
+            let d = new Date(year, month, i, 12, 0, 0); // set 12h để an toàn múi giờ
+            const ds = getLocalISODate(d);
+            dateArr.push(ds);
+            
+            const isToday = ds === realTodayStr ? 'today' : '';
             header.innerHTML += `
-                <div class="date-cell ${isToday}">
+                <div class="date-unit ${isToday}">
                     <span>${d.toLocaleDateString('vi-VN', {weekday: 'short'})}</span>
-                    <b>${d.getDate()} / ${d.getMonth()+1}</b>
+                    <b>${d.getDate()}/${d.getMonth()+1}</b>
                 </div>`;
         }
 
-        rooms.forEach(r => {
-            let row = document.createElement('div');
+        const viewStartStr = dateArr[0];
+        const viewEndStr = dateArr[dateArr.length - 1];
+
+        const filteredRooms = rooms.filter(r => currentFilter === 'all' || r.status === currentFilter);
+
+        filteredRooms.forEach(r => {
+            const row = document.createElement('div');
             row.className = 'grid-row';
-            dates.forEach(date => {
-                let cell = document.createElement('div');
+            
+            dateArr.forEach(date => {
+                const cell = document.createElement('div');
                 cell.className = 'grid-cell';
                 
-                // Tìm booking của ngày này
-                const b = bookings.find(bk => bk.roomId === r.id && date >= bk.start && date < bk.end);
-                
+                // Logic thông minh: Tìm booking bắt đầu vào ngày này HOẶC booking kéo dài từ tháng trước sang tháng này
+                const b = bookings.find(bk => bk.roomId === r.id && 
+                    (bk.start === date || (date === viewStartStr && bk.start < viewStartStr && bk.end > viewStartStr))
+                );
+
                 if(b) {
-                    if(date === b.start) {
-                        const nights = (new Date(b.end) - new Date(b.start)) / (1000*60*60*24);
-                        const width = nights * (window.innerWidth >= 1024 ? 120 : 80);
-                        cell.innerHTML = `
-                            <div class="booking-bar status-${b.status}" 
-                                 style="width: calc(${width}px - 10px); z-index: 5; position: absolute;"
-                                 onclick="openManage('${b.id}')">
-                                <b>${b.guest}</b>
-                                <i>${nights} đêm - ${b.status === 'red' ? 'Đã In' : 'Đặt trước'}</i>
-                            </div>`;
-                    }
+                    // Tính độ dài thanh màu dựa trên phần hiển thị trong tháng này
+                    let startRenderDate = new Date(date);
+                    let endRenderDate = new Date(b.end);
+                    let durationToRender = (endRenderDate - startRenderDate) / 86400000;
+                    
+                    const width = (durationToRender * (window.innerWidth <= 768 ? 70 : 100)) - 10;
+                    
+                    const totalNights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
+                    const label = b.type === 'grey' ? '(Đã xong)' : '';
+                    const depositText = (b.deposit && b.deposit > 0) ? ` - Cọc: ${(b.deposit/1000)}k` : '';
+
+                    // Thêm class đặc biệt nếu là booking từ tháng trước vắt sang
+                    const isCrossMonth = b.start < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
+
+                    cell.innerHTML = `
+                        <div class="booking-tag tag-${b.type}" style="width: ${width}px; ${isCrossMonth}" onclick="openDetail('${b.id}')">
+                            <div style="white-space:nowrap; overflow:hidden">${b.guest} ${label}</div>
+                            <small>${totalNights} đêm${depositText}</small>
+                        </div>`;
                 } else {
-                    cell.onclick = () => openBookingForm(r.id, date);
+                    cell.onclick = () => openBooking(r.id, date);
                 }
                 row.appendChild(cell);
             });
@@ -262,120 +348,300 @@
         });
     }
 
-    // --- LOGIC ĐẶT PHÒNG ---
-    function openBookingForm(roomId, date) {
-        const room = rooms.find(x => x.id === roomId);
-        document.getElementById('modalTitle').innerText = `Phòng ${roomId} - Đặt mới`;
-        document.getElementById('modalBody').innerHTML = `
-            <div class="form-group">
-                <label>Tên khách hàng</label>
-                <input type="text" id="fGuest" placeholder="Nguyễn Văn A...">
+    // --- TÍNH NĂNG QUẢN LÝ PHÒNG (CHỈNH SỬA / XÓA) ---
+    function openRoomSettings(rid, event) {
+        if(event) event.stopPropagation(); 
+        
+        const r = rooms.find(x => x.id === rid);
+        
+        document.getElementById('mTitle').innerText = `Cài đặt phòng`;
+        document.getElementById('mContent').innerHTML = `
+            <div class="f-group">
+                <label>Tên / Số phòng</label>
+                <input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, VIP 1">
             </div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px">
-                <div class="form-group"><label>Ngày đến</label><input type="date" id="fIn" value="${date}"></div>
-                <div class="form-group"><label>Ngày đi</label><input type="date" id="fOut" value="${date}"></div>
+            <div class="f-group">
+                <label>Loại phòng</label>
+                <input id="fRoomCat" type="text" value="${r.cat || 'Standard'}" placeholder="VD: Single, Double, VIP">
             </div>
-            <div class="form-group">
-                <label>Trạng thái</label>
-                <select id="fStatus">
-                    <option value="blue">Đặt trước (Chưa cọc)</option>
-                    <option value="purple">Đã đặt cọc</option>
-                    <option value="red">Check-in luôn</option>
+            <div class="f-group">
+                <label>Giá gốc mỗi đêm (VNĐ)</label>
+                <input id="fRoomPrice" type="number" value="${r.price}">
+            </div>
+            
+            <div class="btn-row" style="margin-top: 25px;">
+                <button class="btn btn-p" onclick="saveRoomSettings('${rid}')">LƯU THAY ĐỔI</button>
+                <button class="btn btn-d" onclick="deleteRoom('${rid}')">XÓA PHÒNG NÀY</button>
+                <button class="btn btn-cancel" onclick="closeModal()">HỦY BỎ</button>
+            </div>
+        `;
+        document.getElementById('pmsModal').style.display = 'flex';
+    }
+
+    function saveRoomSettings(oldRid) {
+        const newId = document.getElementById('fRoomId').value.trim();
+        const newCat = document.getElementById('fRoomCat').value.trim();
+        const newPrice = parseInt(document.getElementById('fRoomPrice').value) || 0;
+
+        if(!newId) return alert("Tên phòng không được để trống!");
+
+        if(newId !== oldRid && rooms.some(x => x.id === newId)) {
+            return alert("Tên phòng này đã tồn tại trong hệ thống! Vui lòng chọn tên khác.");
+        }
+
+        const r = rooms.find(x => x.id === oldRid);
+        r.id = newId;
+        r.cat = newCat;
+        r.price = newPrice;
+
+        if(newId !== oldRid) {
+            bookings.forEach(b => {
+                if(b.roomId === oldRid) b.roomId = newId;
+            });
+        }
+
+        closeModal(); save();
+    }
+
+    function deleteRoom(rid) {
+        const hasBookings = bookings.some(b => b.roomId === rid);
+        let msg = `Bạn có chắc chắn muốn xóa phòng ${rid} khỏi hệ thống không?`;
+        
+        if (hasBookings) {
+            msg = `CẢNH BÁO NGUY HIỂM:\Phòng ${rid} đang có lịch sử khách hàng hoặc đang có khách đặt!\nNếu bạn xóa phòng này, TOÀN BỘ dữ liệu đặt phòng liên quan cũng sẽ bị xóa vĩnh viễn.\n\nBạn vẫn muốn tiếp tục xóa?`;
+        }
+
+        if(confirm(msg)) {
+            rooms = rooms.filter(x => x.id !== rid);
+            bookings = bookings.filter(x => x.roomId !== rid); 
+            closeModal(); save();
+        }
+    }
+
+
+    // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG ---
+
+    window.checkDepositStatus = function() {
+        const dep = parseInt(document.getElementById('fDeposit').value) || 0;
+        const typeSelect = document.getElementById('fType');
+        if (dep > 0 && typeSelect.value === 'blue') {
+            typeSelect.value = 'purple'; 
+        } else if (dep === 0 && typeSelect.value === 'purple') {
+            typeSelect.value = 'blue'; 
+        }
+    };
+
+    function openBooking(roomId, date) {
+        const r = rooms.find(x => x.id === roomId);
+        
+        let nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayStr = getLocalISODate(nextDay);
+
+        document.getElementById('mTitle').innerText = `Đặt phòng ${roomId}`;
+        document.getElementById('mContent').innerHTML = `
+            <div class="f-group"><label>Khách hàng & SĐT</label><input id="fName" type="text" placeholder="VD: Anh Minh - 090xxx"></div>
+            
+            <div style="display:flex; gap:10px">
+                <div class="f-group" style="flex:1"><label>Từ ngày</label><input id="fStart" type="date" value="${date}"></div>
+                <div class="f-group" style="flex:1"><label>Đến ngày</label><input id="fEnd" type="date" value="${nextDayStr}"></div>
+            </div>
+
+            <div style="display:flex; gap:10px">
+                <div class="f-group" style="flex:1">
+                    <label>Giá thỏa thuận / Đêm</label>
+                    <input id="fPrice" type="number" value="${r.price}">
+                </div>
+                <div class="f-group" style="flex:1">
+                    <label>Tiền đã cọc (VNĐ)</label>
+                    <input id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0">
+                </div>
+            </div>
+
+            <div class="f-group">
+                <label>Trạng thái đặt phòng</label>
+                <select id="fType">
+                    <option value="blue">Chưa cọc (Xanh)</option>
+                    <option value="purple">Đã đặt cọc (Tím)</option>
+                    <option value="red">Check-in luôn (Đỏ)</option>
                 </select>
             </div>
-            <button class="btn btn-main" onclick="confirmBooking('${roomId}')">XÁC NHẬN ĐẶT</button>
+            <button class="btn btn-p" style="width:100%; margin-top: 10px;" onclick="confirmBooking('${roomId}')">XÁC NHẬN ĐẶT PHÒNG</button>
         `;
-        document.getElementById('mainModal').style.display = 'flex';
+        document.getElementById('pmsModal').style.display = 'flex';
     }
 
     function confirmBooking(roomId) {
-        const guest = document.getElementById('fGuest').value;
-        const start = document.getElementById('fIn').value;
-        const end = document.getElementById('fOut').value;
+        const guest = document.getElementById('fName').value;
+        const start = document.getElementById('fStart').value;
+        const end = document.getElementById('fEnd').value;
+        const price = parseInt(document.getElementById('fPrice').value) || 0;
+        const deposit = parseInt(document.getElementById('fDeposit').value) || 0;
 
-        if(!guest || start >= end) return alert("Dữ liệu không hợp lệ (Ngày đi phải sau ngày đến)");
+        if(!guest || start >= end) return alert("Vui lòng kiểm tra lại thông tin ngày tháng hoặc tên khách!");
 
-        // Kiểm tra trùng lịch
-        const isOverlapped = bookings.some(b => 
-            b.roomId === roomId && (start < b.end && end > b.start)
-        );
-        if(isOverlapped) return alert("Phòng đã có người đặt trong thời gian này!");
+        const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
+        if(overlap) return alert("Phòng này đã có khách lưu trú trong thời gian bạn chọn!");
 
-        bookings.push({
-            id: "BK" + Date.now(),
+        bookings.push({ 
+            id: 'BK'+Date.now(), 
             roomId, guest, start, end, 
-            status: document.getElementById('fStatus').value
+            type: document.getElementById('fType').value,
+            price: price,     
+            deposit: deposit  
         });
-
-        closeModal(); saveData();
+        
+        closeModal(); save();
     }
 
-    // --- QUẢN LÝ BOOKING HIỆN TẠI ---
-    function openManage(bid) {
+    function openDetail(bid) {
         const b = bookings.find(x => x.id === bid);
-        const nights = (new Date(b.end) - new Date(b.start)) / (1000*60*60*24);
-        const room = rooms.find(r => r.id === b.roomId);
-        const total = nights * room.price;
+        const r = rooms.find(rm => rm.id === b.roomId);
+        
+        const nights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
+        const appliedPrice = b.price !== undefined ? b.price : r.price;
+        const deposit = b.deposit || 0;
+        
+        const totalCost = nights * appliedPrice;
+        const remaining = totalCost - deposit;
+        
+        const isCompleted = b.type === 'grey';
 
-        document.getElementById('modalTitle').innerText = "Chi tiết đặt phòng";
-        document.getElementById('modalBody').innerHTML = `
-            <div style="background:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:20px;">
-                <h3 style="margin:0 0 10px 0">${b.guest}</h3>
-                <p style="margin:4px 0; font-size:14px;">📅 ${b.start} ➜ ${b.end} (<b>${nights} đêm</b>)</p>
-                <p style="margin:4px 0; font-size:14px;">💰 Tổng tiền: <b style="color:var(--danger)">${total.toLocaleString()}đ</b></p>
-            </div>
-            <div class="btn-group">
-                ${b.status !== 'red' ? `<button class="btn btn-main" onclick="updateStatus('${bid}', 'red')">CHECK-IN</button>` : ''}
-                <button class="btn" style="background:var(--secondary)" onclick="checkout('${bid}')">CHECK-OUT</button>
-                <button class="btn btn-danger" onclick="deleteBooking('${bid}')">XÓA</button>
+        document.getElementById('mTitle').innerText = isCompleted ? "Lịch sử lưu trú" : "Quản lý lưu trú";
+        
+        let actionButtons = '';
+        if (isCompleted) {
+            actionButtons = `
+                <button class="btn btn-d" style="grid-column: span 2" onclick="delBK('${bid}')">XÓA HẲN LỊCH SỬ NÀY</button>
                 <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
+            `;
+        } else {
+            actionButtons = `
+                ${b.type !== 'red' ? `<button class="btn btn-s" onclick="updateBK('${bid}','red')">CHECK-IN</button>` : ''}
+                <button class="btn btn-p" style="background:var(--p-gold); color:#000" onclick="checkOut('${bid}')">CHECK-OUT & THU TIỀN</button>
+                <button class="btn btn-d" onclick="delBK('${bid}')">HỦY PHÒNG</button>
+                <button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>
+            `;
+        }
+
+        document.getElementById('mContent').innerHTML = `
+            <div style="background:#f0f7ff; padding:15px; border-radius:12px;">
+                <h2 style="margin:0">${b.guest} ${isCompleted ? '<span style="color:#7f8c8d; font-size:14px">(Đã trả phòng)</span>' : ''}</h2>
+                <p style="margin: 8px 0; color: #555;">Phòng: <b>${b.roomId}</b> | Ngày: ${b.start.split('-').reverse().join('/')} ➔ ${b.end.split('-').reverse().join('/')}</p>
+            </div>
+
+            <div class="bill-box">
+                <div class="bill-row">
+                    <span>Đơn giá phòng (${nights} đêm):</span>
+                    <span>${appliedPrice.toLocaleString()}đ / đêm</span>
+                </div>
+                <div class="bill-row">
+                    <span>Thành tiền:</span>
+                    <span>${totalCost.toLocaleString()}đ</span>
+                </div>
+                <div class="bill-row" style="color: var(--s-green);">
+                    <span>Đã đặt cọc:</span>
+                    <span>- ${deposit.toLocaleString()}đ</span>
+                </div>
+                <div class="bill-row total">
+                    <span>CÒN LẠI CẦN THU:</span>
+                    <span>${remaining.toLocaleString()}đ</span>
+                </div>
+            </div>
+
+            <div class="btn-row">
+                ${actionButtons}
             </div>
         `;
-        document.getElementById('mainModal').style.display = 'flex';
+        document.getElementById('pmsModal').style.display = 'flex';
     }
 
-    function updateStatus(bid, status) {
-        bookings.find(x => x.id === bid).status = status;
-        closeModal(); saveData();
-    }
-
-    function checkout(bid) {
-        if(confirm("Xác nhận trả phòng và thu tiền?")) {
+    function checkOut(bid) {
+        if(confirm("Xác nhận khách đã thanh toán đủ và trả phòng?")) {
             const b = bookings.find(x => x.id === bid);
-            rooms.find(r => r.id === b.roomId).status = "dirty";
-            bookings = bookings.filter(x => x.id !== bid);
-            closeModal(); saveData();
+            rooms.find(r => r.id === b.roomId).status = 'dirty';
+            b.type = 'grey'; 
+            closeModal(); save();
         }
     }
 
-    function deleteBooking(bid) {
-        if(confirm("Bạn có chắc muốn xóa lịch đặt này?")) {
+    function updateBK(bid, type) {
+        bookings.find(x => x.id === bid).type = type;
+        closeModal(); save();
+    }
+
+    function delBK(bid) {
+        if(confirm("Bạn có chắc chắn muốn xóa dữ liệu này?")) {
             bookings = bookings.filter(x => x.id !== bid);
-            closeModal(); saveData();
+            closeModal(); save();
         }
     }
 
-    function toggleRoomStatus(rid) {
+    function toggleDirty(rid) {
         const r = rooms.find(x => x.id === rid);
         if(r.status === 'dirty') {
-            if(confirm("Xác nhận đã dọn phòng xong?")) r.status = 'clean';
+            if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) {
+                r.status = 'clean'; save();
+            }
         } else {
-            if(confirm("Đánh dấu phòng cần dọn dẹp?")) r.status = 'dirty';
+            const newPrice = prompt(`Phòng ${rid} đang Sạch.\nNhập giá gốc mới cho phòng này (hoặc để trống để Hủy):`, r.price);
+            if(newPrice && !isNaN(newPrice)) {
+                r.price = parseInt(newPrice);
+                save();
+            }
         }
-        saveData();
     }
 
     function addRoom() {
-        const id = prompt("Số phòng mới:");
-        if(id) {
-            rooms.push({ id, price: 350000, type: "Standard", status: "clean" });
-            saveData();
+        const id = prompt("Nhập Số/Tên phòng mới (VD: 301, VIP2):");
+        const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
+        if(id && price) {
+            rooms.push({ id, price: parseInt(price), cat: "Phòng mới", status: "clean" });
+            save();
         }
     }
 
-    function closeModal() { document.getElementById('mainModal').style.display = 'none'; }
+    function exportCSV() {
+        if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
 
-    // Chạy khởi tạo
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+        csvContent += "Ma Dat Phong,Ten Khach,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
+
+        bookings.forEach(b => {
+            const r = rooms.find(rm => rm.id === b.roomId);
+            const nights = Math.max((new Date(b.end) - new Date(b.start)) / 86400000, 1);
+            const appliedPrice = b.price !== undefined ? b.price : (r ? r.price : 0);
+            const total = nights * appliedPrice;
+            const deposit = b.deposit || 0;
+            
+            let statusVN = "Lỗi";
+            if(b.type === 'blue') statusVN = "Chưa cọc";
+            if(b.type === 'purple') statusVN = "Đã cọc";
+            if(b.type === 'red') statusVN = "Đang ở";
+            if(b.type === 'grey') statusVN = "Đã trả phòng";
+
+            const cleanGuest = b.guest.replace(/,/g, " ");
+
+            const row = [
+                b.id, cleanGuest, b.roomId, b.start, b.end, nights, 
+                appliedPrice, deposit, total, statusVN
+            ].join(",");
+
+            csvContent += row + "\r\n";
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "Bao_Cao_Doanh_Thu_PMS.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function closeModal() { document.getElementById('pmsModal').style.display = 'none'; }
+    
+    // Khởi động
     render();
 </script>
 </body>
