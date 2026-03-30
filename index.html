@@ -84,7 +84,12 @@
         }
         .grid-cell:hover { background: #fdfdfd; }
 
-        /* Booking Bars */
+        /* Booking Bars & Overdue Animation */
+        @keyframes pulse-overdue {
+            0% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7); }
+            70% { box-shadow: 0 0 0 8px rgba(255, 152, 0, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 152, 0, 0); }
+        }
         .booking-tag {
             position: absolute; height: 80%; top: 10%; border-radius: 8px; z-index: 5;
             color: white; padding: 8px; font-size: 11px; font-weight: 600; cursor: pointer;
@@ -95,6 +100,7 @@
         .tag-purple { background: linear-gradient(135deg, #a332c3, #6c5ce7); }
         .tag-red { background: linear-gradient(135deg, #d4111e, #b20a15); }
         .tag-grey { background: linear-gradient(135deg, #7f8c8d, #95a5a6); opacity: 0.85; }
+        .tag-overdue { border: 2px solid #ff9800 !important; animation: pulse-overdue 1.5s infinite; z-index: 6; }
 
         /* --- MODAL SYSTEM --- */
         .modal {
@@ -203,7 +209,6 @@
         return new Date(d.getTime() - offset).toISOString().substring(0, 10);
     }
 
-    // Hàm lấy giờ phút hiện tại để nối chuỗi
     function getCurrentTimeStr() {
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
@@ -211,7 +216,6 @@
         return `${hh}:${min}`;
     }
 
-    // Hàm chuyển đổi format sang d/m/yyyy hh:mm bằng xử lý chuỗi tuyệt đối an toàn
     function fmt(isoDateStr, includeTime = false) {
         if(!isoDateStr) return '';
         const cleanStr = isoDateStr.replace(' ', 'T');
@@ -229,6 +233,17 @@
             return `${timePart} - ${dd}/${mm}/${yyyy}`;
         }
         return `${dd}/${mm}/${yyyy}`;
+    }
+
+    // Hàm kiểm tra Cảnh báo Quá giờ Check-out
+    function checkOverdue(booking) {
+        if (booking.type === 'grey') return false; // Khách đã check-out, bỏ qua
+        if (!booking.end) return false;
+        
+        const nowMs = new Date().getTime();
+        // Xử lý chuỗi an toàn
+        const endMs = new Date(booking.end.replace(' ', 'T')).getTime();
+        return nowMs > endMs; // Trả về true nếu giờ hiện tại đã vượt qua giờ Check-out dự kiến
     }
 
     // --- DATA ENGINE ---
@@ -339,8 +354,14 @@
             let sttText = 'Sạch - Sẵn sàng';
             
             if (activeBooking) {
-                badgeColor = 'var(--p-red)'; 
-                sttText = 'Đang có khách lưu trú';
+                // Tích hợp cảnh báo màu Cam cho Sidebar
+                if (checkOverdue(activeBooking)) {
+                    badgeColor = '#ff9800'; 
+                    sttText = 'QUÁ GIỜ TRẢ PHÒNG!';
+                } else {
+                    badgeColor = 'var(--p-red)'; 
+                    sttText = 'Đang có khách lưu trú';
+                }
             } else if (isDirty) {
                 badgeColor = 'var(--p-gold)'; 
                 sttText = 'Khách đã out - Chờ dọn dẹp';
@@ -368,7 +389,7 @@
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         document.getElementById('monthPicker').value = `${year}-${String(month + 1).padStart(2, '0')}`;
-        document.getElementById('monthLabel').innerText = `${month + 1}/${year}`; // Cập nhật text tháng tùy chỉnh
+        document.getElementById('monthLabel').innerText = `${month + 1}/${year}`;
 
         let dateArr = [];
         for(let i = 1; i <= daysInMonth; i++) { 
@@ -423,8 +444,11 @@
 
                     const isCrossMonth = (b.start ? b.start.substring(0, 10) : '') < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
 
+                    // Tích hợp Class CSS Nhấp nháy Overdue
+                    const overdueCls = checkOverdue(b) ? ' tag-overdue' : '';
+
                     cell.innerHTML = `
-                        <div class="booking-tag tag-${b.type}" style="width: ${width}px; ${isCrossMonth}" onclick="openDetail('${b.id}')">
+                        <div class="booking-tag tag-${b.type}${overdueCls}" style="width: ${width}px; ${isCrossMonth}" onclick="openDetail('${b.id}')">
                             <div style="white-space:nowrap; overflow:hidden">${b.guest} ${label}</div>
                             <small>${durationToRender} đêm${depositText}</small>
                         </div>`;
@@ -572,7 +596,7 @@
         const dep = parseInt(document.getElementById('fDeposit').value) || 0;
         const typeSelect = document.getElementById('fType');
         if (dep > 0 && typeSelect.value === 'blue') typeSelect.value = 'purple'; 
-        else if (dep === 0 && typeSelect.value === 'purple') typeSelect.value === 'blue'; 
+        else if (dep === 0 && typeSelect.value === 'purple') typeSelect.value = 'blue'; 
     };
 
     function openBooking(roomId, date) {
@@ -706,10 +730,24 @@
             
             const lbDisplay = r.lockbox ? `<b style="color:var(--s-purple); background:#f4e8f9; padding:2px 5px; border-radius:4px; font-size:11px;">LB: ${r.lockbox}</b>` : '';
 
+            // Tích hợp thả xuống Đảo Phòng (Dropdown Select)
+            const roomSelectHtml = `
+                <div style="flex:1;">
+                    <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:4px; color:var(--p-blue);">Phòng (Đổi phòng)</label>
+                    <select id="dRoomId" style="padding: 6px; font-size: 15px; font-weight: bold; color: var(--p-blue); border: 2px solid var(--p-blue); border-radius: 8px; outline: none; width: 100%; max-width: 140px; background: white;">
+                        ${rooms.map(rm => `<option value="${rm.id}" ${rm.id === b.roomId ? 'selected' : ''}>Phòng ${rm.id}</option>`).join('')}
+                    </select>
+                </div>
+            `;
+
+            // Tích hợp cảnh báo Quá Giờ
+            const overdueWarningHtml = checkOverdue(b) ? `<div style="color:white; font-weight:bold; font-size: 13px; text-align:center; padding: 8px; margin-bottom: 12px; background: #ff9800; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">⚠️ KHÁCH ĐÃ QUÁ GIỜ CHECK-OUT DỰ KIẾN!</div>` : '';
+
             document.getElementById('mContent').innerHTML = `
+                ${overdueWarningHtml}
                 <div style="background:#f0f7ff; padding:15px; border-radius:12px; margin-bottom:15px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom: 10px;">
-                        <span style="font-weight:bold; color:var(--p-blue)">Phòng ${b.roomId}</span>
+                    <div style="display:flex; justify-content:space-between; align-items: flex-end; margin-bottom: 15px;">
+                        ${roomSelectHtml}
                         ${lbDisplay}
                     </div>
                     <div style="display:flex; gap:10px">
@@ -736,7 +774,7 @@
                         <div class="f-group" style="flex:1"><label>Giá thỏa thuận</label><input id="dPrice" type="number" value="${appliedPrice}"></div>
                         <div class="f-group" style="flex:1"><label>Tiền cọc</label><input id="dDeposit" type="number" value="${deposit}"></div>
                     </div>
-                    <button class="btn btn-p" style="width:100%; padding: 10px; font-size: 13px; margin-top:5px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / GIA HẠN</button>
+                    <button class="btn btn-p" style="width:100%; padding: 10px; font-size: 13px; margin-top:5px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / ĐỔI PHÒNG</button>
                 </div>
 
                 <div class="bill-box">
@@ -754,6 +792,7 @@
 
     async function saveBookingChanges(bid) {
         const b = bookings.find(x => x.id === bid);
+        const newRoomId = document.getElementById('dRoomId').value; // Lấy ID phòng mới để xử lý Đổi phòng
         const newName = document.getElementById('dName').value;
         const newPhone = document.getElementById('dPhone').value.trim();
         const newStartD = document.getElementById('dStart').value;
@@ -763,20 +802,27 @@
 
         if(!newName || newStartD >= newEndD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
 
-        // Lấy lại phần thời gian cũ đã lưu để nối vào ngày mới
+        // Giữ nguyên giờ checkin checkout cũ
         const oldStartTime = (b.start && b.start.includes('T')) ? b.start.substring(11, 16) : '14:00';
         const oldEndTime = (b.end && b.end.includes('T')) ? b.end.substring(11, 16) : '12:00';
 
         const newStart = `${newStartD}T${oldStartTime}`;
         const newEnd = `${newEndD}T${oldEndTime}`;
 
-        const overlap = bookings.some(x => x.id !== bid && x.roomId === b.roomId && (newStart < x.end && newEnd > x.start));
-        if(overlap) return alert("Lỗi: Không thể gia hạn vì đã có khách khác đặt phòng trong thời gian này!");
+        // Kiểm tra xem phòng dự kiến Đổi/Gia hạn có đang bị kẹt lịch bởi khách nào khác không
+        const overlap = bookings.some(x => x.id !== bid && x.roomId === newRoomId && (newStart < x.end && newEnd > x.start));
+        if(overlap) return alert(`Lỗi: Không thể thực hiện vì Phòng ${newRoomId} đã có khách đặt trong khoảng thời gian này!`);
 
         await _supabase.from('bookings').update({ 
+            roomId: newRoomId, // Đổi phòng
             guest: newName, phone: newPhone, start: newStart, 
             end: newEnd, price: newPrice, deposit: newDeposit 
         }).eq('id', bid);
+
+        // Cập nhật lại trạng thái sạch/bẩn nếu có thao tác đổi phòng
+        if (b.roomId !== newRoomId && b.type === 'red') {
+            await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', b.roomId);
+        }
 
         await loadData();
         openDetail(bid); 
@@ -826,7 +872,7 @@
         }
     }
 
-    // Xuất File CSV với format d/m/yyyy hh:mm an toàn
+    // Xuất File CSV
     function exportCSV() {
         if(bookings.length === 0) return alert("Chưa có dữ liệu đặt phòng để xuất!");
         let csvContent = "data:text/csv;charset=utf-8,\uFEFFMa Dat Phong,Ten Khach,SDT,Phong,Ngay Den,Ngay Di,So Dem,Gia/Dem,Tien Coc,Tong Tien,Trang Thai\r\n";
