@@ -192,10 +192,10 @@
     // --- CÁC HÀM HỖ TRỢ NGÀY GIỜ CHUẨN ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
-        return new Date(d.getTime() - offset).toISOString().split('T')[0];
+        return new Date(d.getTime() - offset).toISOString().substring(0, 10);
     }
 
-    // Hàm tạo chuỗi chuẩn YYYY-MM-DDTHH:mm cho input datetime-local để tránh lỗi trắng dữ liệu
+    // Hàm tạo chuỗi chuẩn YYYY-MM-DDTHH:mm cho input datetime-local
     function formatForInput(d) {
         const yyyy = d.getFullYear();
         const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -205,14 +205,16 @@
         return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
     }
 
-    // Hàm chuyển đổi format sang d/m/yyyy hh:mm (Bỏ số 0 vô nghĩa, đủ 4 số năm)
+    // Hàm chuyển đổi format sang d/m/yyyy hh:mm
     function fmt(isoDateStr, includeTime = false) {
         if(!isoDateStr) return '';
-        const d = new Date(isoDateStr);
+        // Chuẩn hóa dấu cách thành T để tạo đối tượng Date không bị lỗi
+        let normalized = isoDateStr.replace(' ', 'T');
+        const d = new Date(normalized);
         const dd = d.getDate();
         const mm = d.getMonth() + 1;
         const yyyy = d.getFullYear();
-        if (includeTime && isoDateStr.includes('T')) {
+        if (includeTime && normalized.includes('T')) {
             const hh = String(d.getHours()).padStart(2, '0');
             const min = String(d.getMinutes()).padStart(2, '0');
             return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
@@ -240,7 +242,12 @@
             console.error("Lỗi tải dữ liệu Supabase:", e1 || e2);
         } else {
             rooms = rms || [];
-            bookings = bks || [];
+            // Vá lỗi Supabase trả về khoảng trắng: Thay thế bằng chữ T để đồng bộ chuẩn hệ thống
+            bookings = (bks || []).map(b => {
+                if (b.start && b.start.includes(' ')) b.start = b.start.replace(' ', 'T');
+                if (b.end && b.end.includes(' ')) b.end = b.end.replace(' ', 'T');
+                return b;
+            });
             render();
         }
     }
@@ -280,14 +287,15 @@
 
     function renderDashboard() {
         const active = bookings.filter(b => {
-            const bStartD = b.start.split('T')[0];
-            const bEndD = b.end.split('T')[0];
+            // Lấy chính xác chuỗi YYYY-MM-DD
+            const bStartD = b.start.substring(0, 10);
+            const bEndD = b.end.substring(0, 10);
             return realTodayStr >= bStartD && realTodayStr < bEndD && b.type === 'red';
         }).length;
         
         const totalRev = bookings.reduce((sum, b) => {
-            const startCal = new Date(b.start.split('T')[0] + 'T00:00:00');
-            const endCal = new Date(b.end.split('T')[0] + 'T00:00:00');
+            const startCal = new Date(b.start.substring(0, 10) + 'T00:00:00');
+            const endCal = new Date(b.end.substring(0, 10) + 'T00:00:00');
             const nights = Math.max((endCal - startCal) / 86400000, 1);
             const appliedPrice = b.price !== undefined ? b.price : (rooms.find(rm => rm.id === b.roomId)?.price || 0);
             return sum + (nights * appliedPrice);
@@ -314,8 +322,8 @@
 
         filteredRooms.forEach(r => {
             const activeBooking = bookings.find(b => {
-                const bStartD = b.start.split('T')[0];
-                const bEndD = b.end.split('T')[0];
+                const bStartD = b.start.substring(0, 10);
+                const bEndD = b.end.substring(0, 10);
                 return b.roomId === r.id && realTodayStr >= bStartD && realTodayStr < bEndD && b.type === 'red';
             });
             
@@ -391,21 +399,22 @@
                 cell.className = 'grid-cell';
                 
                 const b = bookings.find(bk => {
-                    const bkStartD = bk.start.split('T')[0];
-                    const bkEndD = bk.end.split('T')[0];
-                    return bk.roomId === r.id && (bkStartD === date || (date === viewStartStr && bk.start < viewStartStr && bkEndD > viewStartStr));
+                    // Dùng substring để chống lỗi ngày bị cách ra từ DB
+                    const bkStartD = bk.start.substring(0, 10);
+                    const bkEndD = bk.end.substring(0, 10);
+                    return bk.roomId === r.id && (bkStartD === date || (date === viewStartStr && bkStartD < viewStartStr && bkEndD > viewStartStr));
                 });
 
                 if(b) {
-                    const startCal = new Date(b.start.split('T')[0] + 'T00:00:00');
-                    const endCal = new Date(b.end.split('T')[0] + 'T00:00:00');
+                    const startCal = new Date(b.start.substring(0, 10) + 'T00:00:00');
+                    const endCal = new Date(b.end.substring(0, 10) + 'T00:00:00');
                     const durationToRender = Math.max((endCal - startCal) / 86400000, 1);
                     
                     const width = (durationToRender * (window.innerWidth <= 768 ? 70 : 100)) - 10;
                     const label = b.type === 'grey' ? '(Đã xong)' : '';
                     const depositText = (b.deposit && b.deposit > 0) ? ` - Cọc: ${(b.deposit/1000)}k` : '';
 
-                    const isCrossMonth = b.start < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
+                    const isCrossMonth = b.start.substring(0, 10) < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
 
                     cell.innerHTML = `
                         <div class="booking-tag tag-${b.type}" style="width: ${width}px; ${isCrossMonth}" onclick="openDetail('${b.id}')">
@@ -599,10 +608,9 @@
 
         if(!guest || start >= end) return alert("Vui lòng kiểm tra lại thông tin thời gian hoặc tên khách!");
 
-        // Nếu nhấn Check-in luôn, ghi nhận thời gian bấm nút ngay lập tức
         if (type === 'red') {
             const now = new Date();
-            start = formatForInput(now); // Đẩy thời gian thực vào CSDL
+            start = formatForInput(now); 
         }
 
         const overlap = bookings.some(b => b.roomId === roomId && (start < b.end && end > b.start));
@@ -631,8 +639,8 @@
         const dStartInput = formatForInput(dStartObj);
         const dEndInput = formatForInput(dEndObj);
 
-        const startCal = new Date(bStart.split('T')[0] + 'T00:00:00');
-        const endCal = new Date(bEnd.split('T')[0] + 'T00:00:00');
+        const startCal = new Date(bStart.substring(0, 10) + 'T00:00:00');
+        const endCal = new Date(bEnd.substring(0, 10) + 'T00:00:00');
         const nights = Math.max((endCal - startCal) / 86400000, 1);
         
         const appliedPrice = b.price !== undefined ? b.price : r.price;
@@ -732,7 +740,6 @@
     async function checkOut(bid) {
         if(confirm("Xác nhận khách đã thanh toán đủ và trả phòng?")) {
             const b = bookings.find(x => x.id === bid);
-            // Ghi nhận thời gian Checkout thực tế bằng giờ hiện tại
             const actualOut = formatForInput(new Date()); 
             
             await _supabase.from('bookings').update({ type: 'grey', end: actualOut }).eq('id', bid);
@@ -745,7 +752,6 @@
     async function updateBK(bid, type) { 
         let updateData = { type: type };
         
-        // Ghi nhận thời gian Checkin thực tế nếu vừa nhấn Check-in
         if (type === 'red') {
             updateData.start = formatForInput(new Date());
         }
@@ -779,8 +785,8 @@
         bookings.forEach(b => {
             const r = rooms.find(rm => rm.id === b.roomId);
             
-            const startCal = new Date(b.start.split('T')[0] + 'T00:00:00');
-            const endCal = new Date(b.end.split('T')[0] + 'T00:00:00');
+            const startCal = new Date(b.start.substring(0, 10) + 'T00:00:00');
+            const endCal = new Date(b.end.substring(0, 10) + 'T00:00:00');
             const nights = Math.max((endCal - startCal) / 86400000, 1);
             
             const appliedPrice = b.price !== undefined ? b.price : (r ? r.price : 0);
