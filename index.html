@@ -37,10 +37,11 @@
         .header-tools { display: flex; gap: 8px; align-items: center; overflow-x: auto; white-space: nowrap; padding: 5px 0; scrollbar-width: none; }
         .header-tools::-webkit-scrollbar { display: none; }
 
-        .month-nav { display: flex; align-items: center; gap: 2px; background: var(--bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); }
-        .month-nav button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 5px 8px; color: var(--p-blue); font-weight: bold; }
+        .month-nav { display: flex; align-items: center; gap: 2px; background: var(--bg); padding: 4px; border-radius: 8px; border: 1px solid var(--border); position: relative; }
+        .month-nav button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 5px 8px; color: var(--p-blue); font-weight: bold; position: relative; z-index: 2; }
         .month-nav button:hover { background: #e0e0e0; border-radius: 5px; }
-        .month-nav input[type="month"] { border: none; background: transparent; font-weight: bold; color: #333; outline: none; font-size: 14px; cursor: pointer; width: 115px; }
+        .month-label { font-size: 15px; font-weight: 800; color: #333; min-width: 65px; text-align: center; }
+        .month-nav input[type="month"] { position: absolute; left: 0; top: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 1; }
 
         /* --- LAYOUT GRID --- */
         .pms-wrapper { display: grid; grid-template-columns: var(--sidebar-w) 1fr; flex: 1; overflow: hidden; }
@@ -149,6 +150,7 @@
         
         <div class="month-nav">
             <button onclick="changeMonth(-1)">◀</button>
+            <span class="month-label" id="monthLabel"></span>
             <input type="month" id="monthPicker" onchange="selectMonth()">
             <button onclick="changeMonth(1)">▶</button>
         </div>
@@ -195,7 +197,7 @@
         return new Date(d.getTime() - offset).toISOString().substring(0, 10);
     }
 
-    // Hàm lấy giờ phút hiện tại để nối chuỗi (Tránh lỗi timezone của Javascript)
+    // Hàm lấy giờ phút hiện tại để nối chuỗi
     function getCurrentTimeStr() {
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
@@ -360,6 +362,7 @@
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         document.getElementById('monthPicker').value = `${year}-${String(month + 1).padStart(2, '0')}`;
+        document.getElementById('monthLabel').innerText = `${month + 1}/${year}`; // Cập nhật text tháng tùy chỉnh
 
         let dateArr = [];
         for(let i = 1; i <= daysInMonth; i++) { 
@@ -601,7 +604,6 @@
 
         if(!guest || startD >= endD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng hoặc tên khách!");
 
-        // Ghi lại ngày đến + Giờ thực tế (nếu check in luôn) hoặc giờ mặc định
         const startTimeStr = type === 'red' ? getCurrentTimeStr() : '14:00';
         let startStr = `${startD}T${startTimeStr}`;
         let endStr = `${endD}T12:00`;
@@ -621,7 +623,7 @@
 
     function openDetail(bid) {
         const b = bookings.find(x => x.id === bid);
-        if(!b) return; // Tránh lỗi nếu booking không tồn tại
+        if(!b) return; 
         const r = rooms.find(rm => rm.id === b.roomId);
         
         let bStart = b.start && b.start.includes('T') ? b.start : (b.start || realTodayStr) + 'T14:00';
@@ -719,7 +721,6 @@
 
         if(!newName || newStartD >= newEndD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
 
-        // Lấy lại phần thời gian cũ đã lưu để nối vào ngày mới
         const oldStartTime = (b.start && b.start.includes('T')) ? b.start.substring(11, 16) : '14:00';
         const oldEndTime = (b.end && b.end.includes('T')) ? b.end.substring(11, 16) : '12:00';
 
@@ -741,7 +742,6 @@
     async function checkOut(bid) {
         if(confirm("Xác nhận khách đã thanh toán đủ và trả phòng?")) {
             const b = bookings.find(x => x.id === bid);
-            // Cắt đúng phần Ngày gốc và nối bằng Giờ Checkout thực tế
             const oldDate = b.end ? b.end.substring(0, 10) : realTodayStr;
             const actualOut = `${oldDate}T${getCurrentTimeStr()}`; 
             
@@ -755,7 +755,6 @@
     async function updateBK(bid, type) { 
         let updateData = { type: type };
         
-        // CHỈ SỬA GIỜ, KHÔNG ĐỘNG TỚI NGÀY ĐỂ TRÁNH LỆCH TIMELINE
         if (type === 'red') {
             const b = bookings.find(x => x.id === bid);
             const oldDate = b.start ? b.start.substring(0, 10) : realTodayStr;
