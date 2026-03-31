@@ -9,7 +9,7 @@ let needRefresh = false;
 
 // --- HÀM HỖ TRỢ XỬ LÝ TIỀN TỆ (FORMAT DẤU PHẨY) ---
 function formatCur(input) {
-    let val = input.value.replace(/[^0-9]/g, ''); // Chỉ giữ lại số
+    let val = input.value.replace(/[^0-9]/g, ''); 
     input.value = val ? parseInt(val, 10).toLocaleString('en-US') : '';
 }
 
@@ -73,6 +73,7 @@ let searchCriteria = null;
 
 const realTodayStr = getLocalISODate(new Date()); 
 let currentViewDate = new Date();
+currentViewDate.setDate(1); // Cố định ngày 1 để chống nhảy tháng khi bấm chuyển
 currentViewDate.setHours(12, 0, 0, 0); 
 
 // --- ĐỒNG BỘ THỜI GIAN THỰC (REALTIME SYNC) ---
@@ -183,8 +184,10 @@ function renderTimeline() {
     dateArr.forEach((ds, index) => {
         let d = new Date(year, month, index + 1);
         const isToday = ds === realTodayStr ? 'background: #fff9db; border-bottom: 3px solid var(--p-gold);' : '';
+        const todayAttr = ds === realTodayStr ? 'id="col-today"' : ''; 
+        
         trHead.innerHTML += `
-            <th class="sticky-header" style="${isToday}">
+            <th ${todayAttr} class="sticky-header" style="${isToday}">
                 <div style="font-size: 12px; font-weight: normal; color: #555;">${d.toLocaleDateString('vi-VN', {weekday: 'short'})}</div>
                 <div style="font-size: 14px; font-weight: bold; color: #1e293b;">${d.getDate()}/${d.getMonth()+1}</div>
             </th>
@@ -300,6 +303,40 @@ function renderTimeline() {
     
     table.appendChild(tbody);
     container.appendChild(table);
+
+    // --- TỰ ĐỘNG CUỘN ĐẾN NGÀY HÔM NAY HOẶC ĐẦU THÁNG ---
+    const currentRealDate = new Date();
+    const isCurrentMonth = (year === currentRealDate.getFullYear() && month === currentRealDate.getMonth());
+
+    const currentViewKey = `${year}-${month}`;
+    if (window.lastViewedMonth !== currentViewKey) {
+        window.hasAutoScrolled = false; 
+        window.lastViewedMonth = currentViewKey;
+    }
+
+    if (!window.hasAutoScrolled) {
+        setTimeout(() => {
+            if (container) {
+                if (isCurrentMonth) {
+                    const todayCol = document.getElementById('col-today');
+                    const stickyCorner = document.querySelector('.sticky-corner');
+                    if (todayCol) {
+                        const offsetLeft = stickyCorner ? stickyCorner.offsetWidth : 120;
+                        container.scrollTo({
+                            left: todayCol.offsetLeft - offsetLeft - 5, 
+                            behavior: 'smooth'
+                        });
+                    }
+                } else {
+                    container.scrollTo({
+                        left: 0,
+                        behavior: 'smooth'
+                    });
+                }
+                window.hasAutoScrolled = true; 
+            }
+        }, 100);
+    }
 }
 
 // --- HÀM ĐIỀU HƯỚNG THÁNG ---
@@ -490,7 +527,6 @@ async function deleteRoom(rid) {
     }
 }
 
-// KHÔI PHỤC HỘP THOẠI XÁC NHẬN DỌN PHÒNG
 async function toggleDirty(rid, event) {
     if(event) event.stopPropagation(); 
     const r = rooms.find(x => x.id === rid);
@@ -590,7 +626,6 @@ async function confirmBooking(roomId) {
     closeModal(); 
 }
 
-// Cập nhật giá động khi chọn đổi phòng
 window.updatePriceOnChange = function(newRid) {
     const rm = rooms.find(x => x.id === newRid);
     if (rm) {
@@ -617,7 +652,6 @@ window.openDetail = function(bid) {
     const deposit = b.deposit || 0;
     const roomCost = nights * appliedPrice;
     
-    // XỬ LÝ DỮ LIỆU MINIBAR
     let miniItems = [];
     try { miniItems = typeof b.minibar_items === 'string' ? JSON.parse(b.minibar_items) : (b.minibar_items || []); } catch(e) { miniItems = []; }
     let miniTotal = parseInt(b.minibar_total) || 0;
