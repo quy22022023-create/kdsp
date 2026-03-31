@@ -88,6 +88,28 @@ _supabase.channel('public-changes')
   })
   .subscribe();
 
+// --- VŨ KHÍ "TỈNH GIẤC" (VISIBILITY API) ---
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        console.log('App is visible again, checking for updates...');
+        if (!isModalOpen) {
+            loadData();
+        } else {
+            needRefresh = true;
+        }
+    }
+});
+
+// --- BỘ LỌC "BẤT TỬ" (POLLING 3 PHÚT) ---
+setInterval(() => {
+    console.log('Polling: Auto-fetching fresh data...');
+    if (!isModalOpen) {
+        loadData();
+    } else {
+        needRefresh = true;
+    }
+}, 180000); // 3 phút = 180.000 ms
+
 // --- HÀM TẢI VÀ ĐỒNG BỘ DỮ LIỆU TỪ SUPABASE ---
 async function loadData() {
     const { data: rms, error: e1 } = await _supabase.from('rooms').select('*').order('id', { ascending: true });
@@ -832,7 +854,7 @@ window.removeMb = async function(bid, idx) {
     }
 }
 
-// --- LƯU THAY ĐỔI & LOGIC ĐỔI PHÒNG ---
+// --- LƯU THAY ĐỔI & LOGIC ĐỔI PHÒNG & LOGIC MÀU SẮC THÔNG MINH ---
 async function saveBookingChanges(bid) {
     const b = bookings.find(x => x.id === bid);
     const newRoomId = document.getElementById('dRoomId').value; 
@@ -854,10 +876,15 @@ async function saveBookingChanges(bid) {
     const overlap = bookings.some(x => x.id !== bid && x.roomId === newRoomId && (newStart < x.end && newEnd > x.start));
     if(overlap) return alert(`Lỗi: Không thể thực hiện vì Phòng ${newRoomId} đã có khách đặt trong khoảng thời gian này!`);
 
+    // --- LOGIC MÀU SẮC THÔNG MINH ---
+    let newType = b.type;
+    if (newDeposit > 0 && newType === 'blue') newType = 'purple';
+    else if (newDeposit === 0 && newType === 'purple') newType = 'blue';
+
     await _supabase.from('bookings').update({ 
         roomId: newRoomId, 
         guest: newName, phone: newPhone, start: newStart, 
-        end: newEnd, price: newPrice, deposit: newDeposit 
+        end: newEnd, price: newPrice, deposit: newDeposit, type: newType
     }).eq('id', bid);
 
     if (b.roomId !== newRoomId && b.type === 'red') {
