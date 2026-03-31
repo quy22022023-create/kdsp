@@ -240,6 +240,21 @@
     let isModalOpen = false;
     let needRefresh = false;
 
+    // --- HÀM HỖ TRỢ XỬ LÝ TIỀN TỆ (FORMAT DẤU PHẨY) ---
+    function formatCur(input) {
+        let val = input.value.replace(/[^0-9]/g, ''); // Chỉ giữ lại số
+        input.value = val ? parseInt(val, 10).toLocaleString('en-US') : '';
+    }
+
+    function getNum(val) {
+        if (!val) return 0;
+        return parseInt(String(val).replace(/,/g, ''), 10) || 0;
+    }
+
+    function numToStr(num) {
+        return (num || 0).toLocaleString('en-US');
+    }
+
     // --- CÁC HÀM HỖ TRỢ XỬ LÝ NGÀY GIỜ ---
     function getLocalISODate(d) {
         const offset = d.getTimezoneOffset() * 60000;
@@ -298,9 +313,9 @@
       .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
           console.log('Phát hiện dữ liệu thay đổi:', payload);
           if (isModalOpen) {
-              needRefresh = true; // Đang mở Modal -> Đánh dấu chờ
+              needRefresh = true; 
           } else {
-              loadData(); // Đang xem lưới -> Tải lại ngay lập tức
+              loadData(); 
           }
       })
       .subscribe();
@@ -339,13 +354,13 @@
         services.forEach((item) => {
             html += `<tr>
                 <td><input type="text" value="${item.name}" onchange="updateCatalog('${item.id}', 'name', this.value)"></td>
-                <td><input type="number" value="${item.price}" onchange="updateCatalog('${item.id}', 'price', this.value)"></td>
+                <td><input type="text" inputmode="numeric" value="${numToStr(item.price)}" oninput="formatCur(this)" onchange="updateCatalog('${item.id}', 'price', this.value)"></td>
                 <td style="text-align: center;"><button style="background: #ffebee; color: var(--p-red);" onclick="deleteCatalog('${item.id}')">✕</button></td>
             </tr>`;
         });
         html += `<tr>
                 <td><input type="text" id="newCatName" placeholder="Thêm món mới..." style="background: #f0f7ff;"></td>
-                <td><input type="number" id="newCatPrice" placeholder="Giá tiền..." style="background: #f0f7ff;"></td>
+                <td><input type="text" inputmode="numeric" id="newCatPrice" placeholder="Giá tiền..." style="background: #f0f7ff;" oninput="formatCur(this)"></td>
                 <td style="text-align: center;"><button style="background: var(--s-green); color: white; font-weight:bold;" onclick="addCatalog()">+</button></td>
             </tr>
             </table></div>
@@ -354,27 +369,25 @@
         document.getElementById('mTitle').innerText = `Quản lý Danh mục Dịch vụ`;
         document.getElementById('mContent').innerHTML = html;
         document.getElementById('pmsModal').style.display = 'flex';
-        isModalOpen = true; // Đánh dấu Modal đang mở
+        isModalOpen = true; 
     }
 
     window.updateCatalog = async function(id, field, val) {
-        if(field === 'price') val = parseInt(val) || 0;
+        if(field === 'price') val = getNum(val);
         const { error } = await _supabase.from('services').update({ [field]: val }).eq('id', id);
         if(error) alert("Lỗi khi cập nhật món hàng!");
-        // Không gọi loadData() ở đây nữa vì Realtime sẽ tự bắt
     }
     
     window.deleteCatalog = async function(id) {
         if(confirm("Bạn có chắc muốn xóa dịch vụ này? (Không ảnh hưởng đến hóa đơn cũ)")) {
             await _supabase.from('services').delete().eq('id', id);
-            // Không gọi loadData() ở đây nữa vì Realtime sẽ tự bắt
             openMinibarCatalog();
         }
     }
 
     window.addCatalog = async function() {
         let name = document.getElementById('newCatName').value.trim();
-        let price = parseInt(document.getElementById('newCatPrice').value) || 0;
+        let price = getNum(document.getElementById('newCatPrice').value);
         if(!name) return;
         
         let newId = 'SV' + Date.now();
@@ -382,7 +395,6 @@
         if(error) {
             alert("Lỗi! Cần đảm bảo đã tạo bảng 'services' trên Supabase.");
         } else {
-            // Cập nhật giao diện thủ công 1 xíu để mượt hơn trong lúc mở Modal
             await loadData();
             openMinibarCatalog();
         }
@@ -439,7 +451,7 @@
 
         document.getElementById('topStats').innerHTML = `
             <div class="stat-card"><small>ĐANG Ở</small><b>${active}</b></div>
-            <div class="stat-card"><small>TỔNG DOANH THU</small><b>${(totalRev/1000).toLocaleString()}k</b></div>
+            <div class="stat-card"><small>TỔNG DOANH THU</small><b>${numToStr(totalRev/1000)}k</b></div>
         `;
     }
 
@@ -484,7 +496,7 @@
                 <div class="room-item" onclick="openRoomSettings('${r.id}')" title="Nhấn để mở Cài đặt phòng">
                     <b>${r.id}</b>
                     <span class="lb-code">${r.lockbox ? 'LB: ' + r.lockbox : 'Chưa có LB'}</span>
-                    <span class="r-price">${(r.price/1000).toLocaleString()}k/đ</span>
+                    <span class="r-price">${numToStr(r.price)}đ</span>
                     <span class="r-notes">${r.notes || '---'}</span>
                     
                     <div class="badge-status" style="background:${badgeColor}" onclick="toggleDirty('${r.id}', event)" title="Tình trạng: ${sttText}. Nhấn để đổi trạng thái"></div>
@@ -553,7 +565,7 @@
                     
                     const width = (durationToRender * (window.innerWidth <= 768 ? 70 : 100)) - 10;
                     const label = b.type === 'grey' ? '(Đã xong)' : '';
-                    const depositText = (b.deposit && b.deposit > 0) ? ` - Cọc: ${(b.deposit/1000)}k` : '';
+                    const depositText = (b.deposit && b.deposit > 0) ? ` - Cọc: ${numToStr(b.deposit/1000)}k` : '';
 
                     const isCrossMonth = (b.start ? b.start.substring(0, 10) : '') < viewStartStr ? 'border-radius: 0 8px 8px 0; border-left: 3px dashed #fff;' : '';
 
@@ -640,7 +652,7 @@
             <div class="f-group"><label>Tên / Số phòng</label><input id="fRoomId" type="text" value="${r.id}" placeholder="VD: 101, P201 (P1)"></div>
             <div class="flex-row" style="margin-bottom: 15px;">
                 <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Mã Lockbox</label><input class="f-group" style="margin-bottom:0;" id="fRoomLockbox" type="text" value="${r.lockbox || ''}" placeholder="VD: 9138"></div>
-                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá gốc / đêm</label><input class="f-group" style="margin-bottom:0;" id="fRoomPrice" type="number" value="${r.price}"></div>
+                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá gốc / đêm</label><input class="f-group" style="margin-bottom:0;" id="fRoomPrice" type="text" inputmode="numeric" value="${numToStr(r.price)}" oninput="formatCur(this)"></div>
             </div>
             <div class="f-group"><label>Ghi chú / Tính chất phòng</label><input id="fRoomNotes" type="text" value="${r.notes || ''}" placeholder="VD: Quạt trần, ban công, 2 giường..."></div>
             <div class="btn-row" style="margin-top: 25px;">
@@ -655,7 +667,7 @@
 
     async function saveRoomSettings(oldRid) {
         const newId = document.getElementById('fRoomId').value.trim();
-        const newPrice = parseInt(document.getElementById('fRoomPrice').value) || 0;
+        const newPrice = getNum(document.getElementById('fRoomPrice').value);
         const newLockbox = document.getElementById('fRoomLockbox').value.trim();
         const newNotes = document.getElementById('fRoomNotes').value.trim();
 
@@ -702,7 +714,7 @@
 
     // --- CÁC CHỨC NĂNG NGHIỆP VỤ ĐẶT PHÒNG ---
     window.checkDepositStatus = function() {
-        const dep = parseInt(document.getElementById('fDeposit').value) || 0;
+        const dep = getNum(document.getElementById('fDeposit').value);
         const typeSelect = document.getElementById('fType');
         if (dep > 0 && typeSelect.value === 'blue') typeSelect.value = 'purple'; 
         else if (dep === 0 && typeSelect.value === 'purple') typeSelect.value = 'blue'; 
@@ -741,8 +753,8 @@
             </div>
             
             <div class="flex-row" style="margin-bottom: 15px;">
-                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá thỏa thuận / Đêm</label><input class="f-group" style="margin-bottom:0;" id="fPrice" type="number" value="${r.price}"></div>
-                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tiền đã cọc (VNĐ)</label><input class="f-group" style="margin-bottom:0;" id="fDeposit" type="number" value="0" oninput="checkDepositStatus()" placeholder="0"></div>
+                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá thỏa thuận / Đêm</label><input class="f-group" style="margin-bottom:0;" id="fPrice" type="text" inputmode="numeric" value="${numToStr(r.price)}" oninput="formatCur(this)"></div>
+                <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tiền đã cọc (VNĐ)</label><input class="f-group" style="margin-bottom:0;" id="fDeposit" type="text" inputmode="numeric" value="0" oninput="formatCur(this); checkDepositStatus();" placeholder="0"></div>
             </div>
             <div class="f-group">
                 <label>Trạng thái ban đầu</label>
@@ -763,8 +775,8 @@
         const phone = document.getElementById('fPhone').value.trim();
         const startD = document.getElementById('fStart').value;
         const endD = document.getElementById('fEnd').value;
-        const price = parseInt(document.getElementById('fPrice').value) || 0;
-        const deposit = parseInt(document.getElementById('fDeposit').value) || 0;
+        const price = getNum(document.getElementById('fPrice').value);
+        const deposit = getNum(document.getElementById('fDeposit').value);
         const type = document.getElementById('fType').value;
 
         if(!guest || startD >= endD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng hoặc tên khách!");
@@ -789,7 +801,7 @@
     window.updatePriceOnChange = function(newRid) {
         const rm = rooms.find(x => x.id === newRid);
         if (rm) {
-            document.getElementById('dPrice').value = rm.price;
+            document.getElementById('dPrice').value = numToStr(rm.price);
         }
     };
 
@@ -830,7 +842,7 @@
                 <h4 style="margin: 0 0 10px 0; color: var(--p-blue); font-size: 14px;">🛒 Gọi Dịch vụ / Minibar</h4>
                 <div style="display:flex; gap:8px; margin-bottom: 12px; width: 100%;">
                     <select id="mbItem" class="mb-select">
-                        ${services.map(c => `<option value="${c.name}|${c.price}">${c.name} - ${(c.price/1000)}k</option>`).join('')}
+                        ${services.map(c => `<option value="${c.name}|${c.price}">${c.name} - ${numToStr(c.price/1000)}k</option>`).join('')}
                     </select>
                     <input type="number" id="mbQty" class="mb-qty" value="1" min="1">
                     <button class="mb-add-btn" onclick="addMbToBooking('${bid}')">+</button>
@@ -838,7 +850,7 @@
                 <div id="mbList" style="font-size: 14px; color: #444;">
                     ${miniItems.map((m, i) => `<div style="display:flex; justify-content:space-between; padding: 6px 0; border-bottom: 1px dashed #e0e0e0;">
                         <span>${m.qty}x ${m.name}</span>
-                        <span><b>${(m.qty * m.price).toLocaleString()}đ</b> <span style="color:var(--p-red); cursor:pointer; margin-left:12px; font-weight:bold;" onclick="removeMb('${bid}', ${i})">✕</span></span>
+                        <span><b>${numToStr(m.qty * m.price)}đ</b> <span style="color:var(--p-red); cursor:pointer; margin-left:12px; font-weight:bold;" onclick="removeMb('${bid}', ${i})">✕</span></span>
                     </div>`).join('')}
                 </div>
             </div>`;
@@ -859,11 +871,11 @@
                 <div class="bill-box">
                     <div class="bill-row" style="color:var(--p-blue); font-size:13px; font-weight:bold;"><span>⏱ Giờ vào:</span><span>${fmt(bStart, true)}</span></div>
                     <div class="bill-row" style="color:var(--p-red); font-size:13px; font-weight:bold; margin-bottom: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 8px;"><span>🚪 Giờ ra:</span><span>${fmt(bEnd, true)}</span></div>
-                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
-                    <div class="bill-row"><span>Tiền phòng:</span><span>${roomCost.toLocaleString()}đ</span></div>
-                    ${miniTotal > 0 ? `<div class="bill-row" style="color:var(--s-purple);"><span>Phụ thu Dịch vụ:</span><span>+ ${miniTotal.toLocaleString()}đ</span></div>` : ''}
-                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
-                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
+                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${numToStr(appliedPrice)}đ / đêm</span></div>
+                    <div class="bill-row"><span>Tiền phòng:</span><span>${numToStr(roomCost)}đ</span></div>
+                    ${miniTotal > 0 ? `<div class="bill-row" style="color:var(--s-purple);"><span>Phụ thu Dịch vụ:</span><span>+ ${numToStr(miniTotal)}đ</span></div>` : ''}
+                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${numToStr(deposit)}đ</span></div>
+                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${numToStr(remaining)}đ</span></div>
                 </div>
                 <div class="btn-row">${actionButtons}</div>
             `;
@@ -919,8 +931,8 @@
                     </div>
                     
                     <div class="flex-row">
-                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá / Đêm</label><input class="f-group" style="margin-bottom:0;" id="dPrice" type="number" value="${appliedPrice}"></div>
-                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tiền cọc</label><input class="f-group" style="margin-bottom:0;" id="dDeposit" type="number" value="${deposit}"></div>
+                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá / Đêm</label><input class="f-group" style="margin-bottom:0;" id="dPrice" type="text" inputmode="numeric" value="${numToStr(appliedPrice)}" oninput="formatCur(this)"></div>
+                        <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tiền cọc</label><input class="f-group" style="margin-bottom:0;" id="dDeposit" type="text" inputmode="numeric" value="${numToStr(deposit)}" oninput="formatCur(this)"></div>
                     </div>
                     <button class="btn btn-p" style="width:100%; padding: 12px; font-size: 14px; margin-top:15px;" onclick="saveBookingChanges('${bid}')">💾 LƯU THÔNG TIN / ĐỔI PHÒNG</button>
                 </div>
@@ -929,11 +941,11 @@
 
                 <div class="bill-box">
                     ${b.type === 'red' ? `<div class="bill-row" style="color:var(--p-blue); font-size:13px; font-weight:bold; margin-bottom: 12px; border-bottom: 1px dashed #ccc; padding-bottom: 8px;"><span>⏱ Giờ vào (thực tế):</span><span>${fmt(bStart, true)}</span></div>` : ''}
-                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${appliedPrice.toLocaleString()}đ / đêm</span></div>
-                    <div class="bill-row"><span>Tiền phòng:</span><span>${roomCost.toLocaleString()}đ</span></div>
-                    ${miniTotal > 0 ? `<div class="bill-row" style="color:var(--s-purple);"><span>Phụ thu Dịch vụ:</span><span>+ ${miniTotal.toLocaleString()}đ</span></div>` : ''}
-                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${deposit.toLocaleString()}đ</span></div>
-                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${remaining.toLocaleString()}đ</span></div>
+                    <div class="bill-row"><span>Đơn giá (${nights} đêm):</span><span>${numToStr(appliedPrice)}đ / đêm</span></div>
+                    <div class="bill-row"><span>Tiền phòng:</span><span>${numToStr(roomCost)}đ</span></div>
+                    ${miniTotal > 0 ? `<div class="bill-row" style="color:var(--s-purple);"><span>Phụ thu Dịch vụ:</span><span>+ ${numToStr(miniTotal)}đ</span></div>` : ''}
+                    <div class="bill-row" style="color: var(--s-green);"><span>Đã đặt cọc:</span><span>- ${numToStr(deposit)}đ</span></div>
+                    <div class="bill-row total"><span>CÒN LẠI CẦN THU:</span><span>${numToStr(remaining)}đ</span></div>
                 </div>
                 <div class="btn-row">${actionButtons}</div>
             `;
@@ -967,6 +979,8 @@
             alert("Lưu thất bại! Bạn đã tạo bảng 'services' trên Supabase chưa?");
             return;
         }
+        // Tắt cờ refresh đi tạm để mở lại detail không bị giật
+        needRefresh = false; 
         await loadData();
         openDetail(bid); 
     }
@@ -986,6 +1000,7 @@
         }).eq('id', bid);
         
         if(!error) {
+            needRefresh = false;
             await loadData();
             openDetail(bid);
         }
@@ -999,8 +1014,8 @@
         const newPhone = document.getElementById('dPhone').value.trim();
         const newStartD = document.getElementById('dStart').value;
         const newEndD = document.getElementById('dEnd').value;
-        const newPrice = parseInt(document.getElementById('dPrice').value) || 0;
-        const newDeposit = parseInt(document.getElementById('dDeposit').value) || 0;
+        const newPrice = getNum(document.getElementById('dPrice').value);
+        const newDeposit = getNum(document.getElementById('dDeposit').value);
 
         if(!newName || newStartD >= newEndD) return alert("Vui lòng kiểm tra lại thông tin ngày tháng!");
 
@@ -1062,7 +1077,7 @@
         const id = prompt("Nhập Số/Tên phòng mới (VD: 301, P201):");
         const price = prompt("Giá mặc định mỗi đêm (VNĐ):", "350000");
         if(id && price) { 
-            await _supabase.from('rooms').insert([{ id, price: parseInt(price), cat: "", status: "clean", lockbox: "", notes: "" }]);
+            await _supabase.from('rooms').insert([{ id, price: getNum(price), cat: "", status: "clean", lockbox: "", notes: "" }]);
         }
     }
 
@@ -1132,7 +1147,7 @@
                     let coTime = b.end ? b.end.substring(11, 16) : '12:00';
                     let appliedPrice = b.price !== undefined ? b.price : r.price;
                     
-                    // Tính tổng tiền toàn bộ booking (không chỉ phần ở trong tháng này)
+                    // Tính tổng tiền toàn bộ booking
                     let totalNights = Math.max((new Date((b.end?b.end.substring(0,10):realTodayStr)+'T00:00:00') - new Date((b.start?b.start.substring(0,10):realTodayStr)+'T00:00:00')) / 86400000, 1);
                     let miniTotal = parseInt(b.minibar_total) || 0;
                     let totalCost = (totalNights * appliedPrice) + miniTotal;
@@ -1145,7 +1160,7 @@
                     if(b.type === 'red') bgColor = '#d4111e'; 
                     if(b.type === 'grey') { bgColor = '#bdc3c7'; fontColor = '#333'; } // Xám thì chữ đen cho dễ đọc
 
-                    let text = `${b.guest} - Cọc ${(dep/1000)}k - Thu ${(totalCost/1000)}k - CI ${ciTime} CO ${coTime}`;
+                    let text = `${b.guest} - Cọc ${numToStr(dep/1000)}k - Thu ${numToStr(totalCost/1000)}k - CI ${ciTime} CO ${coTime}`;
 
                     html += `<td colspan="${colspan}" style="background-color: ${bgColor}; color: ${fontColor}; text-align: center; vertical-align: middle; white-space: nowrap; font-size: 12px; font-weight: bold; border: 1px solid #fff;">${text}</td>`;
 
