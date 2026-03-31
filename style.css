@@ -8,7 +8,7 @@
     --sidebar-w: 120px; 
     --row-h: 105px; 
     --cell-w: 100px;
-    --border: #b0bec5; /* Viền dặm đậm màu xám */
+    --border: #b0bec5;
     --shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
@@ -227,17 +227,17 @@ td.grid-cell {
 /* --- TÔ MÀU XEN KẼ & HOVER (ZEBRA STRIPING) --- */
 tbody tr:nth-child(even) th.sticky-col,
 tbody tr:nth-child(even) td.grid-cell { 
-    background-color: #f0f8ff; /* Xanh biển rất nhẹ */ 
+    background-color: #f0f8ff; 
 }
 
 tbody tr:nth-child(odd) th.sticky-col,
 tbody tr:nth-child(odd) td.grid-cell { 
-    background-color: #ffffff; /* Trắng */ 
+    background-color: #ffffff; 
 }
 
 tbody tr:hover th.sticky-col,
 tbody tr:hover td.grid-cell { 
-    background-color: #e2e8f0 !important; /* Dặm màu rõ hơn khi rê chuột */ 
+    background-color: #e2e8f0 !important; 
 }
 
 /* --- THÔNG TIN PHÒNG TRONG CỘT --- */
