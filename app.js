@@ -86,7 +86,7 @@ async function loadData() {
 // --- HIỂN THỊ DỮ LIỆU (RENDER) ---
 window.render = function() {
     renderDashboard();
-    renderTimeline(); // Gọi hàm render Unified Table
+    renderTimeline(); 
 }
 
 window.renderDashboard = function() {
@@ -453,10 +453,20 @@ window.deleteRoom = async function(rid) {
     } 
 }
 
+// KHÔI PHỤC TÍNH NĂNG THÔNG BÁO XÁC NHẬN KHI DỌN PHÒNG
 window.toggleDirty = async function(rid, event) { 
     if(event) event.stopPropagation(); 
     const r = rooms.find(x => x.id === rid); 
-    await _supabase.from('rooms').update({ status: r.status === 'dirty' ? 'clean' : 'dirty' }).eq('id', rid); 
+    
+    if(r.status === 'dirty') {
+        if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) {
+            await _supabase.from('rooms').update({ status: 'clean' }).eq('id', rid);
+        }
+    } else {
+        if(confirm("Đánh dấu phòng " + rid + " cần dọn dẹp?")) {
+            await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', rid);
+        }
+    }
 }
 
 // --- ĐẶT PHÒNG ---
