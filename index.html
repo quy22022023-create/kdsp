@@ -9,6 +9,9 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
 
+    <link rel="icon" type="image/png" href="logo.PNG">
+    <link rel="apple-touch-icon" href="logo.PNG">
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <link rel="stylesheet" href="style.css?v=1.1">
@@ -16,7 +19,10 @@
 <body>
 
     <header>
-        <div class="brand">ULTIMATE PMS</div>
+        <div class="brand" style="display: flex; align-items: center; gap: 8px;">
+            <img src="logo.png" alt="Logo" style="width: 36px; height: 36px; border-radius: 8px; object-fit: contain;">
+            ULTIMATE PMS
+        </div>
         <div class="stats-bar" id="topStats"></div>
         <div class="header-tools">
             <div class="month-nav">
