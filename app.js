@@ -1,5 +1,5 @@
 // --- QUẢN LÝ PHIÊN BẢN (APP VERSION) ---
-const APP_VERSION = 'v1.5.4_SUPER_FIX';
+const APP_VERSION = 'v1.6.3_REALTIME_PRO';
 
 // --- KHỞI TẠO SUPABASE ---
 const supabaseUrl = 'https://awxkvzkigfxoidnvmxew.supabase.co';
@@ -9,7 +9,6 @@ const _supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 // --- BIẾN TRẠNG THÁI QUẢN LÝ REALTIME MODAL ---
 let currentUser = JSON.parse(localStorage.getItem('pms_user')) || null;
 let isModalOpen = false;
-let needRefresh = false;
 
 // --- HÀM HỖ TRỢ XỬ LÝ QUYỀN HẠN (CHỐNG LỖI JSON) ---
 function getPerms(userObj) {
@@ -114,35 +113,37 @@ let currentViewDate = new Date();
 currentViewDate.setDate(1); 
 currentViewDate.setHours(12, 0, 0, 0); 
 
-// --- ĐỒNG BỘ THỜI GIAN THỰC (REALTIME SYNC) ---
+// --- ĐỒNG BỘ THỜI GIAN THỰC (REALTIME ĐA LUỒNG) ---
 _supabase.channel('public-changes')
   .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
-      console.log('Phát hiện dữ liệu thay đổi:', payload);
+      console.log('Đã bắt được dữ liệu mới từ Server:', payload);
       if (!currentUser) return;
-      if (isModalOpen) {
-          needRefresh = true; 
-      } else {
-          loadData(); 
-      }
+      // Dù đang mở bảng (isModalOpen) thì vẫn tải lại lưới nền phía sau bình thường
+      loadData(); 
   })
-  .subscribe();
+  .subscribe((status) => {
+      console.log('Trạng thái kết nối Realtime:', status);
+      const stEl = document.getElementById('rtStatus');
+      if (stEl) {
+          if (status === 'SUBSCRIBED') {
+              stEl.style.background = '#2ecc71'; // Màu Xanh: Chạy mượt
+              stEl.title = "Đã kết nối Realtime siêu tốc";
+          } else {
+              stEl.style.background = '#e74c3c'; // Màu Đỏ: Đang load hoặc mất mạng
+              stEl.title = "Mất kết nối hoặc đang tải...";
+          }
+      }
+  });
 
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && currentUser) {
-        console.log('App is visible again, checking for updates...');
-        if (!isModalOpen) {
-            loadData();
-        } else {
-            needRefresh = true;
-        }
+        loadData();
     }
 });
 
 setInterval(() => {
-    if (currentUser && !isModalOpen) {
+    if (currentUser) {
         loadData();
-    } else if (currentUser) {
-        needRefresh = true;
     }
 }, 180000); 
 
@@ -188,18 +189,28 @@ function applyPermissions() {
     const p = getPerms(currentUser);
     const isAdmin = role === 'admin';
     
-    // Nút Lọc và Tìm phòng
+    // ÉP BỘ LỌC TỰ ĐỘNG THEO CHỨC DANH (TÍNH NĂNG TO-DO LIST)
+    if (role === 'housekeeping') {
+        currentFilter = 'dirty';
+    } else if (role === 'maintenance') {
+        currentFilter = 'maintenance';
+    } else {
+        currentFilter = 'all'; // Admin và Lễ tân mặc định thấy tất cả
+    }
+    
+    const rf = document.getElementById('roomFilter');
+    if (rf) rf.value = currentFilter;
+
+    // ẨN/HIỆN GIAO DIỆN THEO QUYỀN
     document.getElementById('roomFilter').style.display = (isAdmin || role === 'staff') ? 'inline-block' : 'none';
     document.getElementById('btnSearchRoom').style.display = (isAdmin || role === 'staff') ? 'inline-block' : 'none';
     
-    // Các chức năng Quản lý
     document.getElementById('btnServices').style.display = (isAdmin || p.can_manage_services) ? 'inline-block' : 'none';
     document.getElementById('btnHolidays').style.display = isAdmin ? 'inline-block' : 'none';
     document.getElementById('btnUsers').style.display = isAdmin ? 'inline-block' : 'none';
     document.getElementById('btnExcel').style.display = (isAdmin || p.can_export_excel) ? 'inline-block' : 'none';
     document.getElementById('btnAddRoom').style.display = (isAdmin || p.can_edit_room) ? 'inline-block' : 'none';
     
-    // Thống kê doanh thu
     const statsEl = document.getElementById('topStats');
     if (isAdmin || p.can_view_revenue) {
         statsEl.style.display = window.innerWidth > 768 ? 'flex' : 'none'; 
@@ -480,6 +491,11 @@ function renderDashboard() {
 function renderTimeline() {
     const container = document.getElementById('mainTimeline');
     if (!container) return;
+    
+    // Lưu lại vị trí cuộn hiện tại trước khi vẽ lại
+    const scrollLeft = container.scrollLeft;
+    const scrollTop = container.scrollTop;
+
     container.innerHTML = '';
 
     const year = currentViewDate.getFullYear();
@@ -548,6 +564,7 @@ function renderTimeline() {
         let badgeColor = 'var(--s-green)';
         let sttText = 'Sạch - Sẵn sàng';
         
+        // CẬP NHẬT TRẠNG THÁI BẢO TRÌ
         if (activeBk) { 
             if (checkOverdue(activeBk)) {
                 badgeColor = '#ff9800';
@@ -556,6 +573,9 @@ function renderTimeline() {
                 badgeColor = 'var(--p-red)';
                 sttText = 'Đang có khách lưu trú';
             }
+        } else if (r.status === 'maintenance') {
+            badgeColor = '#34495e';
+            sttText = 'Đang bảo trì / Sửa chữa';
         } else if (r.status === 'dirty') { 
             badgeColor = 'var(--p-gold)'; 
             sttText = 'Khách đã out - Chờ dọn dẹp'; 
@@ -643,17 +663,20 @@ function renderTimeline() {
     table.appendChild(tbody);
     container.appendChild(table);
 
-    // --- TỰ ĐỘNG CUỘN ĐẾN NGÀY HÔM NAY ---
+    // --- PHỤC HỒI CUỘN HOẶC TỰ ĐỘNG CUỘN ĐẾN HÔM NAY ---
     const currentRealDate = new Date();
     const isCurrentMonth = (year === currentRealDate.getFullYear() && month === currentRealDate.getMonth());
-
     const currentViewKey = `${year}-${month}`;
+
     if (window.lastViewedMonth !== currentViewKey) {
         window.hasAutoScrolled = false; 
         window.lastViewedMonth = currentViewKey;
     }
 
-    if (!window.hasAutoScrolled) {
+    if (scrollLeft > 0 || scrollTop > 0) {
+        container.scrollLeft = scrollLeft;
+        container.scrollTop = scrollTop;
+    } else if (!window.hasAutoScrolled) {
         setTimeout(() => {
             if (container) {
                 if (isCurrentMonth) {
@@ -667,10 +690,7 @@ function renderTimeline() {
                         });
                     }
                 } else {
-                    container.scrollTo({
-                        left: 0,
-                        behavior: 'smooth'
-                    });
+                    container.scrollTo({ left: 0, behavior: 'smooth' });
                 }
                 window.hasAutoScrolled = true; 
             }
@@ -826,7 +846,7 @@ function executeSearch() {
     closeModal(); render();
 }
 
-// --- TÍNH NĂNG QUẢN LÝ PHÒNG (ĐÃ VÁ LỖI PHÂN QUYỀN) ---
+// --- TÍNH NĂNG QUẢN LÝ PHÒNG VÀ BẢO TRÌ ---
 function openRoomSettings(rid) {
     if(!currentUser) return;
     const r = rooms.find(x => x.id === rid);
@@ -842,10 +862,14 @@ function openRoomSettings(rid) {
     // QUYỀN BẢO TRÌ
     if(currentUser.role === 'maintenance') {
         document.getElementById('mTitle').innerText = `Bảo trì Phòng ${r.id}`;
+        
+        let btnComplete = r.status === 'maintenance' ? `<button class="btn btn-s" style="width:100%; margin-top:10px; background:#27ae60;" onclick="completeMaintenance('${rid}')">✅ HOÀN TẤT BẢO TRÌ</button>` : '';
+
         document.getElementById('mContent').innerHTML = `
             <div class="f-group"><label>Mã Lockbox (Chỉ xem)</label><input type="text" value="${r.lockbox || 'Không có'}" readonly style="background:#f4f7f6;"></div>
             <div class="f-group"><label>Ghi chú hỏng hóc (Cập nhật khi sửa xong)</label><input id="fMaintNotes" type="text" value="${r.notes || ''}"></div>
             <button class="btn btn-p" style="width:100%; margin-top:15px;" onclick="saveMaintenanceNotes('${rid}')">LƯU THÔNG TIN</button>
+            ${btnComplete}
             <button class="btn btn-cancel" style="width:100%; margin-top:10px;" onclick="closeModal()">ĐÓNG LẠI</button>
         `;
         document.getElementById('pmsModal').style.display = 'flex';
@@ -853,13 +877,24 @@ function openRoomSettings(rid) {
         return;
     }
 
-    // QUYỀN LỄ TÂN & ADMIN DỰA TRÊN MICRO-PERMISSIONS
+    // QUYỀN LỄ TÂN & ADMIN
     const canEditRoom = isAdmin || p.can_edit_room;
     const canDeleteRoom = isAdmin || p.can_delete_room;
 
-    const btnDelete = canDeleteRoom ? `<button class="btn btn-d" onclick="deleteRoom('${rid}')">XÓA PHÒNG</button>` : '';
     const readOnlyAttr = !canEditRoom ? 'readonly style="background:#f4f7f6;"' : '';
-    const btnSave = canEditRoom ? `<button class="btn btn-p" ${!canDeleteRoom ? 'style="grid-column: span 2"' : ''} onclick="saveRoomSettings('${rid}')">LƯU THAY ĐỔI</button>` : '';
+    
+    // Tạo lưới nút thông minh
+    const btnSave = canEditRoom ? `<button class="btn btn-p" onclick="saveRoomSettings('${rid}')">LƯU THAY ĐỔI</button>` : '';
+    const btnDelete = canDeleteRoom ? `<button class="btn btn-d" onclick="deleteRoom('${rid}')">XÓA PHÒNG</button>` : '';
+    const btnMaint = r.status !== 'maintenance' ? `<button class="btn" style="background:#34495e; color:#fff;" onclick="reportMaintenance('${rid}')">🔧 BÁO HỎNG</button>` : `<button class="btn" style="background:#f39c12; color:#fff;" onclick="completeMaintenance('${rid}')">✅ ĐÃ SỬA XONG</button>`;
+    
+    let btns = [];
+    if(canEditRoom) btns.push(btnSave);
+    btns.push(btnMaint);
+    if(canDeleteRoom) btns.push(btnDelete);
+    btns.push(`<button class="btn btn-cancel" onclick="closeModal()">ĐÓNG</button>`);
+
+    let gridHtml = `<div class="btn-row" style="margin-top: 25px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">${btns.join('')}</div>`;
 
     document.getElementById('mTitle').innerText = `Cài đặt phòng`;
     document.getElementById('mContent').innerHTML = `
@@ -869,11 +904,7 @@ function openRoomSettings(rid) {
             <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá gốc / đêm</label><input class="f-group" style="margin-bottom:0;" id="fRoomPrice" type="text" inputmode="numeric" value="${numToStr(r.price)}" oninput="formatCur(this)" ${readOnlyAttr}></div>
         </div>
         <div class="f-group"><label>Ghi chú / Tính chất phòng</label><input id="fRoomNotes" type="text" value="${r.notes || ''}" placeholder="VD: Quạt trần, ban công..." ${readOnlyAttr}></div>
-        <div class="btn-row" style="margin-top: 25px;">
-            ${btnSave}
-            ${btnDelete}
-            <button class="btn btn-cancel" ${!canEditRoom && !canDeleteRoom ? 'style="grid-column: span 2"' : ''} onclick="closeModal()">ĐÓNG</button>
-        </div>
+        ${gridHtml}
     `;
     document.getElementById('pmsModal').style.display = 'flex';
     isModalOpen = true;
@@ -884,6 +915,24 @@ window.saveMaintenanceNotes = async function(rid) {
     const { error } = await _supabase.from('rooms').update({ notes: notes }).eq('id', rid);
     if(error) alert("Lỗi: " + error.message);
     else closeModal();
+}
+
+window.reportMaintenance = async function(rid) {
+    const r = rooms.find(x => x.id === rid);
+    const reason = prompt("Nhập lý do báo hỏng / bảo trì (VD: Hỏng điều hòa):", r.notes || "");
+    if (reason !== null) {
+        const { error } = await _supabase.from('rooms').update({ status: 'maintenance', notes: reason }).eq('id', rid);
+        if (error) alert("Lỗi hệ thống: " + error.message);
+        else closeModal();
+    }
+}
+
+window.completeMaintenance = async function(rid) {
+    if (confirm("Xác nhận phòng đã xử lý xong? Hệ thống sẽ chuyển phòng sang trạng thái 'Chờ dọn dẹp'.")) {
+        const { error } = await _supabase.from('rooms').update({ status: 'dirty', notes: '' }).eq('id', rid);
+        if (error) alert("Lỗi hệ thống: " + error.message);
+        else closeModal();
+    }
 }
 
 async function saveRoomSettings(oldRid) {
@@ -957,6 +1006,12 @@ async function toggleDirty(rid, event) {
     if(event) event.stopPropagation(); 
     if(!currentUser) return;
     const r = rooms.find(x => x.id === rid);
+    
+    if (r.status === 'maintenance') {
+        alert("Cảnh báo: Phòng đang trong trạng thái bảo trì! Vui lòng chờ bộ phận kỹ thuật sửa chữa xong.");
+        return;
+    }
+    
     if(r.status === 'dirty') {
         if(confirm("Xác nhận phòng " + rid + " đã được dọn sạch?")) { 
             const { error } = await _supabase.from('rooms').update({ status: 'clean' }).eq('id', rid);
@@ -981,6 +1036,10 @@ window.checkDepositStatus = function() {
 function openBooking(roomId, date) {
     if(currentUser.role === 'housekeeping' || currentUser.role === 'maintenance') return; 
     const r = rooms.find(x => x.id === roomId);
+    
+    if (r.status === 'maintenance') {
+        if(!confirm("CẢNH BÁO: Phòng này đang được báo hỏng/bảo trì. Bạn có chắc chắn muốn tiếp tục xếp khách vào phòng này không?")) return;
+    }
     
     let nextDay = new Date(date); nextDay.setDate(nextDay.getDate() + 1);
     const endD = getLocalISODate(nextDay);
@@ -1017,7 +1076,7 @@ function openBooking(roomId, date) {
         </div>
         
         <div class="flex-row" style="margin-bottom: 15px;">
-            <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá thỏa thuận / Đêm</label><input class="f-group" style="margin-bottom:0;" id="fPrice" type="text" inputmode="numeric" value="${numToStr(r.price)}" oninput="formatCur(this)"></div>
+            <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Giá gốc / Đêm</label><input class="f-group" style="margin-bottom:0;" id="fPrice" type="text" inputmode="numeric" value="${numToStr(r.price)}" oninput="formatCur(this)"></div>
             <div class="flex-col"><label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block;">Tiền đặt cọc phòng</label><input class="f-group" style="margin-bottom:0;" id="fDeposit" type="text" inputmode="numeric" value="0" oninput="formatCur(this); checkDepositStatus();" placeholder="0"></div>
         </div>
         <div style="font-size:11px; color:#888; margin-bottom:15px; text-align:center;">* Giá này chưa bao gồm phụ thu Ngày Lễ. Hệ thống sẽ tự động bóc tách cộng thêm vào tổng bill.</div>
@@ -1064,6 +1123,13 @@ async function confirmBooking(roomId) {
     
     const { error } = await _supabase.from('bookings').insert([newBk]);
     if (error) return alert("Lỗi khi tạo booking: " + error.message);
+    
+    // Nếu phòng đang bảo trì mà vẫn cố ép khách vào, tự động chuyển về trạng thái bẩn/khách ở
+    const r = rooms.find(x => x.id === roomId);
+    if(type === 'red' && r.status === 'maintenance') {
+        await _supabase.from('rooms').update({ status: 'dirty' }).eq('id', roomId);
+    }
+    
     closeModal(); 
 }
 
@@ -1266,7 +1332,6 @@ window.addMbToBooking = async function(bid) {
     }).eq('id', bid);
 
     if(error) return alert("Lỗi khi thêm dịch vụ: " + error.message);
-    needRefresh = false; 
     await loadData();
     openDetail(bid); 
 }
@@ -1295,7 +1360,6 @@ window.addMbAndPay = async function(bid) {
     }).eq('id', bid);
 
     if(error) return alert("Lỗi khi thêm dịch vụ: " + error.message);
-    needRefresh = false; 
     await loadData();
     openDetail(bid); 
 }
@@ -1321,7 +1385,6 @@ window.removeMb = async function(bid, idx) {
     }).eq('id', bid);
     
     if(error) return alert("Lỗi khi xóa dịch vụ: " + error.message);
-    needRefresh = false;
     await loadData();
     openDetail(bid);
 }
@@ -1513,10 +1576,6 @@ window.exportExcel = function() {
 function closeModal() { 
     document.getElementById('pmsModal').style.display = 'none'; 
     isModalOpen = false;
-    if (needRefresh) {
-        needRefresh = false;
-        loadData(); 
-    }
 }
 
 // Bắt đầu khởi tạo dữ liệu
