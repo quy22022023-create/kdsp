@@ -11,7 +11,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-    <link rel="stylesheet" href="style.css?v=1.5.0">
+    <link rel="stylesheet" href="style.css?v=1.6.3">
 </head>
 <body>
 
@@ -29,7 +29,10 @@
     </div>
 
     <header>
-        <div class="brand">ULTIMATE PMS</div>
+        <div style="display: flex; align-items: center;">
+            <div id="rtStatus" title="Đang kết nối Realtime..." style="width: 12px; height: 12px; border-radius: 50%; background: #e74c3c; margin-right: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.2);"></div>
+            <div class="brand">ULTIMATE PMS</div>
+        </div>
         <div class="stats-bar" id="topStats"></div>
         <div class="header-tools">
             <div class="month-nav">
@@ -43,6 +46,7 @@
                 <option value="all">Hiển thị: Tất cả</option>
                 <option value="clean">Phòng sạch</option>
                 <option value="dirty">Phòng chờ dọn</option>
+                <option value="maintenance">Phòng bảo trì</option>
             </select>
             
             <button id="btnSearchRoom" class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
@@ -69,7 +73,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=1.5.0"></script>
+    <script src="app.js?v=1.6.3"></script>
 
 </body>
 </html>
