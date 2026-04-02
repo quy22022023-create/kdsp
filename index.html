@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>PMS ENTERPRISE - Hotel Management System</title>
+
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <link rel="stylesheet" href="style.css?v=1.5.0">
+</head>
+<body>
+
+    <div id="loginScreen" class="login-overlay">
+        <div class="login-box">
+            <h2 style="color: var(--p-blue); margin-top: 0; margin-bottom: 25px; font-weight: 900;">ĐĂNG NHẬP</h2>
+            <div class="f-group">
+                <input id="loginUser" type="text" placeholder="Tên đăng nhập (VD: admin, letan)" autocapitalize="none">
+            </div>
+            <div class="f-group">
+                <input id="loginPin" type="password" inputmode="numeric" placeholder="Mã PIN (VD: 1234)">
+            </div>
+            <button class="btn btn-p" style="width: 100%; margin-top: 10px;" onclick="executeLogin()">VÀO HỆ THỐNG</button>
+        </div>
+    </div>
+
+    <header>
+        <div class="brand">ULTIMATE PMS</div>
+        <div class="stats-bar" id="topStats"></div>
+        <div class="header-tools">
+            <div class="month-nav">
+                <button onclick="changeMonth(-1)">◀</button>
+                <span class="month-label" id="monthLabel"></span>
+                <input type="month" id="monthPicker" onchange="selectMonth()">
+                <button onclick="changeMonth(1)">▶</button>
+            </div>
+
+            <select id="roomFilter" class="btn" style="background:#f4f7f6; color:#333; padding: 10px; border: 1px solid var(--border);" onchange="applyFilter()">
+                <option value="all">Hiển thị: Tất cả</option>
+                <option value="clean">Phòng sạch</option>
+                <option value="dirty">Phòng chờ dọn</option>
+            </select>
+            
+            <button id="btnSearchRoom" class="btn" style="background:var(--s-purple); color:white; padding: 10px 15px; font-size: 13px;" onclick="openSearchModal()">🔍 TÌM PHÒNG</button>
+            <button id="btnServices" class="btn btn-s" style="padding: 10px 15px; font-size: 13px;" onclick="openMinibarCatalog()">📦 DỊCH VỤ</button>
+            <button id="btnHolidays" class="btn" style="background: #e74c3c; color:white; padding: 10px 15px; font-size: 13px;" onclick="openHolidayMgr()">🎉 NGÀY LỄ</button>
+            <button id="btnUsers" class="btn" style="background: #e67e22; color:white; padding: 10px 15px; font-size: 13px;" onclick="openUserMgr()">👥 NHÂN SỰ</button>
+            <button id="btnExcel" class="btn btn-s" style="background: #27ae60; padding: 10px 15px; font-size: 13px;" onclick="exportExcel()">📥 XUẤT EXCEL</button>
+            <button id="btnAddRoom" class="btn btn-p" style="padding: 10px 15px; font-size: 13px;" onclick="addRoom()">+ PHÒNG</button>
+            <button id="btnLogout" class="btn btn-d" style="padding: 10px 15px; font-size: 13px; margin-left: 10px;" onclick="executeLogout()">THOÁT</button>
+        </div>
+    </header>
+
+    <div class="pms-wrapper">
+        <main class="timeline-view" id="mainTimeline"></main>
+    </div>
+
+    <div class="modal" id="pmsModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <span id="mTitle">Thông tin phòng</span>
+                <span onclick="closeModal()" style="cursor:pointer; font-size: 18px;">✕</span>
+            </div>
+            <div class="modal-content" id="mContent"></div>
+        </div>
+    </div>
+
+    <script src="app.js?v=1.5.0"></script>
+
+</body>
+</html>
