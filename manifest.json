@@ -1,0 +1,10 @@
+{
+  "name": "HSK Personal AI",
+  "short_name": "HSK AI",
+  "description": "Ứng dụng học tiếng Trung cá nhân, hỗ trợ SRS và AI ra đề.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f1f5f4",
+  "theme_color": "#0f766e",
+  "icons": []
+}
