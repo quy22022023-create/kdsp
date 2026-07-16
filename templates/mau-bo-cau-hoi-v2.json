@@ -1,0 +1,29 @@
+{
+  "schema": "hsk-question-pack",
+  "version": 2,
+  "meta": {
+    "id": "hsk4-practice",
+    "name": "HSK4 – Bộ luyện tổng hợp",
+    "level": "HSK4",
+    "description": "Có giải thích cho người mới",
+    "language": "zh-VN"
+  },
+  "questions": [
+    {
+      "id": "g1",
+      "type": "grammar",
+      "level": "HSK4",
+      "grammarPoint": "虽然……但是……",
+      "question": "虽然天气很冷，（___）他还是去跑步了。",
+      "options": [
+        "但是",
+        "因为",
+        "所以",
+        "如果"
+      ],
+      "answer": "但是",
+      "explanation": "虽然 đi với 但是 để diễn tả mặc dù… nhưng…",
+      "beginnerExplanation": "虽然 đặt ở vế đầu, 但是 đặt ở vế sau."
+    }
+  ]
+}

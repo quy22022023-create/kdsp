@@ -1,0 +1,14 @@
+HSK Offline Smart V2
+
+Điểm mới:
+- Phân cấp HSK1 đến HSK7-9.
+- Chế độ giải thích cho người mới.
+- Flashcard SRS.
+- Bộ từ và bộ câu hỏi nhập riêng.
+- Nhiều file JavaScript thường, không dùng type=module để tương thích iOS WebView.
+- IndexedDB có localStorage dự phòng.
+
+Cách dùng:
+1. Giải nén toàn bộ.
+2. Giữ nguyên cấu trúc thư mục js và templates.
+3. Mở index.html.

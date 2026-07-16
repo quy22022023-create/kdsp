@@ -1,0 +1,30 @@
+{
+  "schema": "hsk-vocabulary-pack",
+  "version": 2,
+  "meta": {
+    "id": "hsk4-core",
+    "name": "HSK4 – Từ vựng cốt lõi",
+    "level": "HSK4",
+    "description": "Có giải thích cho người mới",
+    "language": "zh-VN"
+  },
+  "vocabulary": [
+    {
+      "id": "hsk4-0001",
+      "hanzi": "安排",
+      "pinyin": "ānpái",
+      "meaning": "Sắp xếp, thu xếp",
+      "wordType": "động từ",
+      "level": "HSK4",
+      "topic": "Công việc",
+      "example": "我已经安排好了明天的工作。",
+      "exampleMeaning": "Tôi đã sắp xếp xong công việc ngày mai.",
+      "beginnerNote": "Dùng khi nói sắp xếp thời gian, công việc hoặc kế hoạch.",
+      "memoryTip": "安排 = đặt mọi thứ vào đúng vị trí.",
+      "synonyms": [
+        "准备",
+        "组织"
+      ]
+    }
+  ]
+}

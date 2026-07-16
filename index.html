@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#5b5bd6">
+  <title>HSK Offline Smart V2</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <small>HSK OFFLINE SMART V2</small>
+      <h1 id="page-title">Hôm nay</h1>
+    </div>
+    <button class="icon-btn" onclick="App.toggleTheme()">◐</button>
+  </header>
+
+  <main class="app-shell">
+    <section id="screen-home" class="screen active">
+      <article class="hero">
+        <span class="badge">KẾ HOẠCH CÁ NHÂN</span>
+        <h2>Học theo cấp độ và điểm yếu</h2>
+        <p id="home-summary">Đang chuẩn bị dữ liệu…</p>
+        <button class="primary full" onclick="Learning.startSmartSession()">Bắt đầu buổi học</button>
+      </article>
+
+      <div class="stats-grid">
+        <article><strong id="stat-due">0</strong><span>Từ cần ôn</span></article>
+        <article><strong id="stat-new">0</strong><span>Từ mới</span></article>
+        <article><strong id="stat-questions">0</strong><span>Câu chưa làm</span></article>
+        <article><strong id="stat-accuracy">0%</strong><span>Chính xác</span></article>
+      </div>
+
+      <article class="panel">
+        <div class="section-head">
+          <h3>Cấp độ đang học</h3>
+          <button class="text-btn" onclick="App.showScreen('levels')">Đổi cấp</button>
+        </div>
+        <div id="current-level-card"></div>
+      </article>
+
+      <article class="panel">
+        <div class="section-head"><h3>Tiến độ hôm nay</h3><span id="daily-progress-label">0/20</span></div>
+        <div class="progress-track"><div id="daily-progress-bar" class="progress-bar"></div></div>
+        <div id="daily-plan" class="plan-list"></div>
+      </article>
+    </section>
+
+    <section id="screen-levels" class="screen">
+      <div class="section-head">
+        <div><h2>Phân cấp HSK</h2><p class="muted">Chọn cấp độ để lọc từ và câu hỏi</p></div>
+      </div>
+      <div id="level-grid" class="level-grid"></div>
+    </section>
+
+    <section id="screen-vocabulary" class="screen">
+      <div class="section-head">
+        <div><h2>Học từ</h2><p class="muted">Flashcard + giải thích cho người mới</p></div>
+        <button onclick="Vocabulary.openEditor()">+ Thêm từ</button>
+      </div>
+
+      <article class="panel two-col">
+        <label>Bộ từ<select id="vocab-pack-filter" onchange="Vocabulary.resetFlashcards()"></select></label>
+        <label>Trạng thái<select id="vocab-status-filter" onchange="Vocabulary.resetFlashcards()">
+          <option value="due">Cần ôn</option><option value="all">Tất cả</option>
+          <option value="new">Chưa học</option><option value="weak">Hay sai</option>
+          <option value="favorite">Yêu thích</option>
+        </select></label>
+      </article>
+
+      <article id="flashcard" class="flashcard" onclick="Vocabulary.flip()">
+        <div class="face front">
+          <span class="badge">CHỮ HÁN</span>
+          <div id="fc-hanzi" class="hanzi">安排</div>
+          <p class="muted">Chạm để lật thẻ</p>
+        </div>
+        <div class="face back">
+          <div id="fc-pinyin" class="pinyin">ānpái</div>
+          <div id="fc-meaning" class="meaning">Sắp xếp</div>
+          <div id="fc-example" class="example"></div>
+        </div>
+      </article>
+
+      <div class="button-row">
+        <button class="secondary" onclick="Vocabulary.speak()">🔊 Nghe</button>
+        <button id="favorite-btn" class="secondary" onclick="Vocabulary.toggleFavorite()">☆ Yêu thích</button>
+        <button class="secondary" onclick="Vocabulary.shuffle()">Trộn thẻ</button>
+      </div>
+
+      <div class="rating-grid">
+        <button class="danger" onclick="Vocabulary.rate(0)">Quên</button>
+        <button class="warning" onclick="Vocabulary.rate(2)">Khó</button>
+        <button onclick="Vocabulary.rate(4)">Nhớ</button>
+        <button class="success" onclick="Vocabulary.rate(5)">Rất dễ</button>
+      </div>
+      <p id="fc-counter" class="center muted"></p>
+
+      <article class="panel">
+        <div class="section-head"><h3>Giải thích cho người mới</h3><label class="switch-label"><input id="beginner-mode" type="checkbox" onchange="Settings.saveBeginnerMode()"> Bật</label></div>
+        <div id="beginner-explanation" class="beginner-box"></div>
+      </article>
+
+      <article class="panel">
+        <div class="section-head"><h3>Kho từ</h3><span id="vocab-count">0 từ</span></div>
+        <input id="vocab-search" type="search" placeholder="Tìm chữ Hán, pinyin, nghĩa…" oninput="Vocabulary.renderList()">
+        <div id="vocab-list" class="data-list"></div>
+      </article>
+    </section>
+
+    <section id="screen-practice" class="screen">
+      <div class="section-head"><div><h2>Luyện tập</h2><p class="muted">Theo cấp HSK đang chọn</p></div></div>
+      <div class="mode-grid">
+        <button onclick="Practice.start('mixed')"><span>🎯</span><b>Tổng hợp</b><small>Nhiều dạng</small></button>
+        <button onclick="Practice.start('fill_blank')"><span>📝</span><b>Điền từ</b><small>Theo ngữ cảnh</small></button>
+        <button onclick="Practice.start('multiple_choice')"><span>✅</span><b>Trắc nghiệm</b><small>Chọn đáp án</small></button>
+        <button onclick="Practice.start('grammar')"><span>📘</span><b>Ngữ pháp</b><small>Có giải thích</small></button>
+        <button onclick="Practice.start('sentence_order')"><span>🔀</span><b>Sắp xếp câu</b><small>Xếp cụm từ</small></button>
+        <button onclick="Practice.start('error_correction')"><span>🛠️</span><b>Sửa câu sai</b><small>Hiểu lỗi</small></button>
+        <button onclick="Practice.start('reading')"><span>📖</span><b>Đọc hiểu</b><small>Đoạn văn</small></button>
+        <button onclick="Practice.start('writing')"><span>✍️</span><b>Luyện viết</b><small>Bài mẫu</small></button>
+      </div>
+
+      <article class="panel">
+        <h3>Tạo đề tùy chỉnh</h3>
+        <label>Bộ câu hỏi<select id="practice-pack-filter"></select></label>
+        <div class="two-col">
+          <label>Số câu<select id="practice-count"><option>5</option><option selected>10</option><option>20</option><option>40</option></select></label>
+          <label>Nguồn<select id="practice-source"><option value="smart">Thông minh</option><option value="unseen">Chưa làm</option><option value="wrong">Từng sai</option><option value="all">Ngẫu nhiên</option></select></label>
+        </div>
+        <button class="full" onclick="Practice.startCustom()">Bắt đầu đề</button>
+      </article>
+    </section>
+
+    <section id="screen-data" class="screen">
+      <div class="section-head"><div><h2>Kho dữ liệu</h2><p class="muted">Bộ từ và câu hỏi nhập riêng</p></div></div>
+
+      <article class="panel">
+        <div class="section-head"><h3>📚 Bộ từ vựng</h3><span id="vocab-pack-count">0 bộ</span></div>
+        <input id="vocab-file" type="file" accept=".json" onchange="ImportExport.previewVocabulary(event)">
+        <div class="button-row">
+          <button class="secondary" onclick="ImportExport.downloadVocabularyTemplate()">Tải file mẫu</button>
+          <button class="secondary" onclick="ImportExport.exportVocabularyLibrary()">Xuất toàn bộ</button>
+        </div>
+        <div id="vocab-pack-list" class="pack-list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="section-head"><h3>🧩 Kho câu hỏi</h3><span id="question-pack-count">0 bộ</span></div>
+        <input id="question-file" type="file" accept=".json" onchange="ImportExport.previewQuestions(event)">
+        <div class="button-row">
+          <button class="secondary" onclick="ImportExport.downloadQuestionTemplate()">Tải file mẫu</button>
+          <button class="secondary" onclick="ImportExport.exportQuestionLibrary()">Xuất toàn bộ</button>
+        </div>
+        <div id="question-pack-list" class="pack-list"></div>
+      </article>
+
+      <article class="panel">
+        <h3>Sao lưu toàn bộ</h3>
+        <div class="button-row">
+          <button onclick="ImportExport.exportBackup()">Xuất bản sao lưu</button>
+          <label class="file-button secondary">Khôi phục<input type="file" accept=".json" onchange="ImportExport.restoreBackup(event)"></label>
+        </div>
+        <p id="last-backup" class="muted"></p>
+      </article>
+    </section>
+
+    <section id="screen-statistics" class="screen">
+      <div class="stats-grid">
+        <article><strong id="stats-words">0</strong><span>Tổng từ</span></article>
+        <article><strong id="stats-questions">0</strong><span>Tổng câu</span></article>
+        <article><strong id="stats-mastered">0</strong><span>Đã nhớ</span></article>
+        <article><strong id="stats-streak">0</strong><span>Chuỗi ngày</span></article>
+      </div>
+      <article class="panel"><h3>Theo cấp độ</h3><div id="level-statistics" class="bar-list"></div></article>
+      <article class="panel"><h3>Theo dạng bài</h3><div id="category-statistics" class="bar-list"></div></article>
+      <article class="panel"><h3>Từ hay sai</h3><div id="weak-word-list" class="data-list"></div></article>
+      <article class="panel"><h3>Câu hay sai</h3><div id="weak-question-list" class="data-list"></div></article>
+    </section>
+
+    <section id="screen-session" class="screen session-screen">
+      <div class="session-header">
+        <button class="icon-btn" onclick="Learning.exitSession()">✕</button>
+        <div class="progress-track"><div id="session-progress" class="progress-bar"></div></div>
+        <strong id="session-step">1/10</strong>
+      </div>
+      <div id="session-content" class="session-content"></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="active" data-screen="home" onclick="App.showScreen('home',this)">⌂<span>Hôm nay</span></button>
+    <button data-screen="levels" onclick="App.showScreen('levels',this)">级<span>HSK</span></button>
+    <button data-screen="vocabulary" onclick="App.showScreen('vocabulary',this)">字<span>Học từ</span></button>
+    <button data-screen="practice" onclick="App.showScreen('practice',this)">✓<span>Luyện</span></button>
+    <button data-screen="data" onclick="App.showScreen('data',this)">▣<span>Dữ liệu</span></button>
+    <button data-screen="statistics" onclick="App.showScreen('statistics',this)">▥<span>Thống kê</span></button>
+  </nav>
+
+  <div id="import-overlay" class="overlay" onclick="ImportExport.closePreview(event)">
+    <div class="sheet">
+      <div class="handle"></div>
+      <h2 id="import-title">Xác nhận nhập</h2>
+      <div id="import-summary"></div>
+      <div class="button-row">
+        <button class="secondary" onclick="ImportExport.closePreview()">Hủy</button>
+        <button id="confirm-import">Nhập dữ liệu</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="word-overlay" class="overlay" onclick="Vocabulary.closeEditor(event)">
+    <div class="sheet">
+      <div class="handle"></div>
+      <h2 id="word-editor-title">Thêm từ</h2>
+      <input id="word-id" type="hidden">
+      <label>Bộ từ<select id="word-pack"></select></label>
+      <div class="two-col">
+        <label>Chữ Hán *<input id="word-hanzi"></label>
+        <label>Pinyin<input id="word-pinyin"></label>
+      </div>
+      <label>Nghĩa *<input id="word-meaning"></label>
+      <label>Loại từ<input id="word-type"></label>
+      <label>Câu ví dụ<textarea id="word-example"></textarea></label>
+      <label>Dịch ví dụ<textarea id="word-example-meaning"></textarea></label>
+      <label>Giải thích cho người mới<textarea id="word-beginner-note"></textarea></label>
+      <label>Mẹo nhớ<textarea id="word-memory-tip"></textarea></label>
+      <div class="two-col">
+        <label>Cấp độ<input id="word-level" placeholder="HSK4"></label>
+        <label>Chủ đề<input id="word-topic"></label>
+      </div>
+      <div class="button-row">
+        <button class="secondary" onclick="Vocabulary.closeEditor()">Hủy</button>
+        <button onclick="Vocabulary.saveEditor()">Lưu từ</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="js/state.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/hsk.js"></script>
+  <script src="js/vocabulary.js"></script>
+  <script src="js/practice.js"></script>
+  <script src="js/learning.js"></script>
+  <script src="js/import-export.js"></script>
+  <script src="js/statistics.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
