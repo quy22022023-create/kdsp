@@ -1,0 +1,16 @@
+Web App Builder Generic v1.1
+- Giữ toàn bộ chức năng Generic v1.0
+- Thêm Live Preview Runtime chạy app ngay trong Builder
+- Thêm Run / Edit mode và click chọn element trực tiếp
+- Visual Editor: text, màu chữ/nền/viền, font size/weight, border radius
+- Căn lề kiểu PowerPoint: text align, block align ngang, margin/padding, nudge 1 px; Shift + mũi tên = 10 px
+- Desktop / Tablet / Mobile viewport
+- Undo, reset element, clear visual edits
+- Visual style xuất bằng CSS override có selector cụ thể, không global replace
+- Text chỉ sửa trực tiếp khi xác định được HTML text source duy nhất; có runtime fallback tùy chọn
+- Legacy Global Name Sync chuyển sang Nâng cao và tắt mặc định
+- File text không thay đổi giữ nguyên bytes khi export
+- Profile fingerprint mạnh hơn để giảm collision giữa các app 3-file giống cấu trúc
+- Security scan generic hơn, bỏ hard-code riêng OT Pro
+- Validator kiểm tra index.html, JSON sau build, visual text unresolved và cảnh báo Service Worker/ES module
+- ZIP reader/writer vẫn chạy local, không phụ thuộc CDN

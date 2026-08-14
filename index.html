@@ -11,9 +11,9 @@
   <header class="topbar">
     <div>
       <h1>Web App Builder</h1>
-      <p>Đọc app HTML/JS/CSS, tự phát hiện tên · phiên bản · database URL · public key, sửa an toàn và xuất ZIP.</p>
+      <p>Import app web, chạy thử trực tiếp, chỉnh giao diện an toàn, cấu hình và xuất lại ZIP ngay trên máy.</p>
     </div>
-    <span class="badge">Generic v1.0</span>
+    <span class="badge">Generic v1.1</span>
   </header>
 
   <main class="layout">
@@ -31,8 +31,149 @@
       <div id="fileList" class="file-list"></div>
     </section>
 
+    <section class="panel span-2 visual-panel">
+      <div class="panel-head visual-head">
+        <div>
+          <h2>2. Mở app &amp; chỉnh trực quan</h2>
+          <p>Chạy app ngay trong Builder. Chuyển sang <b>Chỉnh sửa</b> rồi bấm vào thành phần trên màn hình để sửa.</p>
+        </div>
+        <div class="actions wrap">
+          <select id="previewEntry" class="compact-select" aria-label="File HTML mở preview"></select>
+          <button id="openPreviewBtn" class="btn primary" type="button">▶ Mở app</button>
+          <button id="reloadPreviewBtn" class="btn" type="button">↻ Tải lại</button>
+        </div>
+      </div>
+
+      <div class="visual-toolbar">
+        <div class="segmented" aria-label="Chế độ preview">
+          <button id="runModeBtn" class="seg active" type="button">▶ Chạy</button>
+          <button id="editModeBtn" class="seg" type="button">✎ Chỉnh sửa</button>
+        </div>
+        <div class="segmented" aria-label="Kích thước preview">
+          <button class="seg viewport-btn active" data-viewport="desktop" type="button">Desktop</button>
+          <button class="seg viewport-btn" data-viewport="tablet" type="button">Tablet</button>
+          <button class="seg viewport-btn" data-viewport="mobile" type="button">Mobile</button>
+        </div>
+        <div class="toolbar-spacer"></div>
+        <button id="undoVisualBtn" class="btn" type="button">↶ Hoàn tác</button>
+        <button id="clearVisualBtn" class="btn danger ghost" type="button">Xóa chỉnh sửa giao diện</button>
+      </div>
+
+      <div class="visual-workspace">
+        <div class="preview-shell">
+          <div id="previewStatus" class="preview-status muted">Nạp source rồi bấm “Mở app”.</div>
+          <div id="previewViewport" class="preview-viewport desktop">
+            <iframe id="previewFrame" title="Live preview app" sandbox="allow-scripts allow-forms allow-modals allow-downloads allow-popups allow-same-origin"></iframe>
+            <div id="previewEmpty" class="preview-empty">Chưa mở app</div>
+          </div>
+        </div>
+
+        <aside class="inspector">
+          <div id="inspectorEmpty" class="inspector-empty">
+            <strong>Chưa chọn thành phần</strong>
+            <p>Bật <b>Chỉnh sửa</b>, đưa chuột lên app rồi bấm vào chữ, nút, thẻ hoặc vùng muốn chỉnh.</p>
+          </div>
+
+          <div id="inspectorPanel" hidden>
+            <div class="inspector-title">
+              <div>
+                <div id="selectedLabel" class="selected-label">Element</div>
+                <code id="selectedSelector" class="selected-selector"></code>
+              </div>
+              <button id="resetSelectedBtn" class="icon-btn" type="button" title="Đặt lại chỉnh sửa của thành phần này">↺</button>
+            </div>
+
+            <details open class="inspect-group">
+              <summary>Chữ</summary>
+              <label class="field-label">Nội dung đang hiển thị
+                <textarea id="visualText" rows="3" placeholder="Chọn thành phần có chữ"></textarea>
+              </label>
+              <div class="actions">
+                <button id="applyTextBtn" class="btn primary" type="button">Áp dụng chữ</button>
+              </div>
+              <div id="textSourceInfo" class="source-info muted small"></div>
+            </details>
+
+            <details open class="inspect-group">
+              <summary>Màu &amp; kiểu chữ</summary>
+              <div class="property-grid two">
+                <label>Màu chữ<div class="color-row"><input id="textColor" type="color"><input id="textColorHex" class="mono-input" autocomplete="off"></div></label>
+                <label>Màu nền<div class="color-row"><input id="bgColor" type="color"><input id="bgColorHex" class="mono-input" autocomplete="off"></div></label>
+                <label>Cỡ chữ (px)<input id="fontSize" type="number" min="6" max="200" step="1"></label>
+                <label>Độ đậm<select id="fontWeight"><option value="">Theo app</option><option value="400">400</option><option value="500">500</option><option value="600">600</option><option value="700">700</option><option value="800">800</option><option value="900">900</option></select></label>
+                <label>Bo góc (px)<input id="borderRadius" type="number" min="0" max="200" step="1"></label>
+                <label>Màu viền<div class="color-row"><input id="borderColor" type="color"><input id="borderColorHex" class="mono-input" autocomplete="off"></div></label>
+              </div>
+            </details>
+
+            <details open class="inspect-group">
+              <summary>Căn lề kiểu PowerPoint</summary>
+              <div class="align-block">
+                <span class="group-label">Căn chữ</span>
+                <div class="icon-grid four">
+                  <button class="tool-icon style-btn" data-prop="text-align" data-value="left" type="button" title="Căn trái">☰</button>
+                  <button class="tool-icon style-btn" data-prop="text-align" data-value="center" type="button" title="Căn giữa">≡</button>
+                  <button class="tool-icon style-btn" data-prop="text-align" data-value="right" type="button" title="Căn phải">☷</button>
+                  <button class="tool-icon style-btn" data-prop="text-align" data-value="justify" type="button" title="Căn đều">▤</button>
+                </div>
+              </div>
+
+              <div class="align-block">
+                <span class="group-label">Căn khối theo chiều ngang</span>
+                <div class="icon-grid three">
+                  <button class="tool-icon block-align-btn" data-align="left" type="button" title="Đưa khối về trái">┃▭</button>
+                  <button class="tool-icon block-align-btn" data-align="center" type="button" title="Căn giữa khối">│▭│</button>
+                  <button class="tool-icon block-align-btn" data-align="right" type="button" title="Đưa khối về phải">▭┃</button>
+                </div>
+                <p class="muted tiny">Dùng margin tự động, ít phá layout hơn kéo thả tự do.</p>
+              </div>
+
+              <div class="align-block">
+                <span class="group-label">Dịch chuyển tinh chỉnh</span>
+                <div class="nudge-pad">
+                  <button class="tool-icon nudge-btn nudge-up" data-dx="0" data-dy="-1" type="button" title="Lên 1 px">↑</button>
+                  <button class="tool-icon nudge-btn nudge-left" data-dx="-1" data-dy="0" type="button" title="Trái 1 px">←</button>
+                  <button class="tool-icon nudge-btn nudge-center" data-dx="0" data-dy="0" type="button" title="Đặt lại dịch chuyển">•</button>
+                  <button class="tool-icon nudge-btn nudge-right" data-dx="1" data-dy="0" type="button" title="Phải 1 px">→</button>
+                  <button class="tool-icon nudge-btn nudge-down" data-dx="0" data-dy="1" type="button" title="Xuống 1 px">↓</button>
+                </div>
+                <div id="nudgeValue" class="muted tiny">X: 0 px · Y: 0 px</div>
+              </div>
+            </details>
+
+            <details class="inspect-group">
+              <summary>Khoảng cách</summary>
+              <div class="spacing-editor">
+                <div class="spacing-title">Margin</div>
+                <label class="space-top">Trên<input id="marginTop" type="number" step="1"></label>
+                <label class="space-left">Trái<input id="marginLeft" type="number" step="1"></label>
+                <div class="space-center">M</div>
+                <label class="space-right">Phải<input id="marginRight" type="number" step="1"></label>
+                <label class="space-bottom">Dưới<input id="marginBottom" type="number" step="1"></label>
+              </div>
+              <div class="spacing-editor">
+                <div class="spacing-title">Padding</div>
+                <label class="space-top">Trên<input id="paddingTop" type="number" min="0" step="1"></label>
+                <label class="space-left">Trái<input id="paddingLeft" type="number" min="0" step="1"></label>
+                <div class="space-center">P</div>
+                <label class="space-right">Phải<input id="paddingRight" type="number" min="0" step="1"></label>
+                <label class="space-bottom">Dưới<input id="paddingBottom" type="number" min="0" step="1"></label>
+              </div>
+            </details>
+
+            <details class="inspect-group">
+              <summary>Nâng cao / nguồn</summary>
+              <div id="elementMeta" class="source-box"></div>
+              <label class="override"><input id="allowRuntimeText" type="checkbox"> Cho phép ghi đè chữ bằng runtime khi không xác định được nguồn duy nhất</label>
+              <p class="muted tiny">Runtime text hữu ích cho app động nhưng có thể bị app ghi lại khi render lại. Mặc định Builder ưu tiên sửa đúng nguồn text duy nhất.</p>
+            </details>
+          </div>
+        </aside>
+      </div>
+    </section>
+
     <section class="panel">
-      <div class="panel-head"><div><h2>2. Cấu hình chính</h2><p>Builder chỉ thay các giá trị đã xác nhận.</p></div></div>
+      <div class="panel-head"><div><h2>3. Cấu hình chính</h2><p>Builder chỉ thay các giá trị đã xác nhận.</p></div></div>
       <div class="form-grid">
         <label>Tên app<input id="appName" autocomplete="off" placeholder="Ví dụ: OT Pro"></label>
         <label>Tên ngắn<input id="shortName" autocomplete="off" placeholder="Ví dụ: OT"></label>
@@ -41,24 +182,28 @@
         <label class="wide">Supabase Project URL<input id="supabaseUrl" autocomplete="off" placeholder="https://xxxx.supabase.co"></label>
         <label class="wide">Supabase Publishable / Anon key<input id="supabaseKey" autocomplete="off" placeholder="sb_publishable_... hoặc anon JWT"></label>
       </div>
-      <div class="inline-options">
-        <label><input type="checkbox" id="globalNameSync" checked> Đồng bộ đúng chuỗi tên app cũ ở các file text</label>
-        <label><input type="checkbox" id="autoBuild" checked> Tự tạo Build ID khi xuất</label>
-      </div>
+      <details class="advanced-options">
+        <summary>Nâng cao</summary>
+        <div class="inline-options">
+          <label><input type="checkbox" id="globalNameSync"> Legacy: đồng bộ toàn bộ chuỗi tên app cũ trong các file text</label>
+          <label><input type="checkbox" id="autoBuild" checked> Tự tạo Build ID khi chuẩn bị build/export</label>
+        </div>
+        <p class="muted tiny">Legacy Global Name Sync tắt mặc định vì có thể tác động đến chuỗi không phải tên hiển thị.</p>
+      </details>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h2>3. Phát hiện tự động</h2><p>Chỉ những mục bật mới được áp dụng.</p></div><button id="scanBtn" class="btn" type="button">Quét lại</button></div>
+      <div class="panel-head"><div><h2>4. Phát hiện tự động</h2><p>Chỉ những mục bật mới được áp dụng.</p></div><button id="scanBtn" class="btn" type="button">Quét lại</button></div>
       <div id="detections" class="detections muted">Nạp source để bắt đầu quét.</div>
     </section>
 
     <section class="panel span-2">
-      <div class="panel-head"><div><h2>4. Quy tắc thủ công</h2><p>Dùng khi source viết lạ hoặc Builder chưa nhận diện đúng.</p></div><button id="addRuleBtn" class="btn" type="button">+ Thêm quy tắc</button></div>
+      <div class="panel-head"><div><h2>5. Quy tắc thủ công</h2><p>Dùng khi source viết lạ hoặc Builder chưa nhận diện đúng.</p></div><button id="addRuleBtn" class="btn" type="button">+ Thêm quy tắc</button></div>
       <div id="manualRules" class="rules"></div>
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h2>5. Adapter / Profile</h2><p>Lưu mapping để lần sau mở cùng kiểu app không phải cấu hình lại.</p></div></div>
+      <div class="panel-head"><div><h2>6. Adapter / Profile</h2><p>Lưu mapping để lần sau mở cùng kiểu app không phải cấu hình lại.</p></div></div>
       <div class="actions wrap">
         <button class="btn" id="saveProfileBtn" type="button">Lưu profile trên máy</button>
         <button class="btn" id="loadProfileBtn" type="button">Nạp profile đã lưu</button>
@@ -69,18 +214,18 @@
     </section>
 
     <section class="panel">
-      <div class="panel-head"><div><h2>6. Kiểm tra an toàn</h2><p>Quét lỗi cấu hình và secret không nên nằm trong frontend.</p></div><button id="validateBtn" class="btn" type="button">Kiểm tra</button></div>
+      <div class="panel-head"><div><h2>7. Kiểm tra an toàn</h2><p>Quét lỗi cấu hình, visual edit và secret không nên nằm trong frontend.</p></div><button id="validateBtn" class="btn" type="button">Kiểm tra</button></div>
       <div id="validation" class="validation muted">Chưa kiểm tra.</div>
       <label class="override"><input id="allowUnsafe" type="checkbox"> Cho phép xuất dù có cảnh báo nghiêm trọng</label>
     </section>
 
     <section class="panel span-2 export-panel">
       <div>
-        <h2>7. Xuất app</h2>
-        <p id="exportHint">Builder giữ nguyên cấu trúc file, chỉ sửa các giá trị được bật.</p>
+        <h2>8. Xuất app</h2>
+        <p id="exportHint">Builder giữ nguyên cấu trúc file và byte của file không chỉnh sửa; chỉ build các thay đổi đã xác nhận.</p>
       </div>
       <div class="actions">
-        <button id="previewBtn" class="btn" type="button">Xem thay đổi</button>
+        <button id="previewBtn" class="btn" type="button">Xem Diff</button>
         <button id="exportBtn" class="btn primary" type="button">Xuất ZIP mới</button>
       </div>
     </section>

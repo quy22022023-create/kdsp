@@ -1,31 +1,80 @@
-# WEB APP BUILDER GENERIC v1.0
+# WEB APP BUILDER GENERIC v1.1
 
-Web app chạy hoàn toàn trong trình duyệt để cấu hình lại source của các app web khác mà không cần server.
+Web app chạy hoàn toàn trong trình duyệt để import, chạy thử, chỉnh giao diện, cấu hình và xuất lại source của nhiều web app khác nhau mà không cần server.
 
 ## Mục tiêu
 
-- Đọc app chỉ có 3 file `index.html`, `script.js`, `style.css`.
-- Cũng đọc được nhiều file, cả thư mục hoặc ZIP.
-- Tự phát hiện các giá trị phổ biến: tên app, tên ngắn, version, build ID, Supabase Project URL, Supabase publishable/anon key.
-- Cho phép bật/tắt từng mapping trước khi sửa.
-- Có Manual Mapping cho source viết khác chuẩn.
-- Lưu Profile/Adapter để dùng lại lần sau.
-- Xuất ZIP mới ngay trong trình duyệt.
-- Giữ nguyên file ảnh/icon/binary.
-- Quét một số secret nguy hiểm trước khi export.
+- Hỗ trợ tốt app tối thiểu chỉ có `index.html`, `script.js`, `style.css`.
+- Đọc nhiều file, thư mục hoặc ZIP và giữ nguyên file ảnh/icon/binary.
+- Mở app ngay trong Builder bằng **Live Preview Runtime**.
+- Có **Run mode** để thao tác app và **Edit mode** để click trực tiếp vào thành phần trên màn hình.
+- Chỉnh text, màu, font, bo góc, căn lề, margin, padding và dịch chuyển tinh chỉnh.
+- Tự phát hiện tên app, tên ngắn, version, build ID, Supabase Project URL và publishable/anon key.
+- Manual Mapping, Adapter/Profile, Validator, Diff và ZIP Export vẫn được giữ.
+- Chạy local, ZIP reader/writer không phụ thuộc CDN.
 
-## Cách dùng nhanh với app 3 file
+## Cách dùng nhanh
 
 1. Mở `index.html` của Builder bằng Chrome/Edge/Safari mới.
-2. Bấm **Chọn file / ZIP** và chọn cùng lúc `index.html`, `script.js`, `style.css` của app cần sửa.
-3. Builder tự quét.
-4. Kiểm tra các mục trong **Phát hiện tự động**.
-5. Nhập tên app/version/URL database/key mới.
-6. Bấm **Xem thay đổi**.
-7. Bấm **Kiểm tra**.
-8. Bấm **Xuất ZIP mới**.
+2. Bấm **Chọn file / ZIP** và nạp source app.
+3. Ở mục **Mở app & chỉnh trực quan**, chọn file HTML entry rồi bấm **Mở app**.
+4. Dùng **Chạy** để thao tác app như bình thường.
+5. Chuyển sang **Chỉnh sửa**, bấm vào thành phần muốn sửa.
+6. Dùng bảng bên phải để sửa chữ, màu, font, căn lề, margin/padding hoặc dịch chuyển.
+7. Bấm **Xem Diff** để xem Builder sẽ thay đổi gì.
+8. Bấm **Kiểm tra**.
+9. Bấm **Xuất ZIP mới**.
 
-## Auto Detect hiện hỗ trợ
+## Visual Editor
+
+### Chỉnh chữ
+
+Builder ưu tiên an toàn:
+
+- Nếu text hiển thị được xác định là một text node HTML duy nhất trong source, Builder sửa đúng nguồn đó.
+- Nếu text xuất hiện nhiều nơi hoặc được tạo động từ JavaScript/API/database, Builder không replace mù.
+- Có tùy chọn nâng cao **Runtime text override** cho trường hợp không xác định được nguồn duy nhất. Tùy chọn này tắt mặc định vì app có thể render lại và ghi đè text.
+
+### Chỉnh màu và style
+
+Các style trực quan được lưu dưới dạng CSS override có selector cụ thể và được đưa vào file HTML entry khi build. Không replace toàn project theo màu hoặc tên class.
+
+Hỗ trợ v1.1:
+
+- Màu chữ
+- Màu nền
+- Màu viền
+- Cỡ chữ
+- Font weight
+- Border radius
+- Căn trái / giữa / phải / đều
+- Căn khối ngang bằng margin auto
+- Margin 4 cạnh
+- Padding 4 cạnh
+- Dịch chuyển tinh chỉnh 1 px
+- Phím mũi tên để dịch chuyển; giữ Shift để dịch 10 px
+- Undo / reset từng element / xóa toàn bộ visual edits
+- Desktop / Tablet / Mobile viewport
+
+### Nguyên tắc dịch chuyển
+
+Để hạn chế phá layout, nudge chỉ tự động hoạt động tốt với element `position: static` hoặc `relative`. Nếu element đang dùng `absolute`, `fixed` hoặc `sticky`, Builder không tự đổi cơ chế position.
+
+## Live Preview Runtime
+
+Preview hỗ trợ tốt static HTML/CSS/JS và app 3-file. Builder tạo Blob URL local cho asset và rewrite các đường dẫn tài nguyên phổ biến trong preview.
+
+Các trường hợp sau có thể khác môi trường production:
+
+- Service Worker / PWA cache
+- OAuth redirect dựa vào domain/origin
+- ES module có chuỗi import tương đối lồng sâu
+- route/backend đặc biệt
+- chức năng phụ thuộc server headers hoặc CORS production
+
+Validator sẽ cảnh báo khi phát hiện một số trường hợp trên. ZIP xuất ra vẫn giữ source và cấu trúc app; Live Preview không thay thế bước test production đối với app phức tạp.
+
+## Auto Detect
 
 - `<title>...</title>`
 - meta `application-name`
@@ -40,43 +89,50 @@ Web app chạy hoàn toàn trong trình duyệt để cấu hình lại source c
 Nếu Builder không phát hiện một giá trị:
 
 - Chọn file chứa giá trị.
-- Nhập **đúng chuỗi hiện tại** cần thay.
-- Chọn trường sẽ thay vào (Tên app, Version, URL, Key...) hoặc **Giá trị tùy chỉnh**.
+- Nhập đúng chuỗi hiện tại cần thay.
+- Chọn trường sẽ thay vào hoặc **Giá trị tùy chỉnh**.
 
-Builder dùng exact replacement, không tự đoán regex khi manual mapping.
+Manual Mapping v1.1 vẫn dùng exact replacement để giữ tương thích ngược.
 
-## Adapter
+## Adapter / Profile
 
-Adapter là JSON mô tả mapping đã xác nhận. Có thể:
+- Adapter JSON v1 cũ vẫn import được.
+- Adapter/Profile v1.1 có thể lưu thêm visual edits.
+- Profile mới dùng fingerprint có cả path, size và CRC32 của file để giảm nguy cơ nhận nhầm hai app có cùng `index.html + script.js + style.css`.
+- Loader vẫn thử key profile kiểu v1 cũ để giữ tương thích.
 
-- Lưu profile trong `localStorage` của trình duyệt.
-- Export adapter JSON để lưu cùng source.
-- Import adapter về sau.
+## An toàn build
 
-Adapter không phải code app và không cần đưa lên hosting.
+- **Legacy Global Name Sync** đã chuyển vào Nâng cao và tắt mặc định.
+- File text không thay đổi không bị decode/encode lại khi export; Builder giữ nguyên bytes gốc.
+- Build ID tự động được freeze khi chuẩn bị Validate/Diff/Export để Diff và ZIP không tự đổi build theo phút.
+- JSON được kiểm tra lại sau replacement.
+- Validator cảnh báo visual text không có source an toàn.
 
 ## Bảo mật
 
-Builder được thiết kế cho **public frontend config**. Supabase Project URL và publishable/anon key là dữ liệu phía client.
+Builder được thiết kế cho public frontend config. Supabase Project URL và publishable/anon key là dữ liệu phía client.
 
-Không nên đưa vào web source:
+Scanner v1.1 cảnh báo các mẫu nguy hiểm phổ biến như:
 
-- Supabase secret key / `sb_secret_...`
-- `service_role`
-- VAPID private key
-- Cron secret
-- private API tokens
+- `sb_secret_...`
+- `SUPABASE_SERVICE_ROLE` / `SERVICE_ROLE` đi cùng JWT
+- PEM private key
+- `VAPID_PRIVATE_KEY`
+- `PRIVATE_KEY`
+- `CRON_SECRET` / `*_CRON_SECRET`
+- `SECRET_KEY` / `*_SECRET_KEY`
 
-Builder có scanner cơ bản để cảnh báo các trường hợp này, nhưng scanner không thay thế review bảo mật.
+Không hard-code scanner riêng cho OT Pro.
 
 ## ZIP
 
-Builder có ZIP reader/writer tích hợp, không cần thư viện CDN.
+ZIP reader/writer tích hợp, không cần CDN.
 
-- Export ZIP dùng phương thức STORE (không nén) để tối đa tương thích và không phụ thuộc thư viện ngoài. File ZIP sẽ lớn hơn source gốc nhưng dữ liệu không thay đổi.
-- Import ZIP hỗ trợ STORE và DEFLATE nếu trình duyệt có `DecompressionStream('deflate-raw')`.
-- Nếu trình duyệt không giải nén được ZIP, hãy chọn file hoặc cả thư mục trực tiếp.
+- Export dùng STORE để tối đa tương thích và chạy offline.
+- Import hỗ trợ STORE và DEFLATE nếu trình duyệt có `DecompressionStream('deflate-raw')`.
+- Nếu trình duyệt không giải nén được một ZIP cụ thể, có thể chọn file/thư mục trực tiếp.
 
-## Phạm vi v1.0
+## Phạm vi v1.1
 
-Builder không tự hiểu logic nghiệp vụ của app. Nó chỉ cấu hình/mapping các giá trị được phát hiện hoặc do người dùng khai báo. Điều này cố ý để tránh vô tình sửa tên table, endpoint nội bộ hoặc logic JavaScript.
+Builder không phải IDE và không tự sửa business logic, database table, Edge Function, storage, auth logic hoặc tên function nội bộ. Visual Editor tập trung vào những gì người dùng nhìn thấy và tạo thay đổi có target rõ ràng.
