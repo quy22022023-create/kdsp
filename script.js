@@ -10,6 +10,8 @@
     frozenBuildId: '',
     visualEdits: new Map(), // entryPath + selector -> edit
     visualHistory: [],
+    visualRedo: [],
+    pwaPlan: {createManifest:false,createServiceWorker:false,ensureWiring:false},
     preview: {
       entryPath: '',
       mode: 'run',
@@ -19,6 +21,7 @@
       selected: null,
       lastSelector: '',
       opened: false,
+      fullscreen: false,
     },
   };
 
@@ -86,7 +89,8 @@
     const files = Array.from(fileList || []);
     if(!files.length) return;
     closePreview();
-    state.visualEdits.clear(); state.visualHistory=[]; state.preview.selected=null; state.preview.lastSelector=''; markBuildDirty();
+    state.visualEdits.clear(); state.visualHistory=[]; state.visualRedo=[]; state.pwaPlan={createManifest:false,createServiceWorker:false,ensureWiring:false}; state.preview.selected=null; state.preview.lastSelector=''; markBuildDirty();
+    if($('pwaName')){$('pwaName').value='';$('pwaShortName').value='';$('pwaStartUrl').value='./';$('pwaDisplay').value='standalone';$('pwaThemeColor').value='#1f6feb';$('pwaThemeColorHex').value='#1f6feb';$('pwaBgColor').value='#ffffff';$('pwaBgColorHex').value='#ffffff';$('pwaIcon192').innerHTML='<option value="">Không dùng</option>';$('pwaIcon512').innerHTML='<option value="">Không dùng</option>';}
     if(files.length===1 && /\.zip$/i.test(files[0].name)){
       try{
         const arr = new Uint8Array(await files[0].arrayBuffer());
@@ -126,6 +130,7 @@
     scan();
     populateRuleFileOptions();
     refreshPreviewEntries();
+    refreshPwaUi();
     updateVisualButtons();
   }
 
@@ -220,7 +225,7 @@
     });
   }
 
-  function fieldLabel(f){return ({appName:'Tên app',shortName:'Tên ngắn',version:'Phiên bản',buildId:'Build ID',supabaseUrl:'DB URL',supabaseKey:'Public key','appName-global':'Tên app (Legacy)','visual-style':'Visual CSS','visual-text':'Visual text','visual-runtime-text':'Runtime text'})[f]||f;}
+  function fieldLabel(f){return ({appName:'Tên app',shortName:'Tên ngắn',version:'Phiên bản',buildId:'Build ID',supabaseUrl:'DB URL',supabaseKey:'Public key','appName-global':'Tên app (Legacy)','visual-style':'Visual CSS','visual-text':'Visual text','visual-runtime-text':'Runtime text','pwa-manifest':'PWA Manifest','pwa-sw':'Service Worker','pwa-wire':'PWA wiring'})[f]||f;}
 
   function currentConfig(prepareBuild=false){
     if($('autoBuild').checked && prepareBuild){
@@ -278,6 +283,7 @@
     }
 
     applyVisualEditsToOutput(output,changes);
+    applyPwaPlanToOutput(output,changes,cfg);
 
     for(const [,f] of output){ if(f.dirty && !f.binary && f.text!=null) f.bytes=encode(f.text); }
     return {output,changes,cfg};
@@ -386,6 +392,7 @@
     const after=cloneJson(edit);
     if(JSON.stringify(before)===JSON.stringify(after)) return;
     state.visualHistory.push({key:edit.key,before,after});
+    state.visualRedo=[];
     state.visualEdits.set(edit.key,edit);
     markBuildDirty();
     updateVisualButtons();
@@ -442,6 +449,7 @@
     const key=visualKey(state.preview.entryPath,sel.selector), old=state.visualEdits.get(key);
     if(!old)return;
     state.visualHistory.push({key,before:cloneJson(old),after:null});
+    state.visualRedo=[];
     state.visualEdits.delete(key);markBuildDirty();updateVisualButtons();
     openPreview(sel.selector);
   }
@@ -449,6 +457,16 @@
   function undoVisual(){
     const h=state.visualHistory.pop();if(!h)return;
     if(h.before==null)state.visualEdits.delete(h.key);else state.visualEdits.set(h.key,cloneJson(h.before));
+    state.visualRedo.push(h);
+    markBuildDirty();updateVisualButtons();
+    const selector=state.preview.selected?.selector||state.preview.lastSelector||'';
+    openPreview(selector);
+  }
+
+  function redoVisual(){
+    const h=state.visualRedo.pop();if(!h)return;
+    if(h.after==null)state.visualEdits.delete(h.key);else state.visualEdits.set(h.key,cloneJson(h.after));
+    state.visualHistory.push(h);
     markBuildDirty();updateVisualButtons();
     const selector=state.preview.selected?.selector||state.preview.lastSelector||'';
     openPreview(selector);
@@ -457,13 +475,14 @@
   function clearVisual(){
     if(!state.visualEdits.size)return;
     if(!confirm('Xóa toàn bộ chỉnh sửa giao diện của project hiện tại?'))return;
-    state.visualEdits.clear();state.visualHistory=[];state.preview.selected=null;state.preview.lastSelector='';markBuildDirty();
+    state.visualEdits.clear();state.visualHistory=[];state.visualRedo=[];state.preview.selected=null;state.preview.lastSelector='';markBuildDirty();
     updateVisualButtons();openPreview();
   }
 
   function updateVisualButtons(){
     $('undoVisualBtn').disabled=!state.visualHistory.length;
-    $('clearVisualBtn').disabled=!state.visualEdits.size;
+    $('redoVisualBtn').disabled=!state.visualRedo.length;
+    $('clearVisualBtn').disabled=!visualChangeCount();
   }
 
   function updateVisualStatus(){
@@ -476,7 +495,7 @@
   function buildVisualCss(entryPath){
     const edits=getVisualEdits(entryPath).filter(e=>Object.keys(e.styles||{}).length);
     if(!edits.length)return '';
-    const lines=['/* Web App Builder Generic v1.1 - visual overrides */'];
+    const lines=['/* Web App Builder Generic v1.2 - visual overrides */'];
     for(const e of edits){
       lines.push(`${e.selector} {`);
       for(const [prop,val] of Object.entries(e.styles)) lines.push(`  ${prop}: ${val} !important;`);
@@ -495,7 +514,7 @@
 
   function appendMarkerBlock(html,start,end,inner,placement){
     if(!inner)return html;
-    const session=`\n/* WAB v1.1 session */\n${inner}\n`;
+    const session=`\n/* WAB v1.2 session */\n${inner}\n`;
     const s=html.indexOf(start), e=html.indexOf(end);
     if(s>=0&&e>s){
       const segment=html.slice(s,e), closeTag=placement==='head'?'</style>':'</script>';
@@ -692,6 +711,7 @@ parentWin.postMessage({type:'wab:ready'},'*');
   function setViewport(viewport){
     state.preview.viewport=viewport;previewViewport.className='preview-viewport '+viewport;
     document.querySelectorAll('.viewport-btn').forEach(b=>b.classList.toggle('active',b.dataset.viewport===viewport));
+    if($('viewportSelect'))$('viewportSelect').value=viewport;
   }
 
   function handlePreviewMessage(e){
@@ -705,8 +725,9 @@ parentWin.postMessage({type:'wab:ready'},'*');
   }
 
   function showInspector(selection){
-    if(!selection){inspectorEmpty.hidden=false;inspectorPanel.hidden=true;return;}
+    if(!selection){inspectorEmpty.hidden=false;inspectorPanel.hidden=true;$('visualInspector')?.classList.remove('sheet-open');return;}
     inspectorEmpty.hidden=true;inspectorPanel.hidden=false;populateInspector(selection);
+    if(isMobileUi()){$('visualInspector')?.classList.add('sheet-open');setInspectorTab('content');}
   }
 
   function cssColorToHex(value,fallback='#000000'){
@@ -738,14 +759,230 @@ parentWin.postMessage({type:'wab:ready'},'*');
     for(const [id,prop] of Object.entries(spacing))$(id).value=numberFromCss(eff(prop));
     document.querySelectorAll('.style-btn[data-prop="text-align"]').forEach(b=>b.classList.toggle('active',b.dataset.value===eff('text-align')));
     document.querySelectorAll('.block-align-btn').forEach(b=>b.classList.toggle('active',b.dataset.align===edit?.blockAlign));
+    const parentDisplay=String(selection.parent?.display||'').toLowerCase(),canSelfAlign=/(flex|grid)/.test(parentDisplay);document.querySelectorAll('.self-align-btn').forEach(b=>{b.disabled=!canSelfAlign;b.classList.toggle('active',b.dataset.value===(styles['align-self']||edit?.selfAlign));});$('verticalAlignHint').textContent=canSelfAlign?'Parent đang dùng '+parentDisplay+' — có thể căn dọc an toàn.':'Parent không phải Flex/Grid — Builder sẽ không tự căn dọc để tránh phá layout.';
     $('nudgeValue').textContent=`X: ${edit?.nudge?.x||0} px · Y: ${edit?.nudge?.y||0} px`;
     const canNudge=['static','relative'].includes(String(orig.position||'static').toLowerCase());document.querySelectorAll('.nudge-btn').forEach(b=>b.disabled=!canNudge);
     $('elementMeta').textContent=`selector: ${selection.selector}\ntag: ${selection.tag}\nsize: ${Math.round(selection.rect?.width||0)} × ${Math.round(selection.rect?.height||0)} px\nposition: ${orig.position||''}\nparent: ${selection.parent?.tag||'-'} (${selection.parent?.display||'-'})`;
   }
 
   function bindColorPair(colorId,hexId,prop){
-    $(colorId).addEventListener('change',()=>{$(hexId).value=$(colorId).value;applyStylePatch({[prop]:$(colorId).value});});
-    $(hexId).addEventListener('change',()=>{const h=normalizeHex($(hexId).value);if(!h){populateInspector(state.preview.selected);return;}$(colorId).value=h;$(hexId).value=h;applyStylePatch({[prop]:h});});
+    const pwaOnly=String(prop).startsWith('__pwa-');
+    $(colorId).addEventListener('change',()=>{$(hexId).value=$(colorId).value;if(pwaOnly){markBuildDirty();return;}applyStylePatch({[prop]:$(colorId).value});});
+    $(hexId).addEventListener('change',()=>{const h=normalizeHex($(hexId).value);if(!h){if(pwaOnly){$(hexId).value=$(colorId).value;}else populateInspector(state.preview.selected);return;}$(colorId).value=h;$(hexId).value=h;if(pwaOnly){markBuildDirty();return;}applyStylePatch({[prop]:h});});
+  }
+
+
+  /* =========================
+     Mobile editor / Fullscreen
+     ========================= */
+
+  function isMobileUi(){ return !!window.matchMedia?.('(max-width: 760px)').matches; }
+
+  function setFullscreenPreview(force){
+    const next=typeof force==='boolean'?force:!state.preview.fullscreen;
+    state.preview.fullscreen=next;
+    $('visualSection')?.classList.toggle('preview-fullscreen',next);
+    document.body.classList.toggle('wab-preview-fullscreen',next);
+    const btn=$('fullscreenPreviewBtn');
+    if(btn)btn.innerHTML=next?'✕ <span>Thu nhỏ</span>':'⛶ <span>Toàn màn hình</span>';
+    if(next&&isMobileUi()&&state.preview.viewport==='desktop')setViewport('mobile');
+    if(next&&!state.preview.opened&&state.files.size)openPreview();
+    if(!next)$('visualInspector')?.classList.remove('sheet-open');
+  }
+
+  function setInspectorTab(tab){
+    document.querySelectorAll('.inspector-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+    if(!isMobileUi())return;
+    document.querySelectorAll('.inspect-group[data-inspector-tab]').forEach(g=>{
+      const show=g.dataset.inspectorTab===tab;
+      g.classList.toggle('mobile-tab-active',show);
+      if(show)g.open=true;
+    });
+  }
+
+  function closeInspectorSheet(){ $('visualInspector')?.classList.remove('sheet-open'); }
+
+  function applySelfAlignment(value){
+    const sel=state.preview.selected;if(!sel)return;
+    const display=String(sel.parent?.display||'').toLowerCase();
+    if(!/(flex|grid)/.test(display)){
+      previewStatus.textContent='Căn dọc chỉ áp dụng an toàn khi phần tử nằm trong Flex hoặc Grid. Builder chưa thay đổi source.';
+      previewStatus.classList.add('visual-dirty');
+      return;
+    }
+    applyStylePatch({'align-self':value},{selfAlign:value});
+  }
+
+  function handleSpacingChange(id,prop){
+    const el=$(id),value=el.value===''?'':`${el.value}px`;
+    const isMargin=id.startsWith('margin'), linked=$(isMargin?'marginLinked':'paddingLinked')?.checked;
+    if(!linked){applyStylePatch({[prop]:value});return;}
+    const prefix=isMargin?'margin':'padding';
+    const patch={};['top','right','bottom','left'].forEach(side=>patch[`${prefix}-${side}`]=value);
+    applyStylePatch(patch);
+  }
+
+  function handleMobileNav(action){
+    const scroll=id=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'});
+    if(action==='import')scroll('importSection');
+    else if(action==='view'){scroll('visualSection');setPreviewMode('run');if(state.files.size&&!state.preview.opened)openPreview();}
+    else if(action==='edit'){scroll('visualSection');setPreviewMode('edit');if(state.files.size&&!state.preview.opened)openPreview();}
+    else if(action==='check'){scroll('validationSection');setTimeout(()=>state.files.size&&validate(),250);}
+    else if(action==='export')scroll('exportSection');
+  }
+
+  /* =========================
+     PWA Generator / Analyzer
+     ========================= */
+
+  function getPrimaryHtmlPath(filesMap=state.files){
+    const paths=[...filesMap.keys()].filter(p=>/\.html?$/i.test(p));
+    return paths.find(p=>/(^|\/)index\.html?$/i.test(p))||paths[0]||'';
+  }
+
+  function relativeFileRef(fromFile,toFile){
+    const from=dirname(normalizePath(fromFile)).split('/').filter(Boolean),to=normalizePath(toFile).split('/').filter(Boolean);
+    let i=0;while(i<from.length&&i<to.length&&from[i]===to[i])i++;
+    const rel=[...Array(from.length-i).fill('..'),...to.slice(i)].join('/');
+    return rel.startsWith('.')?rel:'./'+rel;
+  }
+
+  function analyzePwa(filesMap=state.files){
+    const entry=getPrimaryHtmlPath(filesMap),root=dirname(entry),keys=[...filesMap.keys()],html=entry&&filesMap.get(entry)?.text||'';
+    const manifestCandidates=keys.filter(p=>/(^|\/)(?:manifest(?:\.webmanifest|\.json)|site\.webmanifest)$/i.test(p));
+    const swCandidates=keys.filter(p=>/(^|\/)(?:service-worker|sw)\.js$/i.test(p));
+    let manifestHref='',manifestLinkedPath='',swRef='',swRegisteredPath='';
+    try{const doc=new DOMParser().parseFromString(html,'text/html'),link=doc.querySelector('link[rel~="manifest"]');manifestHref=link?.getAttribute('href')||'';}catch{}
+    if(manifestHref)manifestLinkedPath=resolveVirtualPath(entry,manifestHref,root)||'';
+    const swMatch=html.match(/(?:navigator\.)?serviceWorker\s*\.\s*register\s*\(\s*["'`]([^"'`]+)["'`]/i);if(swMatch)swRef=swMatch[1];
+    if(swRef)swRegisteredPath=resolveVirtualPath(entry,swRef,root)||'';
+    const sameRootManifests=manifestCandidates.filter(p=>dirname(p)===root),sameRootSw=swCandidates.filter(p=>dirname(p)===root);
+    const manifests=(manifestLinkedPath&&filesMap.has(manifestLinkedPath))?[manifestLinkedPath]:sameRootManifests;
+    const serviceWorkers=(swRegisteredPath&&filesMap.has(swRegisteredPath))?[swRegisteredPath]:sameRootSw;
+    const manifestPath=manifests[0]||root+'manifest.webmanifest',swPath=serviceWorkers[0]||root+'service-worker.js';
+    const linkedManifest=!!manifestHref,registeredSw=!!swRef;
+    return {entry,root,manifests,serviceWorkers,manifestPath,swPath,linkedManifest,registeredSw,manifestHref,swRef,manifestCandidates,swCandidates};
+  }
+
+  function populatePwaIconOptions(){
+    const images=[...state.files.keys()].filter(p=>/\.(?:png|webp|jpe?g|svg)$/i.test(p));
+    for(const id of ['pwaIcon192','pwaIcon512']){
+      const sel=$(id);if(!sel)continue;const old=sel.value;sel.innerHTML='<option value="">Không dùng</option>';
+      for(const path of images){const o=document.createElement('option');o.value=path;o.textContent=path;sel.appendChild(o);}
+      if(images.includes(old))sel.value=old;
+    }
+    const pick=(size)=>images.find(p=>new RegExp(`(?:^|[^0-9])${size}(?:x${size})?(?:[^0-9]|$)`,'i').test(p))||images.find(p=>/icon|logo/i.test(p))||'';
+    if($('pwaIcon192')&&!$('pwaIcon192').value)$('pwaIcon192').value=pick(192);
+    if($('pwaIcon512')&&!$('pwaIcon512').value)$('pwaIcon512').value=pick(512);
+  }
+
+  function syncPwaDefaults(){
+    if(!$('pwaName'))return;
+    if(!$('pwaName').value)$('pwaName').value=els.appName.value.trim()||state.projectName||'Web App';
+    if(!$('pwaShortName').value)$('pwaShortName').value=(els.shortName.value.trim()||els.appName.value.trim()||state.projectName||'App').slice(0,24);
+    populatePwaIconOptions();
+  }
+
+  function refreshPwaUi(){
+    const box=$('pwaStatus');if(!box)return;
+    syncPwaDefaults();
+    if(!state.files.size){box.className='pwa-status muted';box.textContent='Nạp source để kiểm tra PWA.';['createManifestBtn','createServiceWorkerBtn','createPwaBtn','cancelPwaPlanBtn'].forEach(id=>$(id).disabled=true);return;}
+    const a=analyzePwa(),plan=state.pwaPlan;
+    const items=[];
+    items.push(a.manifests.length?`✓ Manifest: ${a.manifests.join(', ')}`:(plan.createManifest?'◷ Manifest sẽ được tạo':'⚠ Chưa có Manifest'));
+    items.push(a.serviceWorkers.length?`✓ Service Worker: ${a.serviceWorkers.join(', ')}`:(plan.createServiceWorker?'◷ Service Worker sẽ được tạo':'⚠ Chưa có Service Worker'));
+    if(a.manifests.length||plan.createManifest)items.push(a.linkedManifest?'✓ HTML đã link Manifest':(plan.ensureWiring?'◷ Sẽ thêm link Manifest':'⚠ HTML chưa link Manifest'));
+    if(a.serviceWorkers.length||plan.createServiceWorker)items.push(a.registeredSw?'✓ HTML đã đăng ký Service Worker':(plan.ensureWiring?'◷ Sẽ thêm đăng ký Service Worker':'⚠ HTML chưa đăng ký Service Worker'));
+    box.className='pwa-status';box.innerHTML='';for(const text of items){const d=document.createElement('div');d.className='pwa-status-row';d.textContent=text;box.appendChild(d);}
+    $('createManifestBtn').disabled=a.manifests.length>0||plan.createManifest;
+    $('createServiceWorkerBtn').disabled=a.serviceWorkers.length>0||plan.createServiceWorker;
+    $('createPwaBtn').disabled=a.manifests.length>0&&a.serviceWorkers.length>0&&a.linkedManifest&&a.registeredSw;
+    $('createPwaBtn').textContent=(a.manifests.length||a.serviceWorkers.length)?'+ Hoàn thiện PWA':'+ Tạo PWA cơ bản';
+    $('cancelPwaPlanBtn').disabled=!(plan.createManifest||plan.createServiceWorker||plan.ensureWiring);
+  }
+
+  function queuePwa(kind){
+    if(!state.files.size){alert('Hãy nạp source trước.');return;}
+    const a=analyzePwa();if(!a.entry){alert('Không tìm thấy file HTML để gắn PWA.');return;}
+    syncPwaDefaults();
+    if(kind==='manifest'&&!a.manifests.length)state.pwaPlan.createManifest=true;
+    if(kind==='sw'&&!a.serviceWorkers.length)state.pwaPlan.createServiceWorker=true;
+    if(kind==='all'){
+      if(!a.manifests.length)state.pwaPlan.createManifest=true;
+      if(!a.serviceWorkers.length)state.pwaPlan.createServiceWorker=true;
+    }
+    state.pwaPlan.ensureWiring=true;markBuildDirty();refreshPwaUi();
+  }
+
+  function cancelPwaPlan(){state.pwaPlan={createManifest:false,createServiceWorker:false,ensureWiring:false};markBuildDirty();refreshPwaUi();}
+
+  function pwaConfig(cfg){
+    const theme=normalizeHex($('pwaThemeColorHex')?.value)||$('pwaThemeColor')?.value||'#1f6feb';
+    const bg=normalizeHex($('pwaBgColorHex')?.value)||$('pwaBgColor')?.value||'#ffffff';
+    return {name:$('pwaName')?.value.trim()||cfg.appName||state.projectName||'Web App',shortName:$('pwaShortName')?.value.trim()||cfg.shortName||cfg.appName||'App',startUrl:$('pwaStartUrl')?.value.trim()||'./',display:$('pwaDisplay')?.value||'standalone',theme,bg,icon192:$('pwaIcon192')?.value||'',icon512:$('pwaIcon512')?.value||''};
+  }
+
+  function buildManifestText(cfg,manifestPath){
+    const pc=pwaConfig(cfg),obj={name:pc.name,short_name:pc.shortName,start_url:pc.startUrl,display:pc.display,theme_color:pc.theme,background_color:pc.bg};
+    const icons=[];
+    if(pc.icon192)icons.push({src:relativeFileRef(manifestPath,pc.icon192),sizes:'192x192',type:mimeForPath(pc.icon192).split(';')[0]});
+    if(pc.icon512&&pc.icon512!==pc.icon192)icons.push({src:relativeFileRef(manifestPath,pc.icon512),sizes:'512x512',type:mimeForPath(pc.icon512).split(';')[0]});
+    if(icons.length)obj.icons=icons;
+    return JSON.stringify(obj,null,2)+'\n';
+  }
+
+  function localAssetPathsFromHtml(entryPath,output){
+    const f=output.get(entryPath);if(!f||f.binary||f.text==null)return [entryPath];
+    const refs=[];
+    try{
+      const doc=new DOMParser().parseFromString(f.text,'text/html');
+      doc.querySelectorAll('link[href],script[src],img[src],source[src]').forEach(el=>{const ref=el.getAttribute('href')||el.getAttribute('src');const p=resolveVirtualPath(entryPath,ref,dirname(entryPath));if(p&&output.has(p))refs.push(p);});
+    }catch{}
+    return [...new Set([entryPath,...refs])];
+  }
+
+  function buildServiceWorkerText(cfg,swPath,entryPath,output,manifestPath){
+    const pc=pwaConfig(cfg),prefix='wab-app-'+safeName(pc.shortName).toLowerCase()+'-';
+    const version=safeName(cfg.buildId||cfg.version||'v1').toLowerCase();
+    const paths=localAssetPathsFromHtml(entryPath,output);
+    if(output.has(manifestPath))paths.push(manifestPath);
+    if(pc.icon192&&output.has(pc.icon192))paths.push(pc.icon192);
+    if(pc.icon512&&output.has(pc.icon512))paths.push(pc.icon512);
+    const shell=[...new Set(paths)].map(p=>relativeFileRef(swPath,p));
+    const entryRef=relativeFileRef(swPath,entryPath);
+    return `/* Generated by Web App Builder Generic v1.2 */\nconst CACHE_PREFIX=${JSON.stringify(prefix)};\nconst CACHE_NAME=CACHE_PREFIX+${JSON.stringify(version)};\nconst APP_SHELL=${JSON.stringify(shell,null,2)};\nconst APP_SHELL_URLS=new Set(APP_SHELL.map(path=>new URL(path,self.registration.scope).href));\n\nself.addEventListener('install',event=>{\n  event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));\n});\n\nself.addEventListener('activate',event=>{\n  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX)&&k!==CACHE_NAME).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));\n});\n\nself.addEventListener('fetch',event=>{\n  const req=event.request;if(req.method!=='GET')return;\n  const url=new URL(req.url);if(url.origin!==self.location.origin)return; // Không cache API/external\n  if(req.mode==='navigate'){\n    event.respondWith(fetch(req).then(res=>{if(res&&res.ok){const copy=res.clone();caches.open(CACHE_NAME).then(c=>c.put(req,copy));}return res;}).catch(()=>caches.match(${JSON.stringify(entryRef)})));\n    return;\n  }\n  if(!APP_SHELL_URLS.has(url.href))return; // API/Supabase/same-origin dynamic requests are untouched\n  event.respondWith(caches.match(req).then(hit=>hit||fetch(req)));\n});\n`;
+  }
+
+  function injectManifestLink(html,entryPath,manifestPath){
+    if(/<link\b[^>]*rel=["'][^"']*manifest[^"']*["'][^>]*>/i.test(html))return html;
+    const tag=`<link rel="manifest" href="${relativeFileRef(entryPath,manifestPath)}">`;
+    const i=html.toLowerCase().lastIndexOf('</head>');return i>=0?html.slice(0,i)+`  ${tag}\n`+html.slice(i):tag+'\n'+html;
+  }
+
+  function injectServiceWorkerRegister(html,entryPath,swPath){
+    if(/navigator\.serviceWorker\.register\s*\(/i.test(html)||/serviceWorker\s*\.\s*register\s*\(/i.test(html))return html;
+    const ref=relativeFileRef(entryPath,swPath);
+    const code=`<script id="wab-pwa-register">\nif ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {\n  window.addEventListener('load', () => navigator.serviceWorker.register(${JSON.stringify(ref)}).catch(err => console.warn('Service Worker registration failed', err)), {once:true});\n}\n<\/script>`;
+    const i=html.toLowerCase().lastIndexOf('</body>');return i>=0?html.slice(0,i)+code+'\n'+html.slice(i):html+'\n'+code;
+  }
+
+  function applyPwaPlanToOutput(output,changes,cfg){
+    const plan=state.pwaPlan;if(!(plan.createManifest||plan.createServiceWorker||plan.ensureWiring))return;
+    const a=analyzePwa(output),entry=a.entry;if(!entry)return;
+    let manifestPath=a.manifests[0]||a.manifestPath,swPath=a.serviceWorkers[0]||a.swPath;
+    if(plan.createManifest&&!a.manifests.length){
+      const text=buildManifestText(cfg,manifestPath);output.set(manifestPath,{bytes:encode(text),binary:false,text,dirty:true,generated:true});changes.push({path:manifestPath,field:'pwa-manifest',old:'Không có file',new:'Tạo manifest.webmanifest',count:1});
+    }
+    if(plan.createServiceWorker&&!a.serviceWorkers.length){
+      const text=buildServiceWorkerText(cfg,swPath,entry,output,manifestPath);output.set(swPath,{bytes:encode(text),binary:false,text,dirty:true,generated:true});changes.push({path:swPath,field:'pwa-sw',old:'Không có file',new:'Tạo Service Worker app shell',count:1});
+    }
+    if(plan.ensureWiring){
+      const f=output.get(entry);if(f&&!f.binary&&f.text!=null){let next=f.text;
+        if(output.has(manifestPath))next=injectManifestLink(next,entry,manifestPath);
+        if(output.has(swPath))next=injectServiceWorkerRegister(next,entry,swPath);
+        if(next!==f.text){f.text=next;f.dirty=true;changes.push({path:entry,field:'pwa-wire',old:'HTML chưa liên kết đầy đủ PWA',new:'Đã liên kết Manifest / đăng ký Service Worker cần thiết',count:1});}
+      }
+    }
   }
 
   /* =========================
@@ -786,6 +1023,16 @@ parentWin.postMessage({type:'wab:ready'},'*');
       else{checks.push(['bad',`Visual text ${edit.selector}: chưa có nguồn duy nhất. Bật Runtime text ở Nâng cao hoặc bỏ thay đổi text này.`]);bad.push('visual-text:'+edit.selector);}
     }
 
+    const pwa=analyzePwa(output);
+    if(pwa.manifests.length){
+      checks.push(['ok',`PWA Manifest: ${pwa.manifests.join(', ')}.`]);
+      const mf=output.get(pwa.manifests[0]);
+      try{const obj=JSON.parse(mf.text);if(!obj.name)checks.push(['warn','Manifest chưa có name.']);if(!obj.short_name)checks.push(['warn','Manifest chưa có short_name.']);if(!obj.start_url)checks.push(['warn','Manifest chưa có start_url.']);for(const icon of (obj.icons||[])){const ip=resolveVirtualPath(pwa.manifests[0],icon.src,pwa.root);if(ip&&!output.has(ip))checks.push(['warn',`Manifest tham chiếu icon chưa tìm thấy: ${icon.src}`]);}}catch{}
+      if(pwa.linkedManifest)checks.push(['ok','index HTML đã liên kết Manifest.']);else checks.push(['warn','Có Manifest nhưng HTML entry chưa thấy <link rel="manifest">.']);
+    }else checks.push(['warn','App chưa có Manifest. Có thể tạo tại mục PWA.']);
+    if(pwa.serviceWorkers.length){if(pwa.registeredSw)checks.push(['ok','Service Worker đã được đăng ký trong HTML entry.']);else checks.push(['warn','Có Service Worker nhưng chưa thấy đoạn đăng ký trong HTML entry.']);}
+    else checks.push(['warn','App chưa có Service Worker. Có thể tạo app shell offline tại mục PWA.']);
+
     const sw=[...output.keys()].filter(p=>/(^|\/)(?:service-worker|sw)\.js$/i.test(p));
     if(sw.length)checks.push(['warn',`Phát hiện Service Worker (${sw.join(', ')}). Live Preview không mô phỏng đầy đủ origin/cache production; cần test ZIP sau khi xuất.`]);
     const modules=[];for(const [p,f] of output){if(f.binary||f.text==null||!/\.html?$/i.test(p))continue;if(/<script\b[^>]*type=["']module["']/i.test(f.text))modules.push(p);}if(modules.length)checks.push(['warn',`Có ES module ở ${modules.join(', ')}. Live Preview hỗ trợ file module trực tiếp nhưng import tương đối lồng sâu có thể khác production.`]);
@@ -813,7 +1060,7 @@ parentWin.postMessage({type:'wab:ready'},'*');
 
   async function exportZip(){
     if(!state.files.size){alert('Hãy nạp source trước.');return;}
-    const {bad}=validate(); if(bad.length && !$('allowUnsafe').checked){alert('Đang có lỗi/cảnh báo nghiêm trọng. Kiểm tra mục 7 hoặc bật cho phép xuất nếu bạn đã hiểu rủi ro.');return;}
+    const {bad}=validate(); if(bad.length && !$('allowUnsafe').checked){alert('Đang có lỗi/cảnh báo nghiêm trọng. Kiểm tra mục 8 hoặc bật cho phép xuất nếu bạn đã hiểu rủi ro.');return;}
     const {output,cfg}=applyChanges({prepareBuild:true});
     const entries=[...output].map(([name,f])=>({name,bytes:f.bytes}));
     const zipBytes=makeZip(entries);
@@ -828,12 +1075,14 @@ parentWin.postMessage({type:'wab:ready'},'*');
   async function makeAdapter(){
     const signature=await projectSignature();
     return {
-      format:'web-app-builder-adapter',version:1,builderVersion:'1.1',createdAt:new Date().toISOString(),signature,
+      format:'web-app-builder-adapter',version:1,builderVersion:'1.2',createdAt:new Date().toISOString(),signature,
       config:Object.fromEntries(fields.map(k=>[k,els[k].value.trim()])),
       options:{globalNameSync:$('globalNameSync').checked,autoBuild:$('autoBuild').checked,allowRuntimeText:$('allowRuntimeText').checked},
       detections:state.detections.map(d=>({field:d.field,path:d.path,current:d.current,before:d.before,after:d.after,label:d.label,enabled:d.enabled})),
       manualRules:state.manualRules.map(r=>({...r})),
-      visualEdits:[...state.visualEdits.values()].map(e=>cloneJson(e))
+      visualEdits:[...state.visualEdits.values()].map(e=>cloneJson(e)),
+      pwaPlan:cloneJson(state.pwaPlan),
+      pwaConfig:$('pwaName')?{name:$('pwaName').value,shortName:$('pwaShortName').value,startUrl:$('pwaStartUrl').value,display:$('pwaDisplay').value,theme:$('pwaThemeColorHex').value,bg:$('pwaBgColorHex').value,icon192:$('pwaIcon192').value,icon512:$('pwaIcon512').value}:null
     };
   }
 
@@ -846,7 +1095,10 @@ parentWin.postMessage({type:'wab:ready'},'*');
     }
     state.manualRules=[];manualRulesEl.innerHTML='';(adapter.manualRules||[]).forEach(addManualRule);
     state.visualEdits.clear();for(const e of (adapter.visualEdits||[])){if(e?.entryPath&&e?.selector&&state.files.has(e.entryPath)){e.key=visualKey(e.entryPath,e.selector);state.visualEdits.set(e.key,e);}}
-    state.visualHistory=[];markBuildDirty();updateVisualButtons();
+    state.visualHistory=[];state.visualRedo=[];
+    if(adapter.pwaPlan)state.pwaPlan={createManifest:!!adapter.pwaPlan.createManifest,createServiceWorker:!!adapter.pwaPlan.createServiceWorker,ensureWiring:!!adapter.pwaPlan.ensureWiring};
+    if(adapter.pwaConfig&&$('pwaName')){$('pwaName').value=adapter.pwaConfig.name||'';$('pwaShortName').value=adapter.pwaConfig.shortName||'';$('pwaStartUrl').value=adapter.pwaConfig.startUrl||'./';$('pwaDisplay').value=adapter.pwaConfig.display||'standalone';const th=normalizeHex(adapter.pwaConfig.theme)||'#1f6feb',bg=normalizeHex(adapter.pwaConfig.bg)||'#ffffff';$('pwaThemeColor').value=th;$('pwaThemeColorHex').value=th;$('pwaBgColor').value=bg;$('pwaBgColorHex').value=bg;populatePwaIconOptions();if([...$('pwaIcon192').options].some(o=>o.value===adapter.pwaConfig.icon192))$('pwaIcon192').value=adapter.pwaConfig.icon192;if([...$('pwaIcon512').options].some(o=>o.value===adapter.pwaConfig.icon512))$('pwaIcon512').value=adapter.pwaConfig.icon512;}
+    markBuildDirty();updateVisualButtons();refreshPwaUi();
   }
 
   async function projectSignature(){
@@ -907,7 +1159,7 @@ parentWin.postMessage({type:'wab:ready'},'*');
   dropZone.addEventListener('drop',e=>loadFiles(e.dataTransfer.files));
 
   $('clearBtn').onclick=()=>{
-    closePreview();state.files.clear();state.detections=[];state.manualRules=[];state.visualEdits.clear();state.visualHistory=[];manualRulesEl.innerHTML='';fileListEl.innerHTML='';summaryEl.textContent='Chưa nạp source.';detectionsEl.textContent='Nạp source để bắt đầu quét.';fields.forEach(k=>els[k].value='');previewEntry.innerHTML='';markBuildDirty();updateVisualButtons();
+    setFullscreenPreview(false);closePreview();state.files.clear();state.detections=[];state.manualRules=[];state.visualEdits.clear();state.visualHistory=[];state.visualRedo=[];state.pwaPlan={createManifest:false,createServiceWorker:false,ensureWiring:false};manualRulesEl.innerHTML='';fileListEl.innerHTML='';summaryEl.textContent='Chưa nạp source.';detectionsEl.textContent='Nạp source để bắt đầu quét.';fields.forEach(k=>els[k].value='');if($('pwaName')){$('pwaName').value='';$('pwaShortName').value='';$('pwaStartUrl').value='./';$('pwaIcon192').innerHTML='<option value="">Không dùng</option>';$('pwaIcon512').innerHTML='<option value="">Không dùng</option>';}previewEntry.innerHTML='';markBuildDirty();refreshPwaUi();updateVisualButtons();
   };
   $('scanBtn').onclick=scan;$('addRuleBtn').onclick=()=>addManualRule();$('validateBtn').onclick=validate;$('previewBtn').onclick=previewDiff;$('exportBtn').onclick=exportZip;$('closePreviewBtn').onclick=()=>$('previewDialog').close();
   $('saveProfileBtn').onclick=saveProfile;$('loadProfileBtn').onclick=loadProfile;$('exportAdapterBtn').onclick=exportAdapter;
@@ -918,7 +1170,10 @@ parentWin.postMessage({type:'wab:ready'},'*');
 
   $('openPreviewBtn').onclick=()=>openPreview();$('reloadPreviewBtn').onclick=()=>openPreview(state.preview.lastSelector);previewEntry.addEventListener('change',()=>{state.preview.entryPath=previewEntry.value;state.preview.lastSelector='';if(state.preview.opened)openPreview();});
   $('runModeBtn').onclick=()=>setPreviewMode('run');$('editModeBtn').onclick=()=>setPreviewMode('edit');document.querySelectorAll('.viewport-btn').forEach(b=>b.onclick=()=>setViewport(b.dataset.viewport));
-  $('undoVisualBtn').onclick=undoVisual;$('clearVisualBtn').onclick=clearVisual;$('resetSelectedBtn').onclick=resetSelectedVisual;$('applyTextBtn').onclick=applyVisualText;
+  $('undoVisualBtn').onclick=undoVisual;$('redoVisualBtn').onclick=redoVisual;$('clearVisualBtn').onclick=clearVisual;$('resetSelectedBtn').onclick=resetSelectedVisual;$('applyTextBtn').onclick=applyVisualText;
+  $('fullscreenPreviewBtn').onclick=()=>setFullscreenPreview();$('closeInspectorBtn').onclick=closeInspectorSheet;
+  if($('viewportSelect'))$('viewportSelect').addEventListener('change',e=>setViewport(e.target.value));
+  document.querySelectorAll('.inspector-tab').forEach(b=>b.onclick=()=>setInspectorTab(b.dataset.tab));
 
   bindColorPair('textColor','textColorHex','color');bindColorPair('bgColor','bgColorHex','background-color');bindColorPair('borderColor','borderColorHex','border-color');
   $('fontSize').addEventListener('change',()=>applyStylePatch({'font-size':$('fontSize').value?`${$('fontSize').value}px`:''}));
@@ -929,16 +1184,33 @@ parentWin.postMessage({type:'wab:ready'},'*');
     const a=b.dataset.align,patch=a==='left'?{'margin-left':'0px','margin-right':'auto'}:a==='center'?{'margin-left':'auto','margin-right':'auto'}:{'margin-left':'auto','margin-right':'0px'};
     applyStylePatch(patch,{blockAlign:a});
   });
-  document.querySelectorAll('.nudge-btn').forEach(b=>b.onclick=()=>{const dx=Number(b.dataset.dx),dy=Number(b.dataset.dy);setNudge(dx,dy,dx===0&&dy===0);});
+  document.querySelectorAll('.self-align-btn').forEach(b=>b.onclick=()=>applySelfAlignment(b.dataset.value));
+  document.querySelectorAll('.nudge-btn').forEach(b=>b.onclick=()=>{let dx=Number(b.dataset.dx),dy=Number(b.dataset.dy);const reset=dx===0&&dy===0,step=Number($('nudgeStep')?.value||1);if(!reset){dx*=step;dy*=step;}setNudge(dx,dy,reset);});
   const spacing={marginTop:'margin-top',marginRight:'margin-right',marginBottom:'margin-bottom',marginLeft:'margin-left',paddingTop:'padding-top',paddingRight:'padding-right',paddingBottom:'padding-bottom',paddingLeft:'padding-left'};
-  for(const [id,prop] of Object.entries(spacing))$(id).addEventListener('change',()=>applyStylePatch({[prop]:$(id).value===''?'':`${$(id).value}px`}));
+  for(const [id,prop] of Object.entries(spacing))$(id).addEventListener('change',()=>handleSpacingChange(id,prop));
+
+  $('refreshPwaBtn').onclick=refreshPwaUi;$('createManifestBtn').onclick=()=>queuePwa('manifest');$('createServiceWorkerBtn').onclick=()=>queuePwa('sw');$('createPwaBtn').onclick=()=>queuePwa('all');$('cancelPwaPlanBtn').onclick=cancelPwaPlan;
+  bindColorPair('pwaThemeColor','pwaThemeColorHex','__pwa-theme');bindColorPair('pwaBgColor','pwaBgColorHex','__pwa-bg');
+  ['pwaName','pwaShortName','pwaStartUrl','pwaDisplay','pwaIcon192','pwaIcon512'].forEach(id=>$(id).addEventListener('change',markBuildDirty));
+  document.querySelectorAll('.mobile-bottom-nav button').forEach(b=>b.onclick=()=>handleMobileNav(b.dataset.mobileAction));
 
   window.addEventListener('message',handlePreviewMessage);
   document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&state.preview.fullscreen){e.preventDefault();setFullscreenPreview(false);return;}
     if(state.preview.mode!=='edit'||!state.preview.selected)return;
     const tag=(document.activeElement?.tagName||'').toLowerCase();if(['input','textarea','select'].includes(tag)||document.activeElement?.isContentEditable)return;
     const step=e.shiftKey?10:1,dir={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[e.key];if(!dir)return;e.preventDefault();setNudge(dir[0],dir[1]);
   });
 
-  setPreviewMode('run');setViewport('desktop');updateVisualButtons();showInspector(null);
+  setPreviewMode('run');setViewport(isMobileUi()?'mobile':'desktop');setInspectorTab('content');refreshPwaUi();updateVisualButtons();showInspector(null);
+
+  // PWA shell for the Builder itself. Service Workers require http(s) (localhost is supported).
+  // Opening index.html directly via file:// keeps all Builder functions available, but SW stays disabled.
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./service-worker.js', {scope:'./'}).catch(err => {
+        console.warn('Web App Builder: không đăng ký được Service Worker.', err);
+      });
+    }, {once:true});
+  }
 })();

@@ -14,3 +14,27 @@ Web App Builder Generic v1.1
 - Security scan generic hơn, bỏ hard-code riêng OT Pro
 - Validator kiểm tra index.html, JSON sau build, visual text unresolved và cảnh báo Service Worker/ES module
 - ZIP reader/writer vẫn chạy local, không phụ thuộc CDN
+
+Web App Builder Generic v1.1 - PWA add-on
+- Thêm manifest.webmanifest
+- Thêm service-worker.js cho Builder shell
+- Thêm icon PWA 192x192 và 512x512
+- Đăng ký Service Worker an toàn khi chạy qua http(s)/localhost
+- Cache chỉ giới hạn ở file shell của Builder, không cache app preview/API/Supabase
+
+Web App Builder Generic v1.2
+- Tối ưu Visual Editor cho điện thoại; sửa toolbar bị co/cắt chữ trên màn hình hẹp
+- Thêm chế độ Preview toàn màn hình bằng overlay cố định, hoạt động cả khi trình duyệt không hỗ trợ Fullscreen API
+- Khi dùng điện thoại, Inspector chuyển thành bottom sheet; chia 4 tab: Nội dung / Kiểu / Bố cục / Nâng cao
+- Thêm thanh điều hướng dưới màn hình trên mobile: Nạp / Xem / Sửa / Check / Xuất
+- Thêm Undo + Redo cho visual edit
+- Nudge có bước 1 / 5 / 10 px; giữ hỗ trợ bàn phím desktop
+- Thêm căn dọc an toàn cho phần tử nằm trong Flex/Grid; không tự áp dụng khi layout không phù hợp
+- Margin/Padding có tùy chọn liên kết 4 cạnh
+- Thêm PWA Analyzer theo đúng HTML entry, tránh nhầm manifest/service worker của app con khác thư mục
+- Nếu app chưa có Manifest hoặc Service Worker: cho phép tạo riêng từng file hoặc tạo PWA cơ bản
+- PWA Generator tự nối <link rel="manifest"> và đăng ký Service Worker khi cần
+- Service Worker được tạo chỉ cache app shell cùng origin; không cache API/Supabase/external hoặc request động không thuộc app shell
+- PWA Validator kiểm tra manifest, link manifest, service worker registration và icon tham chiếu
+- Builder shell Service Worker tăng cache version lên v1.2-pwa-1
+- Giữ nguyên import, ZIP local, binary preservation, Auto Detect, Manual Mapping, Adapter/Profile và Preview/Diff từ v1.1

@@ -136,3 +136,61 @@ ZIP reader/writer tích hợp, không cần CDN.
 ## Phạm vi v1.1
 
 Builder không phải IDE và không tự sửa business logic, database table, Edge Function, storage, auth logic hoặc tên function nội bộ. Visual Editor tập trung vào những gì người dùng nhìn thấy và tạo thay đổi có target rõ ràng.
+
+## PWA của Builder
+
+Bản này có thêm `manifest.webmanifest` và `service-worker.js` cho chính Web App Builder.
+
+- Cache offline chỉ áp dụng cho shell của Builder: HTML, CSS, JS, manifest và icon.
+- Không cache API, Supabase hoặc source/app đang chạy trong Live Preview.
+- Service Worker chỉ hoạt động khi Builder được mở qua `http://`, `https://` hoặc localhost. Nếu mở trực tiếp `index.html` bằng `file://`, Builder vẫn dùng bình thường nhưng PWA/offline cache sẽ không được kích hoạt.
+- Khi cập nhật Service Worker, cần đổi `CACHE_NAME` để cache shell cũ được dọn trong lần activate kế tiếp.
+
+---
+
+## Bổ sung v1.2 – Mobile Visual Editor
+
+Trên điện thoại, khu **Mở app & chỉnh trực quan** tự chuyển sang giao diện mobile:
+
+- Toolbar gọn, không ép tất cả nút vào một hàng.
+- Có **Toàn màn hình** để app preview chiếm gần toàn bộ màn hình.
+- `Chạy`: sử dụng app như bình thường.
+- `Chỉnh sửa`: chạm trực tiếp vào thành phần để chọn.
+- Bảng thuộc tính hiện dạng **bottom sheet** với 4 tab: Nội dung, Kiểu, Bố cục, Nâng cao.
+- Có Undo / Redo.
+- Dịch chuyển tinh chỉnh 1 / 5 / 10 px.
+- Margin và Padding có thể khóa 4 cạnh để chỉnh đồng thời.
+- Căn dọc chỉ được Builder tự áp dụng khi parent là Flex/Grid, nhằm tránh phá layout.
+
+Thanh dưới mobile có 5 lối tắt: **Nạp / Xem / Sửa / Check / Xuất**.
+
+### Preview toàn màn hình
+
+Nút **⛶ Toàn màn hình** dùng overlay của Builder thay vì phụ thuộc hoàn toàn vào Fullscreen API của trình duyệt. Vì vậy thao tác ổn định hơn trên iPhone/iPad và vẫn giữ được toolbar chỉnh sửa.
+
+---
+
+## Bổ sung v1.2 – Tạo Manifest / Service Worker cho app được import
+
+Sau khi import source, mở mục **PWA / Manifest / Service Worker**.
+
+Builder sẽ kiểm tra app entry `index.html` và báo:
+
+- Có/chưa có Manifest.
+- Có/chưa có Service Worker.
+- HTML đã link Manifest hay chưa.
+- HTML đã đăng ký Service Worker hay chưa.
+
+Nếu thiếu, có thể chọn:
+
+- **Tạo Manifest**: tạo `manifest.webmanifest` và nối vào HTML.
+- **Tạo Service Worker**: tạo `service-worker.js` và thêm đoạn đăng ký.
+- **Tạo PWA cơ bản**: hoàn thiện các phần còn thiếu trong một lần.
+
+Các trường có thể cấu hình trước khi build gồm tên app, short name, start URL, display, theme/background color và icon 192/512 nếu source đã có ảnh phù hợp.
+
+Service Worker do Builder sinh sử dụng cache app-shell giới hạn. Nó không cache request external và không đưa API/Supabase/request động không thuộc app shell vào cache.
+
+Mọi file/đoạn HTML được tạo đều đi qua **Validator + Diff** trước khi Export ZIP.
+
+> Lưu ý: Service Worker chỉ hoạt động khi app được chạy qua HTTP(S), ví dụ localhost hoặc hosting HTTPS. Mở app trực tiếp bằng `file://` không kích hoạt Service Worker.
