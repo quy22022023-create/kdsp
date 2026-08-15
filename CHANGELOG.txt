@@ -38,3 +38,15 @@ Web App Builder Generic v1.2
 - PWA Validator kiểm tra manifest, link manifest, service worker registration và icon tham chiếu
 - Builder shell Service Worker tăng cache version lên v1.2-pwa-1
 - Giữ nguyên import, ZIP local, binary preservation, Auto Detect, Manual Mapping, Adapter/Profile và Preview/Diff từ v1.1
+
+Web App Builder Generic v1.3
+- Tối ưu lại Mobile Visual Editor theo hướng gọn, ít che app preview
+- Bottom sheet mở thấp mặc định ở tab Nội dung; Kiểu/Bố cục/Nâng cao mở rộng khi cần
+- Chạm thanh kéo để thu gọn/mở rộng bảng chỉnh sửa
+- Tự cuộn element được chọn vào vùng nhìn thấy an toàn trước khi chỉnh
+- Ẩn selector/source kỹ thuật khỏi giao diện mobile cơ bản
+- Tên element trên mobile ưu tiên hiển thị nội dung thực thay vì chỉ tag như p/div
+- Toolbar mobile chỉ giữ Chạy/Chỉnh sửa, thiết bị và Toàn màn hình
+- Undo/Redo/Reset chuyển vào header bảng chỉnh sửa; bottom navigation tự ẩn khi đang sửa
+- Sửa regression PWA Generator: Manifest mới tạo luôn được gắn vào HTML entry cùng Service Worker
+- Giữ nguyên PWA Generator, Validator, Adapter/Profile, Preview/Diff và ZIP engine từ v1.2

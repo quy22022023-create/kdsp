@@ -1,4 +1,4 @@
-# WEB APP BUILDER GENERIC v1.1
+# WEB APP BUILDER GENERIC v1.3
 
 Web app chạy hoàn toàn trong trình duyệt để import, chạy thử, chỉnh giao diện, cấu hình và xuất lại source của nhiều web app khác nhau mà không cần server.
 
@@ -194,3 +194,13 @@ Service Worker do Builder sinh sử dụng cache app-shell giới hạn. Nó kh�
 Mọi file/đoạn HTML được tạo đều đi qua **Validator + Diff** trước khi Export ZIP.
 
 > Lưu ý: Service Worker chỉ hoạt động khi app được chạy qua HTTP(S), ví dụ localhost hoặc hosting HTTPS. Mở app trực tiếp bằng `file://` không kích hoạt Service Worker.
+
+## Bổ sung v1.3 – Compact Mobile Visual Editor
+
+- Trên điện thoại, Inspector dùng bottom sheet thấp mặc định để không che element đang sửa.
+- Tab **Nội dung** giữ sheet gọn; **Kiểu / Bố cục / Nâng cao** tự mở rộng và vẫn có thể thu gọn bằng thanh kéo.
+- Khi chọn element, Builder tự đưa element đó về vùng nhìn thấy an toàn trong Preview.
+- Toolbar mobile rút gọn còn Chạy/Chỉnh sửa, chọn thiết bị và Toàn màn hình.
+- Undo / Redo / Reset nằm ngay trên header Inspector.
+- Bottom navigation tạm ẩn khi Inspector đang mở để tăng không gian chỉnh sửa.
+- Selector và thông tin kỹ thuật vẫn còn ở tab Nâng cao nhưng không chiếm diện tích giao diện cơ bản.

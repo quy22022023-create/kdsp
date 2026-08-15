@@ -19,7 +19,7 @@
       <h1>Web App Builder</h1>
       <p>Import app web, chạy thử trực tiếp, chỉnh giao diện an toàn, cấu hình và xuất lại ZIP ngay trên máy.</p>
     </div>
-    <span class="badge">Generic v1.2</span>
+    <span class="badge">Generic v1.3</span>
   </header>
 
   <main class="layout">
@@ -84,7 +84,7 @@
         </div>
 
         <aside class="inspector" id="visualInspector">
-          <div class="sheet-handle" aria-hidden="true"></div>
+          <button id="inspectorSizeBtn" class="sheet-handle" type="button" aria-label="Mở rộng bảng chỉnh sửa" title="Mở rộng / thu gọn"></button>
           <button id="closeInspectorBtn" class="inspector-close-mobile" type="button" aria-label="Đóng bảng chỉnh sửa">✕</button>
           <div id="inspectorEmpty" class="inspector-empty">
             <strong>Chưa chọn thành phần</strong>
@@ -93,11 +93,15 @@
 
           <div id="inspectorPanel" hidden>
             <div class="inspector-title">
-              <div>
+              <div class="selected-summary">
                 <div id="selectedLabel" class="selected-label">Element</div>
                 <code id="selectedSelector" class="selected-selector"></code>
               </div>
-              <button id="resetSelectedBtn" class="icon-btn" type="button" title="Đặt lại chỉnh sửa của thành phần này">↺</button>
+              <div class="inspector-title-actions">
+                <button id="undoVisualMobileBtn" class="icon-btn mobile-history-btn" type="button" title="Hoàn tác">↶</button>
+                <button id="redoVisualMobileBtn" class="icon-btn mobile-history-btn" type="button" title="Làm lại">↷</button>
+                <button id="resetSelectedBtn" class="icon-btn" type="button" title="Đặt lại chỉnh sửa của thành phần này">↺</button>
+              </div>
             </div>
 
             <div class="mobile-inspector-tabs" role="tablist" aria-label="Nhóm chỉnh sửa">
@@ -113,7 +117,7 @@
                 <textarea id="visualText" rows="3" placeholder="Chọn thành phần có chữ"></textarea>
               </label>
               <div class="actions">
-                <button id="applyTextBtn" class="btn primary" type="button">Áp dụng chữ</button>
+                <button id="applyTextBtn" class="btn primary" type="button">Áp dụng</button>
               </div>
               <div id="textSourceInfo" class="source-info muted small"></div>
             </details>
