@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#1f6feb" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -19,13 +19,13 @@
       <h1>Web App Builder</h1>
       <p>Import app web, chạy thử trực tiếp, chỉnh giao diện an toàn, cấu hình và xuất lại ZIP ngay trên máy.</p>
     </div>
-    <span class="badge">Generic v1.3</span>
+    <span class="badge">Generic v1.4</span>
   </header>
 
-  <main class="layout">
+  <main class="layout main-layout" id="mainPage">
     <section class="panel span-2" id="importSection">
       <div class="panel-head">
-        <div><h2>1. Nạp source app</h2><p>Hỗ trợ chọn 3 file riêng, nhiều file, cả thư mục hoặc ZIP.</p></div>
+        <div><h2>Nạp source app</h2><p>Hỗ trợ chọn 3 file riêng, nhiều file, cả thư mục hoặc ZIP.</p></div>
         <div class="actions">
           <label class="btn primary">Chọn file / ZIP<input id="fileInput" type="file" multiple hidden></label>
           <label class="btn">Chọn thư mục<input id="folderInput" type="file" webkitdirectory multiple hidden></label>
@@ -37,19 +37,122 @@
       <div id="fileList" class="file-list"></div>
     </section>
 
-    <section class="panel span-2 visual-panel" id="visualSection">
-      <div class="panel-head visual-head">
-        <div>
-          <h2>2. Mở app &amp; chỉnh trực quan</h2>
-          <p>Chạy app ngay trong Builder. Chuyển sang <b>Chỉnh sửa</b> rồi bấm vào thành phần trên màn hình để sửa.</p>
-        </div>
-        <div class="actions wrap">
-          <select id="previewEntry" class="compact-select" aria-label="File HTML mở preview"></select>
-          <button id="openPreviewBtn" class="btn primary" type="button">▶ Mở app</button>
-          <button id="reloadPreviewBtn" class="btn" type="button">↻ Tải lại</button>
-        </div>
-      </div>
 
+    <section class="panel editor-launch-panel" id="editorLaunchSection">
+      <div class="editor-launch-copy">
+        <span class="section-kicker">TRÌNH CHỈNH SỬA</span>
+        <h2>Chỉnh giao diện trực quan</h2>
+        <p>Mở app ở một màn hình riêng để sửa chữ, màu sắc, căn lề và khoảng cách mà không làm rối trang cấu hình.</p>
+        <span id="editorLaunchStatus" class="muted small">Nạp source để sử dụng.</span>
+      </div>
+      <button id="openEditorPageBtn" class="btn primary editor-launch-btn" type="button" disabled>Mở trình chỉnh sửa →</button>
+    </section>
+
+    <section class="panel" id="configSection">
+      <div class="panel-head"><div><h2>Cấu hình app</h2><p>Builder chỉ thay các giá trị đã xác nhận.</p></div></div>
+      <div class="form-grid">
+        <label>Tên app<input id="appName" autocomplete="off" placeholder="Ví dụ: OT Pro"></label>
+        <label>Tên ngắn<input id="shortName" autocomplete="off" placeholder="Ví dụ: OT"></label>
+        <label>Phiên bản<input id="version" autocomplete="off" placeholder="Ví dụ: V1.0.0"></label>
+        <label>Build ID<input id="buildId" autocomplete="off" placeholder="AUTO hoặc 20260814-01"></label>
+        <label class="wide">Supabase Project URL<input id="supabaseUrl" autocomplete="off" placeholder="https://xxxx.supabase.co"></label>
+        <label class="wide">Supabase Publishable / Anon key<input id="supabaseKey" autocomplete="off" placeholder="sb_publishable_... hoặc anon JWT"></label>
+      </div>
+      <details class="advanced-options">
+        <summary>Nâng cao</summary>
+        <div class="inline-options">
+          <label><input type="checkbox" id="globalNameSync"> Legacy: đồng bộ toàn bộ chuỗi tên app cũ trong các file text</label>
+          <label><input type="checkbox" id="autoBuild" checked> Tự tạo Build ID khi chuẩn bị build/export</label>
+        </div>
+        <p class="muted tiny">Legacy Global Name Sync tắt mặc định vì có thể tác động đến chuỗi không phải tên hiển thị.</p>
+      </details>
+    </section>
+
+    <details class="advanced-hub" id="mappingHub">
+      <summary>Mapping &amp; công cụ nâng cao <span>Phát hiện tự động · Quy tắc thủ công · Adapter/Profile</span></summary>
+      <div class="advanced-stack">
+    <section class="advanced-card">
+      <div class="panel-head"><div><h3>Phát hiện tự động</h3><p>Chỉ những mục bật mới được áp dụng.</p></div><button id="scanBtn" class="btn" type="button">Quét lại</button></div>
+      <div id="detections" class="detections muted">Nạp source để bắt đầu quét.</div>
+    </section>
+
+    <section class="advanced-card">
+      <div class="panel-head"><div><h3>Quy tắc thủ công</h3><p>Dùng khi source viết lạ hoặc Builder chưa nhận diện đúng.</p></div><button id="addRuleBtn" class="btn" type="button">+ Thêm quy tắc</button></div>
+      <div id="manualRules" class="rules"></div>
+    </section>
+
+    <section class="advanced-card">
+      <div class="panel-head"><div><h3>Adapter / Profile</h3><p>Lưu mapping để lần sau mở cùng kiểu app không phải cấu hình lại.</p></div></div>
+      <div class="actions wrap">
+        <button class="btn" id="saveProfileBtn" type="button">Lưu profile trên máy</button>
+        <button class="btn" id="loadProfileBtn" type="button">Nạp profile đã lưu</button>
+        <button class="btn" id="exportAdapterBtn" type="button">Xuất adapter JSON</button>
+        <label class="btn">Nhập adapter<input id="adapterInput" type="file" accept="application/json,.json" hidden></label>
+      </div>
+      <p class="muted small">Profile chỉ lưu cấu hình public/mapping trong trình duyệt này. Không dùng để lưu secret server.</p>
+    </section>
+
+      </div>
+    </details>
+
+    <section class="panel span-2" id="pwaSection">
+      <div class="panel-head">
+        <div><h2>PWA / Manifest / Service Worker</h2><p>Builder tự phát hiện PWA. Nếu app chưa có, bạn có thể tạo từng phần hoặc tạo PWA cơ bản hoàn chỉnh.</p></div>
+        <button id="refreshPwaBtn" class="btn" type="button">↻ Quét PWA</button>
+      </div>
+      <div id="pwaStatus" class="pwa-status muted">Nạp source để kiểm tra PWA.</div>
+      <div class="pwa-actions">
+        <button id="createManifestBtn" class="btn" type="button">+ Tạo Manifest</button>
+        <button id="createServiceWorkerBtn" class="btn" type="button">+ Tạo Service Worker</button>
+        <button id="createPwaBtn" class="btn primary" type="button">+ Tạo PWA cơ bản</button>
+        <button id="cancelPwaPlanBtn" class="btn danger ghost" type="button">Hủy phần PWA đang chờ</button>
+      </div>
+      <details class="advanced-options pwa-options">
+        <summary>Cấu hình PWA sẽ tạo</summary>
+        <div class="form-grid pwa-form">
+          <label>Tên app<input id="pwaName" autocomplete="off" placeholder="Tên hiển thị khi cài app"></label>
+          <label>Tên ngắn<input id="pwaShortName" autocomplete="off" maxlength="24" placeholder="Tên ngắn"></label>
+          <label>Start URL<input id="pwaStartUrl" autocomplete="off" value="./"></label>
+          <label>Display<select id="pwaDisplay"><option value="standalone">standalone</option><option value="fullscreen">fullscreen</option><option value="minimal-ui">minimal-ui</option><option value="browser">browser</option></select></label>
+          <label>Theme color<div class="color-row"><input id="pwaThemeColor" type="color" value="#1f6feb"><input id="pwaThemeColorHex" class="mono-input" value="#1f6feb" autocomplete="off"></div></label>
+          <label>Background color<div class="color-row"><input id="pwaBgColor" type="color" value="#ffffff"><input id="pwaBgColorHex" class="mono-input" value="#ffffff" autocomplete="off"></div></label>
+          <label class="wide">Icon 192 (nếu source có)<select id="pwaIcon192"><option value="">Không dùng</option></select></label>
+          <label class="wide">Icon 512 (nếu source có)<select id="pwaIcon512"><option value="">Không dùng</option></select></label>
+        </div>
+        <p class="muted tiny">Service Worker do Builder tạo chỉ cache app shell cùng origin. Request API/Supabase/external không bị cache.</p>
+      </details>
+    </section>
+
+    <section class="panel" id="validationSection">
+      <div class="panel-head"><div><h2>Kiểm tra an toàn</h2><p>Quét lỗi cấu hình, visual edit, PWA và secret không nên nằm trong frontend.</p></div><button id="validateBtn" class="btn" type="button">Kiểm tra</button></div>
+      <div id="validation" class="validation muted">Chưa kiểm tra.</div>
+      <label class="override"><input id="allowUnsafe" type="checkbox"> Cho phép xuất dù có cảnh báo nghiêm trọng</label>
+    </section>
+
+    <section class="panel span-2 export-panel" id="exportSection">
+      <div>
+        <h2>Xuất app</h2>
+        <p id="exportHint">Builder giữ nguyên cấu trúc file và byte của file không chỉnh sửa; chỉ build các thay đổi đã xác nhận.</p>
+      </div>
+      <div class="actions">
+        <button id="previewBtn" class="btn" type="button">Xem Diff</button>
+        <button id="exportBtn" class="btn primary" type="button">Xuất ZIP mới</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="editorPage" class="editor-page app-page" hidden>
+    <header class="editor-page-header">
+      <button id="backFromEditorBtn" class="editor-back-btn" type="button" aria-label="Quay lại Builder">‹</button>
+      <div class="editor-page-title"><strong>Trình chỉnh sửa</strong><span id="editorProjectLabel">Chưa nạp source</span></div>
+      <span class="editor-page-badge">Visual</span>
+    </header>
+    <section class="visual-panel editor-visual-panel" id="visualSection">
+      <div class="editor-sourcebar">
+        <label class="editor-entry-label"><span>Trang chạy</span><select id="previewEntry" class="compact-select" aria-label="File HTML mở preview"></select></label>
+        <button id="openPreviewBtn" class="btn primary" type="button">▶ Mở app</button>
+        <button id="reloadPreviewBtn" class="btn" type="button" aria-label="Tải lại preview">↻</button>
+      </div>
       <div class="visual-toolbar">
         <div class="segmented mode-segment" aria-label="Chế độ preview">
           <button id="runModeBtn" class="seg active" type="button">▶ <span>Chạy</span></button>
@@ -67,6 +170,11 @@
             <option value="desktop">Desktop</option>
           </select>
         </label>
+        <div class="preview-zoom-control" aria-label="Zoom app preview">
+          <button id="previewZoomOutBtn" type="button" aria-label="Thu nhỏ app">−</button>
+          <button id="previewZoomLabel" type="button" title="Đặt lại 100%">100%</button>
+          <button id="previewZoomInBtn" type="button" aria-label="Phóng to app">+</button>
+        </div>
         <button id="fullscreenPreviewBtn" class="btn fullscreen-btn" type="button">⛶ <span>Toàn màn hình</span></button>
         <div class="toolbar-spacer"></div>
         <button id="undoVisualBtn" class="btn compact-action" type="button" title="Hoàn tác">↶ <span>Hoàn tác</span></button>
@@ -210,97 +318,12 @@
       </div>
     </section>
 
-    <section class="panel">
-      <div class="panel-head"><div><h2>3. Cấu hình chính</h2><p>Builder chỉ thay các giá trị đã xác nhận.</p></div></div>
-      <div class="form-grid">
-        <label>Tên app<input id="appName" autocomplete="off" placeholder="Ví dụ: OT Pro"></label>
-        <label>Tên ngắn<input id="shortName" autocomplete="off" placeholder="Ví dụ: OT"></label>
-        <label>Phiên bản<input id="version" autocomplete="off" placeholder="Ví dụ: V1.0.0"></label>
-        <label>Build ID<input id="buildId" autocomplete="off" placeholder="AUTO hoặc 20260814-01"></label>
-        <label class="wide">Supabase Project URL<input id="supabaseUrl" autocomplete="off" placeholder="https://xxxx.supabase.co"></label>
-        <label class="wide">Supabase Publishable / Anon key<input id="supabaseKey" autocomplete="off" placeholder="sb_publishable_... hoặc anon JWT"></label>
-      </div>
-      <details class="advanced-options">
-        <summary>Nâng cao</summary>
-        <div class="inline-options">
-          <label><input type="checkbox" id="globalNameSync"> Legacy: đồng bộ toàn bộ chuỗi tên app cũ trong các file text</label>
-          <label><input type="checkbox" id="autoBuild" checked> Tự tạo Build ID khi chuẩn bị build/export</label>
-        </div>
-        <p class="muted tiny">Legacy Global Name Sync tắt mặc định vì có thể tác động đến chuỗi không phải tên hiển thị.</p>
-      </details>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head"><div><h2>4. Phát hiện tự động</h2><p>Chỉ những mục bật mới được áp dụng.</p></div><button id="scanBtn" class="btn" type="button">Quét lại</button></div>
-      <div id="detections" class="detections muted">Nạp source để bắt đầu quét.</div>
-    </section>
-
-    <section class="panel span-2">
-      <div class="panel-head"><div><h2>5. Quy tắc thủ công</h2><p>Dùng khi source viết lạ hoặc Builder chưa nhận diện đúng.</p></div><button id="addRuleBtn" class="btn" type="button">+ Thêm quy tắc</button></div>
-      <div id="manualRules" class="rules"></div>
-    </section>
-
-    <section class="panel">
-      <div class="panel-head"><div><h2>6. Adapter / Profile</h2><p>Lưu mapping để lần sau mở cùng kiểu app không phải cấu hình lại.</p></div></div>
-      <div class="actions wrap">
-        <button class="btn" id="saveProfileBtn" type="button">Lưu profile trên máy</button>
-        <button class="btn" id="loadProfileBtn" type="button">Nạp profile đã lưu</button>
-        <button class="btn" id="exportAdapterBtn" type="button">Xuất adapter JSON</button>
-        <label class="btn">Nhập adapter<input id="adapterInput" type="file" accept="application/json,.json" hidden></label>
-      </div>
-      <p class="muted small">Profile chỉ lưu cấu hình public/mapping trong trình duyệt này. Không dùng để lưu secret server.</p>
-    </section>
-
-    <section class="panel span-2" id="pwaSection">
-      <div class="panel-head">
-        <div><h2>7. PWA / Manifest / Service Worker</h2><p>Builder tự phát hiện PWA. Nếu app chưa có, bạn có thể tạo từng phần hoặc tạo PWA cơ bản hoàn chỉnh.</p></div>
-        <button id="refreshPwaBtn" class="btn" type="button">↻ Quét PWA</button>
-      </div>
-      <div id="pwaStatus" class="pwa-status muted">Nạp source để kiểm tra PWA.</div>
-      <div class="pwa-actions">
-        <button id="createManifestBtn" class="btn" type="button">+ Tạo Manifest</button>
-        <button id="createServiceWorkerBtn" class="btn" type="button">+ Tạo Service Worker</button>
-        <button id="createPwaBtn" class="btn primary" type="button">+ Tạo PWA cơ bản</button>
-        <button id="cancelPwaPlanBtn" class="btn danger ghost" type="button">Hủy phần PWA đang chờ</button>
-      </div>
-      <details class="advanced-options pwa-options" open>
-        <summary>Cấu hình PWA sẽ tạo</summary>
-        <div class="form-grid pwa-form">
-          <label>Tên app<input id="pwaName" autocomplete="off" placeholder="Tên hiển thị khi cài app"></label>
-          <label>Tên ngắn<input id="pwaShortName" autocomplete="off" maxlength="24" placeholder="Tên ngắn"></label>
-          <label>Start URL<input id="pwaStartUrl" autocomplete="off" value="./"></label>
-          <label>Display<select id="pwaDisplay"><option value="standalone">standalone</option><option value="fullscreen">fullscreen</option><option value="minimal-ui">minimal-ui</option><option value="browser">browser</option></select></label>
-          <label>Theme color<div class="color-row"><input id="pwaThemeColor" type="color" value="#1f6feb"><input id="pwaThemeColorHex" class="mono-input" value="#1f6feb" autocomplete="off"></div></label>
-          <label>Background color<div class="color-row"><input id="pwaBgColor" type="color" value="#ffffff"><input id="pwaBgColorHex" class="mono-input" value="#ffffff" autocomplete="off"></div></label>
-          <label class="wide">Icon 192 (nếu source có)<select id="pwaIcon192"><option value="">Không dùng</option></select></label>
-          <label class="wide">Icon 512 (nếu source có)<select id="pwaIcon512"><option value="">Không dùng</option></select></label>
-        </div>
-        <p class="muted tiny">Service Worker do Builder tạo chỉ cache app shell cùng origin. Request API/Supabase/external không bị cache.</p>
-      </details>
-    </section>
-
-    <section class="panel" id="validationSection">
-      <div class="panel-head"><div><h2>8. Kiểm tra an toàn</h2><p>Quét lỗi cấu hình, visual edit, PWA và secret không nên nằm trong frontend.</p></div><button id="validateBtn" class="btn" type="button">Kiểm tra</button></div>
-      <div id="validation" class="validation muted">Chưa kiểm tra.</div>
-      <label class="override"><input id="allowUnsafe" type="checkbox"> Cho phép xuất dù có cảnh báo nghiêm trọng</label>
-    </section>
-
-    <section class="panel span-2 export-panel" id="exportSection">
-      <div>
-        <h2>9. Xuất app</h2>
-        <p id="exportHint">Builder giữ nguyên cấu trúc file và byte của file không chỉnh sửa; chỉ build các thay đổi đã xác nhận.</p>
-      </div>
-      <div class="actions">
-        <button id="previewBtn" class="btn" type="button">Xem Diff</button>
-        <button id="exportBtn" class="btn primary" type="button">Xuất ZIP mới</button>
-      </div>
-    </section>
-  </main>
+  </div>
 
   <nav class="mobile-bottom-nav" aria-label="Điều hướng Builder">
     <button type="button" data-mobile-action="import">📥<span>Nạp</span></button>
-    <button type="button" data-mobile-action="view">👁<span>Xem</span></button>
     <button type="button" data-mobile-action="edit">✎<span>Sửa</span></button>
+    <button type="button" data-mobile-action="config">⚙<span>Cấu hình</span></button>
     <button type="button" data-mobile-action="check">✓<span>Check</span></button>
     <button type="button" data-mobile-action="export">📦<span>Xuất</span></button>
   </nav>

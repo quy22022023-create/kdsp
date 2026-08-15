@@ -50,3 +50,17 @@ Web App Builder Generic v1.3
 - Undo/Redo/Reset chuyển vào header bảng chỉnh sửa; bottom navigation tự ẩn khi đang sửa
 - Sửa regression PWA Generator: Manifest mới tạo luôn được gắn vào HTML entry cùng Service Worker
 - Giữ nguyên PWA Generator, Validator, Adapter/Profile, Preview/Diff và ZIP engine từ v1.2
+
+
+Web App Builder Generic v1.4
+- Sắp xếp lại trang chính theo bố cục một cột, ưu tiên điện thoại và loại bỏ panel chen ngang gây rối
+- Tách Visual Editor thành trang con nội bộ #editor; chuyển trang không mất source/import state
+- Thêm card Mở trình chỉnh sửa trên trang chính và nút quay lại riêng trong Editor
+- Gom Auto Detect, Manual Mapping và Adapter/Profile vào nhóm Mapping & công cụ nâng cao mặc định thu gọn
+- PWA advanced config mặc định thu gọn để trang chính ngắn, rõ hơn
+- Mobile bottom nav đổi thành Nạp / Sửa / Cấu hình / Check / Xuất
+- Khóa zoom của Builder UI bằng viewport + gesture guard; tăng cỡ input mobile để tránh iOS focus zoom
+- Thêm zoom riêng cho app Preview 50–200% với nút − / 100% / +
+- Thêm pinch hai ngón trong iframe preview thông qua Preview Bridge; không mở lại zoom cho toàn bộ Builder
+- Giữ nguyên Visual Editor, PWA Generator, Validator, Profile/Adapter, binary preservation và ZIP engine
+- Builder shell Service Worker cache version tăng lên v1.4-pwa-1

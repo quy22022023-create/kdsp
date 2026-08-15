@@ -1,4 +1,4 @@
-# WEB APP BUILDER GENERIC v1.3
+# WEB APP BUILDER GENERIC v1.4
 
 Web app chạy hoàn toàn trong trình duyệt để import, chạy thử, chỉnh giao diện, cấu hình và xuất lại source của nhiều web app khác nhau mà không cần server.
 
@@ -17,13 +17,12 @@ Web app chạy hoàn toàn trong trình duyệt để import, chạy thử, ch�
 
 1. Mở `index.html` của Builder bằng Chrome/Edge/Safari mới.
 2. Bấm **Chọn file / ZIP** và nạp source app.
-3. Ở mục **Mở app & chỉnh trực quan**, chọn file HTML entry rồi bấm **Mở app**.
-4. Dùng **Chạy** để thao tác app như bình thường.
-5. Chuyển sang **Chỉnh sửa**, bấm vào thành phần muốn sửa.
-6. Dùng bảng bên phải để sửa chữ, màu, font, căn lề, margin/padding hoặc dịch chuyển.
-7. Bấm **Xem Diff** để xem Builder sẽ thay đổi gì.
-8. Bấm **Kiểm tra**.
-9. Bấm **Xuất ZIP mới**.
+3. Bấm **Mở trình chỉnh sửa →** để chuyển sang trang con Visual Editor.
+4. Chọn trang HTML entry và bấm **Mở app** nếu preview chưa tự mở.
+5. Dùng **Chạy** để thao tác app như bình thường; chuyển sang **Chỉnh sửa** để chọn element.
+6. Sửa chữ, màu, font, căn lề, margin/padding hoặc dịch chuyển trong Inspector.
+7. Bấm nút quay lại để trở về trang chính.
+8. Bấm **Kiểm tra**, sau đó **Xem Diff** và **Xuất ZIP mới**.
 
 ## Visual Editor
 
@@ -162,7 +161,7 @@ Trên điện thoại, khu **Mở app & chỉnh trực quan** tự chuyển sang
 - Margin và Padding có thể khóa 4 cạnh để chỉnh đồng thời.
 - Căn dọc chỉ được Builder tự áp dụng khi parent là Flex/Grid, nhằm tránh phá layout.
 
-Thanh dưới mobile có 5 lối tắt: **Nạp / Xem / Sửa / Check / Xuất**.
+Thanh dưới mobile có 5 lối tắt: **Nạp / Sửa / Cấu hình / Check / Xuất**.
 
 ### Preview toàn màn hình
 
@@ -204,3 +203,17 @@ Mọi file/đoạn HTML được tạo đều đi qua **Validator + Diff** trư�
 - Undo / Redo / Reset nằm ngay trên header Inspector.
 - Bottom navigation tạm ẩn khi Inspector đang mở để tăng không gian chỉnh sửa.
 - Selector và thông tin kỹ thuật vẫn còn ở tab Nâng cao nhưng không chiếm diện tích giao diện cơ bản.
+
+
+## Bổ sung v1.4 – Bố cục mới / Editor trang con / chống zoom
+
+- Trang chính được sắp xếp lại theo một cột, tránh tình trạng các panel Cấu hình và Phát hiện tự động bị chen ngang trên điện thoại.
+- **Visual Editor được tách thành trang con nội bộ `#editor`**. Source đã import vẫn giữ nguyên trong bộ nhớ; không upload và không cần nạp lại khi chuyển trang.
+- Trang chính chỉ giữ các nhóm: Nạp source, mở Editor, Cấu hình app, Mapping nâng cao, PWA, Kiểm tra và Xuất.
+- Phát hiện tự động / Quy tắc thủ công / Adapter-Profile được gom vào **Mapping & công cụ nâng cao**, mặc định thu gọn.
+- PWA vẫn giữ status ở trang chính; phần cấu hình chi tiết mặc định thu gọn.
+- Giao diện Builder dùng viewport `maximum-scale=1, user-scalable=no`, chặn gesture pinch nhiều ngón và giữ input mobile ở kích thước phù hợp để hạn chế iOS tự zoom khi focus.
+- Việc khóa zoom chỉ áp dụng cho **Builder UI**. App trong Preview có zoom riêng từ **50% đến 200%** bằng `− / % / +`; chạm phần trăm để về 100%.
+- Preview bridge hỗ trợ pinch hai ngón bên trong app và chuyển mức zoom về Builder, nên vẫn có thể phóng to/thu nhỏ app dù giao diện Builder bị khóa zoom.
+- Nút quay lại trong Editor đưa về trang chính nhưng giữ các Visual Edit, Undo/Redo và source đang import.
+- Không thay đổi database, business logic, Adapter schema hay ZIP engine.

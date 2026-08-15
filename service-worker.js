@@ -1,7 +1,7 @@
 'use strict';
 
 const CACHE_PREFIX = 'wab-generic-shell-';
-const CACHE_NAME = `${CACHE_PREFIX}v1.3-pwa-1`;
+const CACHE_NAME = `${CACHE_PREFIX}v1.4-pwa-1`;
 const SHELL_FILES = [
   './',
   './index.html',
