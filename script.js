@@ -24,7 +24,6 @@
       fullscreen: false,
       sheetExpanded: false,
       inspectorTab: 'content',
-      zoom: 1,
     },
   };
 
@@ -135,7 +134,6 @@
     refreshPreviewEntries();
     refreshPwaUi();
     updateVisualButtons();
-    updateEditorLaunch();
   }
 
   function renderFiles(){
@@ -145,15 +143,6 @@
     fileListEl.innerHTML='';
     paths.slice(0,30).forEach(p=>{const d=document.createElement('span');d.className='file-chip';d.title=p;d.textContent=p;fileListEl.appendChild(d);});
     if(paths.length>30){const d=document.createElement('span');d.className='file-chip';d.textContent=`+${paths.length-30} file`;fileListEl.appendChild(d);}
-  }
-
-  function updateEditorLaunch(){
-    const htmlCount=[...state.files.keys()].filter(p=>/\.html?$/i.test(p)).length;
-    const ready=state.files.size>0&&htmlCount>0;
-    const btn=$('openEditorPageBtn'),status=$('editorLaunchStatus'),label=$('editorProjectLabel');
-    if(btn)btn.disabled=!ready;
-    if(status)status.textContent=ready?`${state.files.size} file • ${htmlCount} trang HTML sẵn sàng chỉnh`:(state.files.size?'Chưa tìm thấy file HTML để mở trình chỉnh sửa.':'Nạp source để sử dụng.');
-    if(label)label.textContent=ready?(els.appName?.value.trim()||state.projectName||'Web app'):'Chưa nạp source';
   }
 
   function addDetection(field, path, current, before='', after='', label='', confidence='high'){
@@ -511,7 +500,7 @@
   function buildVisualCss(entryPath){
     const edits=getVisualEdits(entryPath).filter(e=>Object.keys(e.styles||{}).length);
     if(!edits.length)return '';
-    const lines=['/* Web App Builder Generic v1.4 - visual overrides */'];
+    const lines=['/* Web App Builder Generic v1.3 - visual overrides */'];
     for(const e of edits){
       lines.push(`${e.selector} {`);
       for(const [prop,val] of Object.entries(e.styles)) lines.push(`  ${prop}: ${val} !important;`);
@@ -642,10 +631,10 @@
 
   function previewBridgeCode(entryPath,urlMap){
     const assets={};for(const [k,v] of urlMap)assets[k]=v;
-    const cfg={entryPath,rootDir:dirname(entryPath),assets,mode:state.preview.mode,zoom:state.preview.zoom||1};
+    const cfg={entryPath,rootDir:dirname(entryPath),assets,mode:state.preview.mode};
     return `(function(cfg){
 'use strict';
-const parentWin=window.parent;let mode=cfg.mode||'run',selected=null,hovered=null,previewZoom=Math.max(.5,Math.min(2,Number(cfg.zoom)||1)),pinchStart=0,pinchBase=1;
+const parentWin=window.parent;let mode=cfg.mode||'run',selected=null,hovered=null;
 function norm(path){const out=[];String(path||'').replace(/\\\\/g,'/').split('/').forEach(p=>{if(!p||p==='.')return;if(p==='..')out.pop();else out.push(p)});return out.join('/')}
 function dir(path){const a=path.split('/');a.pop();return a.length?a.join('/')+'/':''}
 function resolve(ref,base=cfg.entryPath){if(!ref||typeof ref!=='string'||/^(?:[a-z][a-z0-9+.-]*:|#|\\/\\/)/i.test(ref))return null;const c=ref.split('#')[0].split('?')[0];if(!c)return null;if(c.startsWith('/'))return norm(cfg.rootDir+c.replace(/^\\/+/,''));return norm(dir(base)+c)}
@@ -661,15 +650,9 @@ function select(el){selected=el;rectBox(selectBox,selected);parentWin.postMessag
 function setDirect(el,text){if(!el)return;const nodes=[...el.childNodes].filter(n=>n.nodeType===3);const n=nodes.find(n=>n.nodeValue.trim())||nodes[0];if(n)n.nodeValue=text;else if(!el.children.length)el.textContent=text;else el.insertBefore(document.createTextNode(text),el.firstChild)}
 function revealSpacer(){let s=document.getElementById('wab-edit-reveal-space');if(!s){s=document.createElement('div');s.id='wab-edit-reveal-space';Object.assign(s.style,{height:'0px',width:'1px',pointerEvents:'none',opacity:'0'});document.body.appendChild(s)}return s}
 function clearRevealSpace(){const s=document.getElementById('wab-edit-reveal-space');if(s)s.style.height='0px'}
-function applyPreviewZoom(value){previewZoom=Math.max(.5,Math.min(2,Number(value)||1));const target=document.body;if(!target){document.addEventListener('DOMContentLoaded',()=>applyPreviewZoom(previewZoom),{once:true});return}target.style.zoom=String(previewZoom);requestAnimationFrame(()=>{rectBox(selectBox,selected);rectBox(hoverBox,hovered)})}
-function touchDistance(t){const a=t[0],b=t[1],dx=a.clientX-b.clientX,dy=a.clientY-b.clientY;return Math.hypot(dx,dy)}
-applyPreviewZoom(previewZoom);
-document.addEventListener('touchstart',e=>{if(e.touches&&e.touches.length===2){pinchStart=touchDistance(e.touches);pinchBase=previewZoom;e.preventDefault()}},{passive:false});
-document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length===2&&pinchStart>0){const next=Math.max(.5,Math.min(2,pinchBase*(touchDistance(e.touches)/pinchStart)));parentWin.postMessage({type:'wab:preview-zoom',zoom:next},'*');e.preventDefault()}},{passive:false});
-document.addEventListener('touchend',e=>{if(!e.touches||e.touches.length<2)pinchStart=0},{passive:true});
 document.addEventListener('mouseover',e=>{if(mode!=='edit'||e.target===hoverBox||e.target===selectBox)return;hovered=e.target;rectBox(hoverBox,hovered)},true);document.addEventListener('mouseout',()=>{if(mode==='edit')hoverBox.style.display='none'},true);document.addEventListener('click',e=>{const route=e.target.closest&&e.target.closest('[data-wab-route]');if(mode==='run'&&route){e.preventDefault();parentWin.postMessage({type:'wab:navigate',path:route.dataset.wabRoute},'*');return}if(mode!=='edit')return;if(e.target===hoverBox||e.target===selectBox)return;e.preventDefault();e.stopPropagation();e.stopImmediatePropagation();select(e.target)},true);
 window.addEventListener('scroll',()=>{rectBox(selectBox,selected);rectBox(hoverBox,hovered)},true);window.addEventListener('resize',()=>{rectBox(selectBox,selected);rectBox(hoverBox,hovered)});
-window.addEventListener('message',e=>{const d=e.data||{};if(d.type==='wab:set-zoom'){applyPreviewZoom(d.zoom)}else if(d.type==='wab:set-mode'){mode=d.mode||'run';document.documentElement.style.cursor=mode==='edit'?'crosshair':'';hoverBox.style.display='none';if(mode!=='edit')clearRevealSpace()}else if(d.type==='wab:apply-style'){try{const el=document.querySelector(d.selector);if(el){if(d.value)el.style.setProperty(d.prop,d.value,'important');else el.style.removeProperty(d.prop);if(el===selected)rectBox(selectBox,el)}}catch{}}else if(d.type==='wab:apply-text'){try{setDirect(document.querySelector(d.selector),d.text)}catch{}}else if(d.type==='wab:select-selector'){try{const el=document.querySelector(d.selector);if(el)select(el)}catch{}}else if(d.type==='wab:clear-reveal-space'){clearRevealSpace()}else if(d.type==='wab:reveal-selector'){try{const el=document.querySelector(d.selector);if(el){const ratio=Math.max(.12,Math.min(.45,Number(d.ratio)||.28));const spacer=revealSpacer();spacer.style.height=Math.ceil(innerHeight*.5)+'px';el.scrollIntoView({behavior:'auto',block:'center',inline:'nearest'});requestAnimationFrame(()=>{const r=el.getBoundingClientRect(),desired=innerHeight*ratio,delta=r.top-desired;if(Math.abs(delta)>2)window.scrollBy({top:delta,behavior:d.behavior||'smooth'});setTimeout(()=>{if(el===selected)rectBox(selectBox,el)},220)})}}catch{}}});
+window.addEventListener('message',e=>{const d=e.data||{};if(d.type==='wab:set-mode'){mode=d.mode||'run';document.documentElement.style.cursor=mode==='edit'?'crosshair':'';hoverBox.style.display='none';if(mode!=='edit')clearRevealSpace()}else if(d.type==='wab:apply-style'){try{const el=document.querySelector(d.selector);if(el){if(d.value)el.style.setProperty(d.prop,d.value,'important');else el.style.removeProperty(d.prop);if(el===selected)rectBox(selectBox,el)}}catch{}}else if(d.type==='wab:apply-text'){try{setDirect(document.querySelector(d.selector),d.text)}catch{}}else if(d.type==='wab:select-selector'){try{const el=document.querySelector(d.selector);if(el)select(el)}catch{}}else if(d.type==='wab:clear-reveal-space'){clearRevealSpace()}else if(d.type==='wab:reveal-selector'){try{const el=document.querySelector(d.selector);if(el){const ratio=Math.max(.12,Math.min(.45,Number(d.ratio)||.28));const spacer=revealSpacer();spacer.style.height=Math.ceil(innerHeight*.5)+'px';el.scrollIntoView({behavior:'auto',block:'center',inline:'nearest'});requestAnimationFrame(()=>{const r=el.getBoundingClientRect(),desired=innerHeight*ratio,delta=r.top-desired;if(Math.abs(delta)>2)window.scrollBy({top:delta,behavior:d.behavior||'smooth'});setTimeout(()=>{if(el===selected)rectBox(selectBox,el)},220)})}}catch{}}});
 parentWin.postMessage({type:'wab:ready'},'*');
 })(${JSON.stringify(cfg)});`;
   }
@@ -709,7 +692,6 @@ parentWin.postMessage({type:'wab:ready'},'*');
       $('previewEmpty').hidden=true;
       previewFrame.onload=()=>{
         sendToPreview({type:'wab:set-mode',mode:state.preview.mode});
-        sendToPreview({type:'wab:set-zoom',zoom:state.preview.zoom||1});
         const target=reselectSelector||state.preview.lastSelector;
         if(target)setTimeout(()=>sendToPreview({type:'wab:select-selector',selector:target}),60);
       };
@@ -739,17 +721,9 @@ parentWin.postMessage({type:'wab:ready'},'*');
     if($('viewportSelect'))$('viewportSelect').value=viewport;
   }
 
-  function setPreviewZoom(value){
-    const z=Math.max(.5,Math.min(2,Math.round((Number(value)||1)*20)/20));
-    state.preview.zoom=z;
-    const label=$('previewZoomLabel');if(label)label.textContent=`${Math.round(z*100)}%`;
-    sendToPreview({type:'wab:set-zoom',zoom:z});
-  }
-
   function handlePreviewMessage(e){
     if(e.source!==previewFrame.contentWindow)return;
     const d=e.data||{};
-    if(d.type==='wab:preview-zoom'){setPreviewZoom(d.zoom);return;}
     if(d.type==='wab:selected'){
       state.preview.selected=d.payload;state.preview.lastSelector=d.payload?.selector||'';showInspector(d.payload);
     }else if(d.type==='wab:navigate'&&d.path&&state.files.has(d.path)){
@@ -892,39 +866,12 @@ parentWin.postMessage({type:'wab:ready'},'*');
     applyStylePatch(patch);
   }
 
-  function setBuilderPage(page){
-    const editor=page==='editor';
-    if(editor&&!state.files.size){alert('Hãy nạp source trước khi mở trình chỉnh sửa.');return false;}
-    const main=$('mainPage'),editorPage=$('editorPage');
-    if(main)main.hidden=editor;if(editorPage)editorPage.hidden=!editor;
-    document.body.classList.toggle('editor-page-active',editor);
-    if(editor){
-      updateEditorLaunch();
-      if(isMobileUi()&&state.preview.viewport==='desktop')setViewport('mobile');
-      if(!state.preview.opened)setTimeout(()=>openPreview(),30);
-      window.scrollTo({top:0,behavior:'auto'});
-    }else{
-      setFullscreenPreview(false);closeInspectorSheet();window.scrollTo({top:0,behavior:'auto'});
-    }
-    return true;
-  }
-
-  function openEditorPage(){
-    if(!state.files.size){alert('Hãy nạp source trước khi mở trình chỉnh sửa.');return;}
-    if(location.hash!=='#editor')location.hash='editor';else setBuilderPage('editor');
-  }
-  function closeEditorPage(){if(location.hash==='#editor')location.hash='';else setBuilderPage('main');}
-  function syncPageFromHash(){
-    if(location.hash==='#editor'&&state.files.size)setBuilderPage('editor');
-    else{if(location.hash==='#editor'&&!state.files.size){try{history.replaceState(null,'',location.pathname+location.search)}catch{location.hash=''}}setBuilderPage('main');}
-  }
-
   function handleMobileNav(action){
-    const scroll=id=>{setBuilderPage('main');setTimeout(()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'}),20);};
+    const scroll=id=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'});
     if(action==='import')scroll('importSection');
-    else if(action==='edit')openEditorPage();
-    else if(action==='config')scroll('configSection');
-    else if(action==='check'){scroll('validationSection');setTimeout(()=>state.files.size&&validate(),280);}
+    else if(action==='view'){scroll('visualSection');setPreviewMode('run');if(state.files.size&&!state.preview.opened)openPreview();}
+    else if(action==='edit'){scroll('visualSection');setPreviewMode('edit');if(state.files.size&&!state.preview.opened)openPreview();}
+    else if(action==='check'){scroll('validationSection');setTimeout(()=>state.files.size&&validate(),250);}
     else if(action==='export')scroll('exportSection');
   }
 
@@ -944,21 +891,40 @@ parentWin.postMessage({type:'wab:ready'},'*');
     return rel.startsWith('.')?rel:'./'+rel;
   }
 
+  function findServiceWorkerRegistration(filesMap,entry,html){
+    const direct=html.match(/(?:navigator\.)?serviceWorker\s*\.\s*register\s*\(\s*["'`]([^"'`]+)["'`]/i);
+    if(direct)return {ref:direct[1],source:entry};
+    try{
+      const doc=new DOMParser().parseFromString(html,'text/html');
+      const scripts=[...doc.querySelectorAll('script[src]')];
+      for(const el of scripts){
+        const src=el.getAttribute('src'); if(!src||/^(?:https?:|\/\/|data:|blob:)/i.test(src))continue;
+        const path=resolveVirtualPath(entry,src,dirname(entry));
+        const file=path&&filesMap.get(path);
+        if(!file||file.binary||file.text==null)continue;
+        const match=file.text.match(/(?:navigator\.)?serviceWorker\s*\.\s*register\s*\(\s*["'`]([^"'`]+)["'`]/i);
+        if(match)return {ref:match[1],source:path};
+      }
+    }catch{}
+    return {ref:'',source:''};
+  }
+
   function analyzePwa(filesMap=state.files){
     const entry=getPrimaryHtmlPath(filesMap),root=dirname(entry),keys=[...filesMap.keys()],html=entry&&filesMap.get(entry)?.text||'';
     const manifestCandidates=keys.filter(p=>/(^|\/)(?:manifest(?:\.webmanifest|\.json)|site\.webmanifest)$/i.test(p));
     const swCandidates=keys.filter(p=>/(^|\/)(?:service-worker|sw)\.js$/i.test(p));
-    let manifestHref='',manifestLinkedPath='',swRef='',swRegisteredPath='';
+    let manifestHref='',manifestLinkedPath='',swRef='',swRegisteredPath='',swRegistrationSource='';
     try{const doc=new DOMParser().parseFromString(html,'text/html'),link=doc.querySelector('link[rel~="manifest"]');manifestHref=link?.getAttribute('href')||'';}catch{}
     if(manifestHref)manifestLinkedPath=resolveVirtualPath(entry,manifestHref,root)||'';
-    const swMatch=html.match(/(?:navigator\.)?serviceWorker\s*\.\s*register\s*\(\s*["'`]([^"'`]+)["'`]/i);if(swMatch)swRef=swMatch[1];
-    if(swRef)swRegisteredPath=resolveVirtualPath(entry,swRef,root)||'';
+    const swRegistration=findServiceWorkerRegistration(filesMap,entry,html);
+    swRef=swRegistration.ref;swRegistrationSource=swRegistration.source;
+    if(swRef)swRegisteredPath=resolveVirtualPath(swRegistrationSource,swRef,dirname(swRegistrationSource))||'';
     const sameRootManifests=manifestCandidates.filter(p=>dirname(p)===root),sameRootSw=swCandidates.filter(p=>dirname(p)===root);
     const manifests=(manifestLinkedPath&&filesMap.has(manifestLinkedPath))?[manifestLinkedPath]:sameRootManifests;
     const serviceWorkers=(swRegisteredPath&&filesMap.has(swRegisteredPath))?[swRegisteredPath]:sameRootSw;
     const manifestPath=manifests[0]||root+'manifest.webmanifest',swPath=serviceWorkers[0]||root+'service-worker.js';
     const linkedManifest=!!manifestHref,registeredSw=!!swRef;
-    return {entry,root,manifests,serviceWorkers,manifestPath,swPath,linkedManifest,registeredSw,manifestHref,swRef,manifestCandidates,swCandidates};
+    return {entry,root,manifests,serviceWorkers,manifestPath,swPath,linkedManifest,registeredSw,manifestHref,swRef,swRegistrationSource,manifestCandidates,swCandidates};
   }
 
   function populatePwaIconOptions(){
@@ -989,7 +955,7 @@ parentWin.postMessage({type:'wab:ready'},'*');
     items.push(a.manifests.length?`✓ Manifest: ${a.manifests.join(', ')}`:(plan.createManifest?'◷ Manifest sẽ được tạo':'⚠ Chưa có Manifest'));
     items.push(a.serviceWorkers.length?`✓ Service Worker: ${a.serviceWorkers.join(', ')}`:(plan.createServiceWorker?'◷ Service Worker sẽ được tạo':'⚠ Chưa có Service Worker'));
     if(a.manifests.length||plan.createManifest)items.push(a.linkedManifest?'✓ HTML đã link Manifest':(plan.ensureWiring?'◷ Sẽ thêm link Manifest':'⚠ HTML chưa link Manifest'));
-    if(a.serviceWorkers.length||plan.createServiceWorker)items.push(a.registeredSw?'✓ HTML đã đăng ký Service Worker':(plan.ensureWiring?'◷ Sẽ thêm đăng ký Service Worker':'⚠ HTML chưa đăng ký Service Worker'));
+    if(a.serviceWorkers.length||plan.createServiceWorker)items.push(a.registeredSw?'✓ Đã có đăng ký Service Worker':(plan.ensureWiring?'◷ Sẽ thêm đăng ký Service Worker':'⚠ Chưa tìm thấy đăng ký Service Worker'));
     box.className='pwa-status';box.innerHTML='';for(const text of items){const d=document.createElement('div');d.className='pwa-status-row';d.textContent=text;box.appendChild(d);}
     $('createManifestBtn').disabled=a.manifests.length>0||plan.createManifest;
     $('createServiceWorkerBtn').disabled=a.serviceWorkers.length>0||plan.createServiceWorker;
@@ -1079,7 +1045,7 @@ parentWin.postMessage({type:'wab:ready'},'*');
     if(plan.ensureWiring){
       const f=output.get(entry);if(f&&!f.binary&&f.text!=null){let next=f.text;
         if(output.has(manifestPath))next=injectManifestLink(next,entry,manifestPath);
-        if(output.has(swPath))next=injectServiceWorkerRegister(next,entry,swPath);
+        if(output.has(swPath) && !afterFiles.registeredSw)next=injectServiceWorkerRegister(next,entry,swPath);
         if(next!==f.text){f.text=next;f.dirty=true;changes.push({path:entry,field:'pwa-wire',old:'HTML chưa liên kết đầy đủ PWA',new:'Đã liên kết Manifest / đăng ký Service Worker cần thiết',count:1});}
       }
     }
@@ -1130,7 +1096,7 @@ parentWin.postMessage({type:'wab:ready'},'*');
       try{const obj=JSON.parse(mf.text);if(!obj.name)checks.push(['warn','Manifest chưa có name.']);if(!obj.short_name)checks.push(['warn','Manifest chưa có short_name.']);if(!obj.start_url)checks.push(['warn','Manifest chưa có start_url.']);for(const icon of (obj.icons||[])){const ip=resolveVirtualPath(pwa.manifests[0],icon.src,pwa.root);if(ip&&!output.has(ip))checks.push(['warn',`Manifest tham chiếu icon chưa tìm thấy: ${icon.src}`]);}}catch{}
       if(pwa.linkedManifest)checks.push(['ok','index HTML đã liên kết Manifest.']);else checks.push(['warn','Có Manifest nhưng HTML entry chưa thấy <link rel="manifest">.']);
     }else checks.push(['warn','App chưa có Manifest. Có thể tạo tại mục PWA.']);
-    if(pwa.serviceWorkers.length){if(pwa.registeredSw)checks.push(['ok','Service Worker đã được đăng ký trong HTML entry.']);else checks.push(['warn','Có Service Worker nhưng chưa thấy đoạn đăng ký trong HTML entry.']);}
+    if(pwa.serviceWorkers.length){if(pwa.registeredSw)checks.push(['ok',`Service Worker đã có đăng ký (nguồn: ${pwa.swRegistrationSource||pwa.entry}).`]);else checks.push(['warn','Có Service Worker nhưng chưa tìm thấy đoạn đăng ký trong HTML entry hoặc JS mà HTML entry tải.']);}
     else checks.push(['warn','App chưa có Service Worker. Có thể tạo app shell offline tại mục PWA.']);
 
     const sw=[...output.keys()].filter(p=>/(^|\/)(?:service-worker|sw)\.js$/i.test(p));
@@ -1259,18 +1225,16 @@ parentWin.postMessage({type:'wab:ready'},'*');
   dropZone.addEventListener('drop',e=>loadFiles(e.dataTransfer.files));
 
   $('clearBtn').onclick=()=>{
-    setFullscreenPreview(false);closePreview();state.files.clear();state.detections=[];state.manualRules=[];state.visualEdits.clear();state.visualHistory=[];state.visualRedo=[];state.pwaPlan={createManifest:false,createServiceWorker:false,ensureWiring:false};manualRulesEl.innerHTML='';fileListEl.innerHTML='';summaryEl.textContent='Chưa nạp source.';detectionsEl.textContent='Nạp source để bắt đầu quét.';fields.forEach(k=>els[k].value='');if($('pwaName')){$('pwaName').value='';$('pwaShortName').value='';$('pwaStartUrl').value='./';$('pwaIcon192').innerHTML='<option value="">Không dùng</option>';$('pwaIcon512').innerHTML='<option value="">Không dùng</option>';}previewEntry.innerHTML='';markBuildDirty();refreshPwaUi();updateVisualButtons();updateEditorLaunch();setBuilderPage('main');
+    setFullscreenPreview(false);closePreview();state.files.clear();state.detections=[];state.manualRules=[];state.visualEdits.clear();state.visualHistory=[];state.visualRedo=[];state.pwaPlan={createManifest:false,createServiceWorker:false,ensureWiring:false};manualRulesEl.innerHTML='';fileListEl.innerHTML='';summaryEl.textContent='Chưa nạp source.';detectionsEl.textContent='Nạp source để bắt đầu quét.';fields.forEach(k=>els[k].value='');if($('pwaName')){$('pwaName').value='';$('pwaShortName').value='';$('pwaStartUrl').value='./';$('pwaIcon192').innerHTML='<option value="">Không dùng</option>';$('pwaIcon512').innerHTML='<option value="">Không dùng</option>';}previewEntry.innerHTML='';markBuildDirty();refreshPwaUi();updateVisualButtons();
   };
   $('scanBtn').onclick=scan;$('addRuleBtn').onclick=()=>addManualRule();$('validateBtn').onclick=validate;$('previewBtn').onclick=previewDiff;$('exportBtn').onclick=exportZip;$('closePreviewBtn').onclick=()=>$('previewDialog').close();
   $('saveProfileBtn').onclick=saveProfile;$('loadProfileBtn').onclick=loadProfile;$('exportAdapterBtn').onclick=exportAdapter;
   $('adapterInput').addEventListener('change',async e=>{try{const f=e.target.files[0];if(!f)return;await applyAdapter(JSON.parse(await f.text()));alert('Đã nhập adapter.');}catch(err){alert('Adapter lỗi: '+err.message);}});
 
-  fields.forEach(k=>els[k].addEventListener('input',()=>{if(k==='appName'){state.projectName=safeName(els.appName.value||'web-app');updateEditorLaunch();}markBuildDirty();}));
+  fields.forEach(k=>els[k].addEventListener('input',()=>{if(k==='appName')state.projectName=safeName(els.appName.value||'web-app');markBuildDirty();}));
   $('autoBuild').addEventListener('change',markBuildDirty);$('globalNameSync').addEventListener('change',markBuildDirty);$('allowRuntimeText').addEventListener('change',()=>{markBuildDirty();updateVisualStatus();});
 
   $('openPreviewBtn').onclick=()=>openPreview();$('reloadPreviewBtn').onclick=()=>openPreview(state.preview.lastSelector);previewEntry.addEventListener('change',()=>{state.preview.entryPath=previewEntry.value;state.preview.lastSelector='';if(state.preview.opened)openPreview();});
-  $('openEditorPageBtn').onclick=openEditorPage;$('backFromEditorBtn').onclick=closeEditorPage;
-  $('previewZoomOutBtn').onclick=()=>setPreviewZoom((state.preview.zoom||1)-.1);$('previewZoomInBtn').onclick=()=>setPreviewZoom((state.preview.zoom||1)+.1);$('previewZoomLabel').onclick=()=>setPreviewZoom(1);
   $('runModeBtn').onclick=()=>setPreviewMode('run');$('editModeBtn').onclick=()=>setPreviewMode('edit');document.querySelectorAll('.viewport-btn').forEach(b=>b.onclick=()=>setViewport(b.dataset.viewport));
   $('undoVisualBtn').onclick=undoVisual;$('redoVisualBtn').onclick=redoVisual;$('clearVisualBtn').onclick=clearVisual;$('resetSelectedBtn').onclick=resetSelectedVisual;$('applyTextBtn').onclick=applyVisualText;
   if($('undoVisualMobileBtn'))$('undoVisualMobileBtn').onclick=undoVisual;if($('redoVisualMobileBtn'))$('redoVisualMobileBtn').onclick=redoVisual;
@@ -1298,12 +1262,6 @@ parentWin.postMessage({type:'wab:ready'},'*');
   document.querySelectorAll('.mobile-bottom-nav button').forEach(b=>b.onclick=()=>handleMobileNav(b.dataset.mobileAction));
 
   window.addEventListener('message',handlePreviewMessage);
-  window.addEventListener('hashchange',syncPageFromHash);
-  // Khóa pinch zoom cho giao diện Builder. Preview iframe có zoom riêng.
-  document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
-  document.addEventListener('gesturechange',e=>e.preventDefault(),{passive:false});
-  document.addEventListener('gestureend',e=>e.preventDefault(),{passive:false});
-  document.addEventListener('touchmove',e=>{if(e.touches&&e.touches.length>1)e.preventDefault();},{passive:false});
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'&&state.preview.fullscreen){e.preventDefault();setFullscreenPreview(false);return;}
     if(state.preview.mode!=='edit'||!state.preview.selected)return;
@@ -1311,7 +1269,7 @@ parentWin.postMessage({type:'wab:ready'},'*');
     const step=e.shiftKey?10:1,dir={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[e.key];if(!dir)return;e.preventDefault();setNudge(dir[0],dir[1]);
   });
 
-  setPreviewMode('run');setViewport(isMobileUi()?'mobile':'desktop');setPreviewZoom(1);setInspectorTab('content');refreshPwaUi();updateVisualButtons();updateEditorLaunch();showInspector(null);syncPageFromHash();
+  setPreviewMode('run');setViewport(isMobileUi()?'mobile':'desktop');setInspectorTab('content');refreshPwaUi();updateVisualButtons();showInspector(null);
 
   // PWA shell for the Builder itself. Service Workers require http(s) (localhost is supported).
   // Opening index.html directly via file:// keeps all Builder functions available, but SW stays disabled.
