@@ -216,6 +216,7 @@
               <button class="inspector-tab active" data-tab="content" type="button">Nội dung</button>
               <button class="inspector-tab" data-tab="style" type="button">Kiểu</button>
               <button class="inspector-tab" data-tab="layout" type="button">Bố cục</button>
+              <button class="inspector-tab" data-tab="layer" type="button">Lớp</button>
               <button class="inspector-tab" data-tab="advanced" type="button">Nâng cao</button>
             </div>
 
@@ -305,6 +306,12 @@
                 <label class="space-right">Phải<input id="paddingRight" type="number" min="0" step="1"></label>
                 <label class="space-bottom">Dưới<input id="paddingBottom" type="number" min="0" step="1"></label>
               </div>
+            </details>
+
+            <details class="inspect-group" data-inspector-tab="layer">
+              <summary>Lớp (Layer)</summary>
+              <div id="layerList" class="layer-list"></div>
+              <p class="muted tiny">Chọn các lớp hoặc phần tử bao ngoài để dễ dàng chỉnh sửa khi bị chồng chéo.</p>
             </details>
 
             <details class="inspect-group" data-inspector-tab="advanced">
