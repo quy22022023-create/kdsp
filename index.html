@@ -24,6 +24,9 @@
 </head>
 <body>
   <div class="app-shell">
+    <!-- CẢNH BÁO LỖI CÚ PHÁP DATA.JS (NẾU CÓ KHI CHỈNH SỬA TRÊN GITHUB) -->
+    <div id="data-error-banner" style="display: none; background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; padding: 10px 12px; border-radius: 14px; font-size: 12px; font-weight: 600; line-height: 1.4;"></div>
+
     <!-- THANH TIÊU ĐỀ -->
     <header class="top-header">
       <div class="header-row">
@@ -356,7 +359,20 @@
   <!-- THÔNG BÁO TOAST -->
   <div id="toast-banner" class="toast">Đã lưu</div>
 
-  <!-- TẢI TỆP DỮ LIỆU TRƯỚC, SAU ĐÓ TẢI LOGIC ỨNG DỤNG -->
+  <!-- BẮT LỖI CÚ PHÁP NẾU DATA.JS BỊ SAI KHI CHỈNH SỬA -->
+  <script>
+    window.addEventListener('error', function(e) {
+      if (e && e.filename && e.filename.indexOf('data.js') !== -1) {
+        var banner = document.getElementById('data-error-banner');
+        if (banner) {
+          banner.style.display = 'block';
+          banner.innerHTML = '⚠️ <strong>Lỗi cú pháp trong tệp data.js (dòng ' + e.lineno + '):</strong> ' + e.message + '<br/>Hãy kiểm tra xem có thiếu dấu phẩy (,) giữa các từ hoặc còn dính ký tự ``` ở đầu/cuối tệp không.';
+        }
+      }
+    });
+  </script>
+
+  <!-- TẢI TỆP DỮ LIỆU & LOGIC RỜI -->
   <script src="data.js"></script>
   <script src="app.js"></script>
 </body>
