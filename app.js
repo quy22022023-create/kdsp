@@ -240,53 +240,159 @@ function deduplicateRepository() {
 
 /**
  * =========================================================================
- * 4. BỘ PHÁT ÂM TIẾNG NHẬT TỰ NHIÊN
+ * 4. BỘ PHÁT ÂM TIẾNG NHẬT TỰ NHIÊN (TƯƠNG THÍCH SAFARI IOS & GITHUB PAGES)
  * =========================================================================
  */
-let currentAudioPlayer = null;
+let cachedJaVoice = null;
+let activeUtterance = null;
+let fallbackAudioPlayer = null;
+
+function resolveBestJapaneseVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices() || [];
+  if (!voices.length) return null;
+
+  const jaVoices = voices.filter(v =>
+    v.lang && (v.lang.toLowerCase().startsWith('ja') || v.lang.toLowerCase().includes('jp'))
+  );
+  if (!jaVoices.length) return null;
+
+  const preferredKeywords = [
+    'kyoko',
+    'o-ren',
+    'nanami',
+    'haruka',
+    'ayumi',
+    'google 日本語',
+    'sayaka',
+    'ichika'
+  ];
+
+  for (const kw of preferredKeywords) {
+    const match = jaVoices.find(v => v.name.toLowerCase().includes(kw));
+    if (match) {
+      cachedJaVoice = match;
+      return match;
+    }
+  }
+
+  cachedJaVoice = jaVoices[0];
+  return cachedJaVoice;
+}
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  resolveBestJapaneseVoice();
+  if (typeof window.speechSynthesis.onvoiceschanged !== 'undefined') {
+    window.speechSynthesis.onvoiceschanged = () => {
+      resolveBestJapaneseVoice();
+    };
+  }
+}
+
+function setAudioButtonsPlaying(isPlaying) {
+  document.querySelectorAll('.audio-btn').forEach(btn => {
+    if (btn.classList.contains('solid')) {
+      btn.textContent = isPlaying ? '🔊 Đang đọc...' : '🔊 Đọc lại';
+    } else {
+      btn.textContent = isPlaying ? '🔊 Đang đọc...' : '🔊 Nghe';
+    }
+  });
+}
+
+function sanitizeJapaneseForSpeech(rawText) {
+  return String(rawText || '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/（[^）]*）/g, '')
+    .replace(/[〜～]/g, '')
+    .replace(/\s*[\/・]\s*/g, '、')
+    .trim();
+}
 
 function stopSpeech() {
-  if (currentAudioPlayer) {
+  if (fallbackAudioPlayer) {
     try {
-      currentAudioPlayer.pause();
-      currentAudioPlayer.currentTime = 0;
+      fallbackAudioPlayer.pause();
+      fallbackAudioPlayer.currentTime = 0;
     } catch (e) {}
-    currentAudioPlayer = null;
+    fallbackAudioPlayer = null;
   }
+
   if ('speechSynthesis' in window) {
     try {
-      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+        window.speechSynthesis.cancel();
+      }
     } catch (e) {}
   }
+  activeUtterance = null;
+  setAudioButtonsPlaying(false);
 }
 
 function speakJapanese(text) {
-  if (!text) return;
+  const cleanText = sanitizeJapaneseForSpeech(text);
+  if (!cleanText) return;
+
   stopSpeech();
 
-  const cleanText = text.replace(/\s*\/\s*/g, '、').trim();
-  const encoded = encodeURIComponent(cleanText);
-  const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ja&client=tw-ob&q=${encoded}`;
+  // Ưu tiên Web Speech API đồng bộ trực tiếp trong sự kiện chạm (bắt buộc với iOS Safari)
+  if ('speechSynthesis' in window) {
+    try {
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      const voice = cachedJaVoice || resolveBestJapaneseVoice();
+      if (voice) {
+        utterance.voice = voice;
+        utterance.lang = voice.lang || 'ja-JP';
+      } else {
+        utterance.lang = 'ja-JP';
+      }
 
-  try {
-    const audio = new Audio(ttsUrl);
-    currentAudioPlayer = audio;
-    audio.playbackRate = state.voiceMode === 'normal' ? 0.95 : 0.72;
-    audio.onerror = () => speakFallback(cleanText);
-    audio.play().catch(() => speakFallback(cleanText));
-  } catch (e) {
-    speakFallback(cleanText);
+      utterance.rate = state.voiceMode === 'slow' ? 0.68 : 0.94;
+      utterance.pitch = 1.02;
+      utterance.volume = 1.0;
+
+      utterance.onstart = () => setAudioButtonsPlaying(true);
+      utterance.onend = () => {
+        activeUtterance = null;
+        setAudioButtonsPlaying(false);
+      };
+      utterance.onerror = () => {
+        activeUtterance = null;
+        setAudioButtonsPlaying(false);
+        playAudioFallback(cleanText);
+      };
+
+      // Giữ tham chiếu toàn cục tránh bị trình duyệt thu hồi bộ nhớ giữa chừng
+      activeUtterance = utterance;
+      window.speechSynthesis.speak(utterance);
+      return;
+    } catch (e) {
+      setAudioButtonsPlaying(false);
+    }
   }
+
+  playAudioFallback(cleanText);
 }
 
-function speakFallback(cleanText) {
-  if (!('speechSynthesis' in window)) return;
+function playAudioFallback(cleanText) {
   try {
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    utterance.lang = 'ja-JP';
-    utterance.rate = state.voiceMode === 'slow' ? 0.7 : 0.94;
-    window.speechSynthesis.speak(utterance);
-  } catch (e) {}
+    const encoded = encodeURIComponent(cleanText);
+    const ttsUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=ja&client=gtx&q=${encoded}`;
+    const audio = new Audio(ttsUrl);
+    fallbackAudioPlayer = audio;
+    audio.playbackRate = state.voiceMode === 'normal' ? 0.95 : 0.72;
+    audio.onplay = () => setAudioButtonsPlaying(true);
+    audio.onended = () => setAudioButtonsPlaying(false);
+    audio.onerror = () => {
+      setAudioButtonsPlaying(false);
+      showToast('Thiết bị chưa bật giọng đọc tiếng Nhật (ja-JP)');
+    };
+    audio.play().catch(() => {
+      setAudioButtonsPlaying(false);
+      showToast('Hãy bật tiếng chuông iPhone hoặc kiểm tra giọng đọc ja-JP');
+    });
+  } catch (e) {
+    setAudioButtonsPlaying(false);
+  }
 }
 
 function toggleSpeechRate() {
@@ -547,12 +653,14 @@ function flipCard() {
 function speakCurrentCard() {
   const visible = getFilteredCards();
   if (!visible.length) return;
-  speakJapanese(visible[state.currentCardIndex].jp);
+  const card = visible[state.currentCardIndex];
+  speakJapanese(card.jp || card.kanji);
 }
 
 function nextCard() {
   const visible = getFilteredCards();
   if (!visible.length) return;
+  stopSpeech();
   state.isFlipped = false;
   state.currentCardIndex = (state.currentCardIndex + 1) % visible.length;
   renderFlashcard();
@@ -561,6 +669,7 @@ function nextCard() {
 function prevCard() {
   const visible = getFilteredCards();
   if (!visible.length) return;
+  stopSpeech();
   state.isFlipped = false;
   state.currentCardIndex = (state.currentCardIndex - 1 + visible.length) % visible.length;
   renderFlashcard();
@@ -570,6 +679,7 @@ function rateCurrentCard(rating) {
   const visible = getFilteredCards();
   if (!visible.length) return;
 
+  stopSpeech();
   const card = visible[state.currentCardIndex];
   state.progress[card.id] = rating;
   saveProgressStorage();
@@ -593,6 +703,7 @@ function rateCurrentCard(rating) {
  * =========================================================================
  */
 function setMode(newMode) {
+  stopSpeech();
   state.mode = newMode;
   document.getElementById('mode-flashcard-btn').classList.toggle('active', newMode === 'flashcard');
   document.getElementById('mode-quiz-btn').classList.toggle('active', newMode === 'quiz');
@@ -747,7 +858,7 @@ function handleQuizAnswer(btnEl, selectedId) {
   const currentCard = state.quiz.questions[state.quiz.currentIndex].card;
   const isCorrect = selectedId === currentCard.id;
 
-  speakJapanese(currentCard.jp);
+  speakJapanese(currentCard.jp || currentCard.kanji);
   document.getElementById('quiz-romaji-hint').style.display = 'block';
 
   document.querySelectorAll('.quiz-opt-btn').forEach(btn => {
@@ -778,6 +889,7 @@ function handleQuizAnswer(btnEl, selectedId) {
 }
 
 function nextQuizQuestion() {
+  stopSpeech();
   state.quiz.currentIndex += 1;
   renderQuizQuestion();
 }
