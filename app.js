@@ -41,7 +41,6 @@ function normalizeLevel(rawLevel) {
 function getDuplicateSignature(item) {
   const jp = String(item.jp || '').trim();
   const kanji = String(item.kanji || '').trim();
-  // Khóa nhận diện trùng: kết hợp cách đọc Hiragana/Katakana + chữ Kanji
   return `${jp}||${kanji}`;
 }
 
@@ -75,9 +74,14 @@ function normalizeCardObject(raw, idx = 0) {
  * =========================================================================
  */
 function loadRepository() {
-  const fileCards = (typeof VOCAB_DATA !== 'undefined' && Array.isArray(VOCAB_DATA))
-    ? VOCAB_DATA.map((item, idx) => ({ ...normalizeCardObject(item, idx), source: 'data.js' }))
-    : [];
+  const sourceArray = (typeof VOCAB_DATA !== 'undefined' && Array.isArray(VOCAB_DATA))
+    ? VOCAB_DATA
+    : (typeof window !== 'undefined' && Array.isArray(window.VOCAB_DATA) ? window.VOCAB_DATA : []);
+
+  const fileCards = sourceArray.map((item, idx) => ({
+    ...normalizeCardObject(item, idx),
+    source: 'data.js'
+  }));
 
   let extraCards = [];
   try {
@@ -85,7 +89,10 @@ function loadRepository() {
     if (savedExtra) {
       const parsed = JSON.parse(savedExtra);
       if (Array.isArray(parsed)) {
-        extraCards = parsed.map((item, idx) => ({ ...normalizeCardObject(item, idx), source: 'json' }));
+        extraCards = parsed.map((item, idx) => ({
+          ...normalizeCardObject(item, idx),
+          source: 'json'
+        }));
       }
     }
 
@@ -101,7 +108,6 @@ function loadRepository() {
     state.progress = {};
   }
 
-  // Hợp nhất data.js và thẻ nhập thêm từ JSON
   REPO_CARDS = [...fileCards, ...extraCards];
 }
 
@@ -221,7 +227,6 @@ function deduplicateRepository() {
     } else if (card.source === 'json') {
       removedCount++;
     } else {
-      // Giữ lại nếu nằm trong file data.js gốc nhưng đánh dấu cảnh báo
       uniqueCards.push(card);
     }
   });
@@ -396,7 +401,6 @@ function shuffleCurrentCards() {
 function refreshUI() {
   const hasCards = REPO_CARDS.length > 0;
 
-  // Cập nhật số lượng trên từng tab N5 / N4 / N3
   document.getElementById('count-ALL').textContent = REPO_CARDS.length;
   document.getElementById('count-N5').textContent = REPO_CARDS.filter(c => c.level === 'N5').length;
   document.getElementById('count-N4').textContent = REPO_CARDS.filter(c => c.level === 'N4').length;
@@ -603,7 +607,6 @@ function pickQuizFormatForCard(card) {
   if (card.level === 'N4') {
     return Math.random() < 0.5 ? 'JP_TO_VI' : 'KANJI_TO_READING';
   }
-  // N3: ưu tiên luyện đọc Kanji và chọn Kanji từ nghĩa Việt
   const modes = ['KANJI_TO_READING', 'VI_TO_KANJI', 'JP_TO_VI'];
   return modes[Math.floor(Math.random() * modes.length)];
 }
@@ -682,7 +685,6 @@ function renderQuizQuestion() {
   romajiHint.style.display = 'none';
   document.getElementById('quiz-feedback-box').style.display = 'none';
 
-  // Ưu tiên bốc đáp án nhiễu cùng cấp độ (N5/N4/N3)
   let sameLevelPool = REPO_CARDS.filter(c => c.id !== currentCard.id && c.level === currentCard.level);
   if (qType === 'VI_TO_KANJI') {
     sameLevelPool = sameLevelPool.filter(c => Boolean(c.kanji));
@@ -978,13 +980,11 @@ function importJsonToRepo() {
   let addedCount = 0;
   let updatedCount = 0;
 
-  // Thêm các từ mới hoàn toàn
   analysis.newItems.forEach(item => {
     REPO_CARDS.push({ ...item, source: 'json' });
     addedCount++;
   });
 
-  // Xử lý các từ trùng với kho nếu người dùng chọn "Cập nhật đè"
   if (policy === 'overwrite' && analysis.dupWithRepo.length > 0) {
     analysis.dupWithRepo.forEach(({ incoming, existing }) => {
       const idx = REPO_CARDS.findIndex(c => c.id === existing.id);
