@@ -240,12 +240,32 @@ function deduplicateRepository() {
 
 /**
  * =========================================================================
- * 4. BỘ PHÁT ÂM TIẾNG NHẬT TỰ NHIÊN (TƯƠNG THÍCH SAFARI IOS & GITHUB PAGES)
+ * 4. BỘ PHÁT ÂM TIẾNG NHẬT TỰ NHIÊN 2 TẦNG (NEURAL VOICE + OFFLINE SIRI/KYOKO)
  * =========================================================================
  */
 let cachedJaVoice = null;
 let activeUtterance = null;
-let fallbackAudioPlayer = null;
+let activeAudioElement = null;
+let fallbackTimerId = null;
+let audioUnlocked = false;
+const neuralAudioCache = new Map();
+
+// Mở khóa hệ thống âm thanh trên iPhone Safari ngay lần chạm đầu tiên
+function unlockMobileAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      const ctx = new AudioCtx();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+    }
+  } catch (e) {}
+}
 
 function resolveBestJapaneseVoice() {
   if (!('speechSynthesis' in window)) return null;
@@ -258,6 +278,7 @@ function resolveBestJapaneseVoice() {
   if (!jaVoices.length) return null;
 
   const preferredKeywords = [
+    'siri',
     'kyoko',
     'o-ren',
     'nanami',
@@ -303,18 +324,28 @@ function sanitizeJapaneseForSpeech(rawText) {
   return String(rawText || '')
     .replace(/\([^)]*\)/g, '')
     .replace(/（[^）]*）/g, '')
+    .replace(/\[[^\]]*\]/g, '')
     .replace(/[〜～]/g, '')
     .replace(/\s*[\/・]\s*/g, '、')
     .trim();
 }
 
 function stopSpeech() {
-  if (fallbackAudioPlayer) {
+  if (fallbackTimerId) {
+    clearTimeout(fallbackTimerId);
+    fallbackTimerId = null;
+  }
+
+  if (activeAudioElement) {
     try {
-      fallbackAudioPlayer.pause();
-      fallbackAudioPlayer.currentTime = 0;
+      activeAudioElement.oncanplaythrough = null;
+      activeAudioElement.onplay = null;
+      activeAudioElement.onended = null;
+      activeAudioElement.onerror = null;
+      activeAudioElement.pause();
+      activeAudioElement.currentTime = 0;
     } catch (e) {}
-    fallbackAudioPlayer = null;
+    activeAudioElement = null;
   }
 
   if ('speechSynthesis' in window) {
@@ -328,68 +359,165 @@ function stopSpeech() {
   setAudioButtonsPlaying(false);
 }
 
+function buildNeuralTtsUrls(cleanText) {
+  const encoded = encodeURIComponent(cleanText);
+  return [
+    `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&q=${encoded}`,
+    `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=ja&q=${encoded}`
+  ];
+}
+
+function configurePitchPreservingAudio(audioEl, rate) {
+  audioEl.playbackRate = rate;
+  audioEl.defaultPlaybackRate = rate;
+  if ('preservesPitch' in audioEl) audioEl.preservesPitch = true;
+  if ('mozPreservesPitch' in audioEl) audioEl.mozPreservesPitch = true;
+  if ('webkitPreservesPitch' in audioEl) audioEl.webkitPreservesPitch = true;
+}
+
 function speakJapanese(text) {
   const cleanText = sanitizeJapaneseForSpeech(text);
   if (!cleanText) return;
 
   stopSpeech();
+  setAudioButtonsPlaying(true);
 
-  // Ưu tiên Web Speech API đồng bộ trực tiếp trong sự kiện chạm (bắt buộc với iOS Safari)
-  if ('speechSynthesis' in window) {
-    try {
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      const voice = cachedJaVoice || resolveBestJapaneseVoice();
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang || 'ja-JP';
-      } else {
-        utterance.lang = 'ja-JP';
-      }
+  const targetRate = state.voiceMode === 'slow' ? 0.72 : 0.96;
 
-      utterance.rate = state.voiceMode === 'slow' ? 0.68 : 0.94;
-      utterance.pitch = 1.02;
-      utterance.volume = 1.0;
-
-      utterance.onstart = () => setAudioButtonsPlaying(true);
-      utterance.onend = () => {
-        activeUtterance = null;
-        setAudioButtonsPlaying(false);
-      };
-      utterance.onerror = () => {
-        activeUtterance = null;
-        setAudioButtonsPlaying(false);
-        playAudioFallback(cleanText);
-      };
-
-      // Giữ tham chiếu toàn cục tránh bị trình duyệt thu hồi bộ nhớ giữa chừng
-      activeUtterance = utterance;
-      window.speechSynthesis.speak(utterance);
-      return;
-    } catch (e) {
-      setAudioButtonsPlaying(false);
-    }
+  // Nếu đã có trong bộ nhớ đệm -> phát lại ngay lập tức (0ms độ trễ)
+  if (neuralAudioCache.has(cleanText)) {
+    const cachedSrc = neuralAudioCache.get(cleanText);
+    playHtml5AudioSrc(cachedSrc, targetRate, () => {
+      neuralAudioCache.delete(cleanText);
+      speakWithDeviceVoice(cleanText);
+    });
+    return;
   }
 
-  playAudioFallback(cleanText);
+  const urls = buildNeuralTtsUrls(cleanText);
+  let settled = false;
+
+  // Bộ hẹn giờ an toàn: nếu mạng chậm quá 1.8 giây tự chuyển sang giọng thiết bị để không bị im lặng
+  fallbackTimerId = setTimeout(() => {
+    if (!settled) {
+      settled = true;
+      if (activeAudioElement) {
+        try { activeAudioElement.pause(); } catch (e) {}
+        activeAudioElement = null;
+      }
+      speakWithDeviceVoice(cleanText);
+    }
+  }, 1800);
+
+  const tryUrl = (idx) => {
+    if (settled) return;
+    if (idx >= urls.length) {
+      settled = true;
+      clearTimeout(fallbackTimerId);
+      speakWithDeviceVoice(cleanText);
+      return;
+    }
+
+    const url = urls[idx];
+    const audio = new Audio();
+    audio.preload = 'auto';
+    audio.referrerPolicy = 'no-referrer';
+    configurePitchPreservingAudio(audio, targetRate);
+    activeAudioElement = audio;
+
+    audio.onplay = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(fallbackTimerId);
+      neuralAudioCache.set(cleanText, url);
+      setAudioButtonsPlaying(true);
+    };
+
+    audio.onended = () => {
+      activeAudioElement = null;
+      setAudioButtonsPlaying(false);
+    };
+
+    audio.onerror = () => {
+      if (!settled) {
+        tryUrl(idx + 1);
+      }
+    };
+
+    audio.src = url;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(fallbackTimerId);
+          speakWithDeviceVoice(cleanText);
+        }
+      });
+    }
+  };
+
+  tryUrl(0);
 }
 
-function playAudioFallback(cleanText) {
+function playHtml5AudioSrc(src, rate, onFail) {
+  const audio = new Audio(src);
+  audio.referrerPolicy = 'no-referrer';
+  configurePitchPreservingAudio(audio, rate);
+  activeAudioElement = audio;
+
+  audio.onplay = () => setAudioButtonsPlaying(true);
+  audio.onended = () => {
+    activeAudioElement = null;
+    setAudioButtonsPlaying(false);
+  };
+  audio.onerror = () => {
+    activeAudioElement = null;
+    if (typeof onFail === 'function') onFail();
+  };
+
+  audio.play().catch(() => {
+    activeAudioElement = null;
+    if (typeof onFail === 'function') onFail();
+  });
+}
+
+function speakWithDeviceVoice(cleanText) {
+  if (!('speechSynthesis' in window)) {
+    setAudioButtonsPlaying(false);
+    showToast('Thiết bị không hỗ trợ phát âm tiếng Nhật');
+    return;
+  }
+
   try {
-    const encoded = encodeURIComponent(cleanText);
-    const ttsUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&tl=ja&client=gtx&q=${encoded}`;
-    const audio = new Audio(ttsUrl);
-    fallbackAudioPlayer = audio;
-    audio.playbackRate = state.voiceMode === 'normal' ? 0.95 : 0.72;
-    audio.onplay = () => setAudioButtonsPlaying(true);
-    audio.onended = () => setAudioButtonsPlaying(false);
-    audio.onerror = () => {
+    // Thêm dấu phẩy Nhật nhẹ cho từ 1-2 ký tự để giọng đọc hệ thống không bị cắt cụt đuôi
+    const paddedText = cleanText.length <= 2 ? `${cleanText}、` : cleanText;
+    const utterance = new SpeechSynthesisUtterance(paddedText);
+    const voice = cachedJaVoice || resolveBestJapaneseVoice();
+
+    if (voice) {
+      utterance.voice = voice;
+      utterance.lang = voice.lang || 'ja-JP';
+    } else {
+      utterance.lang = 'ja-JP';
+    }
+
+    utterance.rate = state.voiceMode === 'slow' ? 0.68 : 0.92;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    utterance.onstart = () => setAudioButtonsPlaying(true);
+    utterance.onend = () => {
+      activeUtterance = null;
       setAudioButtonsPlaying(false);
-      showToast('Thiết bị chưa bật giọng đọc tiếng Nhật (ja-JP)');
     };
-    audio.play().catch(() => {
+    utterance.onerror = () => {
+      activeUtterance = null;
       setAudioButtonsPlaying(false);
-      showToast('Hãy bật tiếng chuông iPhone hoặc kiểm tra giọng đọc ja-JP');
-    });
+    };
+
+    activeUtterance = utterance;
+    window.speechSynthesis.speak(utterance);
   } catch (e) {
     setAudioButtonsPlaying(false);
   }
@@ -399,7 +527,7 @@ function toggleSpeechRate() {
   state.voiceMode = state.voiceMode === 'normal' ? 'slow' : 'normal';
   const btn = document.getElementById('speech-rate-btn');
   btn.textContent = state.voiceMode === 'normal' ? 'Đọc: Chuẩn' : 'Đọc: Chậm';
-  showToast(state.voiceMode === 'normal' ? 'Tốc độ đọc chuẩn' : 'Tốc độ đọc chậm');
+  showToast(state.voiceMode === 'normal' ? 'Tốc độ đọc chuẩn' : 'Tốc độ đọc chậm rõ âm');
   speakCurrentCard();
 }
 
@@ -1189,6 +1317,8 @@ function initSwipeGestures() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('touchstart', unlockMobileAudio, { once: true, passive: true });
+  document.addEventListener('click', unlockMobileAudio, { once: true });
   loadRepository();
   initSwipeGestures();
   refreshUI();
