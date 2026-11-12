@@ -842,7 +842,7 @@ function fillSampleJson() {
       kanji: '判断',
       romaji: 'handan',
       vi: 'Phán đoán, quyết định',
-      mnemonic: 'Phán xét và đưa ra quyết断'
+      mnemonic: 'Phán xét và đưa ra quyết định'
     }
   ];
   document.getElementById('import-json-text').value = JSON.stringify(sample, null, 2);
@@ -1057,6 +1057,7 @@ function showToast(msg) {
 
 function initSwipeGestures() {
   const stage = document.getElementById('card-stage-wrapper');
+  if (!stage) return;
   let startX = 0;
   let startY = 0;
 
