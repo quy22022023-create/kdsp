@@ -9,7 +9,6 @@
  */
 
 var VOCAB_DATA = [
-  [
   {
     "level": "N4",
     "topic": "Công việc & Giao tiếp công sở",
@@ -235,7 +234,6 @@ var VOCAB_DATA = [
     "vi": "Điều tra, tìm hiểu",
     "mnemonic": "Chữ Điều (調 - bộ Ngôn 言 + chữ Chu 周) -> Dùng lời nói đi vòng quanh để điều tra."
   }
-]
 
   // Dán các đối tượng từ vựng JSON của bạn vào bên trong cặp ngoặc vuông [ ] này
 ];
