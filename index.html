@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="referrer" content="no-referrer" />
-  <title>Nhật Ngữ N5–N3 Flashcards &amp; Dịch Câu</title>
+  <title>Nhật Ngữ N5–N3 • Từ Vựng &amp; Bài Tập Liên Kết</title>
 
   <!-- Hỗ trợ thêm vào Màn hình chính iPhone (Safari Web App) -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -25,7 +25,7 @@
 </head>
 <body>
   <div class="app-shell">
-    <!-- CẢNH BÁO LỖI CÚ PHÁP DATA.JS (NẾU CÓ KHI CHỈNH SỬA TRÊN GITHUB) -->
+    <!-- CẢNH BÁO LỖI CÚ PHÁP TỆP DỮ LIỆU (NẾU CÓ KHI CHỈNH SỬA TRÊN GITHUB) -->
     <div id="data-error-banner" style="display: none; background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; padding: 10px 12px; border-radius: 14px; font-size: 12px; font-weight: 600; line-height: 1.4;"></div>
 
     <!-- THANH TIÊU ĐỀ -->
@@ -34,17 +34,23 @@
         <div class="brand">
           <div class="brand-logo">文</div>
           <div>
-            <h1 class="brand-title">Kho Từ Vựng N5–N3</h1>
-            <p class="brand-sub">Lộ trình JLPT &amp; Luyện dịch câu</p>
+            <div class="brand-title-row">
+              <h1 class="brand-title">Nhật Ngữ N5–N3</h1>
+              <span id="streak-pill" class="streak-pill" title="Chuỗi ngày học liên tiếp">🔥 0</span>
+            </div>
+            <p class="brand-sub" id="storage-engine-badge">2 Kho Liên Kết • Chống học sai</p>
           </div>
         </div>
 
         <div class="header-actions">
-          <button type="button" class="btn-outline" onclick="openImportModal()">
-            <span>+ Nhập JSON</span>
+          <button type="button" class="btn-outline" id="search-repo-btn" onclick="openSearchModal()" title="Tra cứu nhanh trong kho" style="display: none;">
+            <span>🔍 Tra từ</span>
           </button>
-          <button type="button" class="btn-outline" id="export-data-btn" onclick="exportDataJsFile()" title="Tải về tệp data.js mới nhất" style="display: none;">
-            <span>Xuất data.js</span>
+          <button type="button" class="btn-outline accent" onclick="openImportModal()">
+            <span>+ Nhập</span>
+          </button>
+          <button type="button" class="btn-outline" id="export-menu-btn" onclick="openExportModal()" title="Xuất tệp vocab_data.js & exercise_data.js" style="display: none;">
+            <span>Xuất</span>
           </button>
         </div>
       </div>
@@ -72,7 +78,7 @@
           <div class="stats-numbers">
             <span id="deck-known-count" class="text-green">0 đã thuộc</span>
             <span class="dot">•</span>
-            <span id="deck-total-count" class="text-muted">0 thẻ</span>
+            <span id="deck-total-count" class="text-muted">0 từ • 0 bài</span>
           </div>
         </div>
         <div class="progress-track">
@@ -80,22 +86,31 @@
         </div>
         <!-- DÒNG CHECK TRÙNG LẶP TOÀN KHO -->
         <div id="repo-dup-line" class="repo-dup-line">
-          <span id="repo-dup-status-text">✓ Kho từ vựng sạch, không có từ trùng lặp</span>
+          <span id="repo-dup-status-text">✓ Kiểm tra trùng: Cả 2 kho đều sạch</span>
           <button type="button" class="link-btn-sm" onclick="openDuplicateCheckerModal()">Chi tiết</button>
         </div>
       </div>
 
-      <!-- TẦNG 2: CHẾ ĐỘ HỌC (3 CHẾ ĐỘ) & BỘ LỌC CHỦ ĐỀ -->
+      <!-- TẦNG 2: 6 CHẾ ĐỘ HỌC & BỘ LỌC THÔNG MINH -->
       <div id="toolbar-section" style="display: none;">
-        <div class="mode-switcher three-cols">
+        <div class="mode-switcher six-grid">
           <button id="mode-flashcard-btn" type="button" class="mode-btn active" onclick="setMode('flashcard')">
-            Lật Thẻ 3D
+            🃏 Lật Thẻ
           </button>
           <button id="mode-quiz-btn" type="button" class="mode-btn" onclick="setMode('quiz')">
-            Trắc Nghiệm
+            🎯 Trắc Nghiệm
           </button>
-          <button id="mode-translate-btn" type="button" class="mode-btn" onclick="setMode('translate')">
-            Dịch Câu
+          <button id="mode-dictation-btn" type="button" class="mode-btn" onclick="setMode('dictation')">
+            🎧 Nghe &amp; Gõ
+          </button>
+          <button id="mode-exercise-btn" type="button" class="mode-btn" onclick="setMode('exercise')">
+            🧩 Bài Tập Câu
+          </button>
+          <button id="mode-match-btn" type="button" class="mode-btn" onclick="setMode('match')">
+            ⚡ Ghép Đôi
+          </button>
+          <button id="mode-drill-btn" type="button" class="mode-btn" onclick="setMode('drill')">
+            🧠 Kanji &amp; Thể
           </button>
         </div>
 
@@ -104,16 +119,20 @@
             <option value="ALL">Tất cả chủ đề</option>
           </select>
 
-          <button id="filter-unmastered-btn" type="button" class="pill-btn" onclick="toggleUnmasteredFilter()">
+          <button id="filter-unmastered-btn" type="button" class="pill-btn" onclick="toggleUnmasteredFilter()" title="Chỉ ôn thẻ chưa thuộc">
             <span id="filter-dot" class="status-dot"></span>
-            <span id="filter-label">Chưa thuộc</span>
+            <span>Chưa thuộc</span>
           </button>
 
-          <button id="speech-rate-btn" type="button" class="pill-btn" onclick="toggleSpeechRate()">
-            Đọc: Chuẩn
+          <button id="toggle-furigana-btn" type="button" class="pill-btn" onclick="toggleFuriganaVisibility()" title="Ẩn/Hiện cách đọc Hiragana để luyện mặt chữ Kanji">
+            👁️ Furigana
           </button>
 
-          <button type="button" class="pill-btn icon-only" onclick="shuffleCurrentCards()" title="Xáo trộn thẻ">
+          <button id="speech-rate-btn" type="button" class="pill-btn" onclick="toggleSpeechRate()" title="Đổi tốc độ đọc">
+            Chuẩn
+          </button>
+
+          <button type="button" class="pill-btn icon-only" onclick="shuffleCurrentCards()" title="Xáo trộn">
             ↻
           </button>
         </div>
@@ -125,34 +144,50 @@
       <!-- TRẠNG THÁI TRỐNG DỮ LIỆU BAN ĐẦU -->
       <section id="empty-app-state" class="empty-box">
         <div class="empty-icon">{ }</div>
-        <h2>Kho từ vựng N5–N3 đang trống</h2>
-        <p>Bạn có thể thêm từ vựng và câu dịch vào tệp <strong>data.js</strong> hoặc bấm nút bên dưới để dán dữ liệu <strong>JSON</strong>.</p>
+        <h2>2 Kho Dữ Liệu N5–N3 Sẵn Sàng</h2>
+        <p>Tách riêng <strong>vocab_data.js</strong> (Từ vựng &amp; Kanji) và <strong>exercise_data.js</strong> (Bài tập ngữ cảnh chuẩn xác), tự động liên kết 2 chiều để tránh học sai.</p>
         <button type="button" class="btn-primary" onclick="openImportModal()">
-          + Nhập Dữ Liệu JSON Ngay
+          + Nhập Từ Vựng / Bài Tập JSON
         </button>
         <button type="button" class="btn-outline full" onclick="loadQuickDemoSession()">
-          ⚡ Dùng thử nhanh bài mẫu (Từ vựng + Dịch câu)
+          ⚡ Nạp thử bộ mẫu (Từ vựng + 3 dạng Bài tập liên kết)
         </button>
       </section>
 
-      <!-- CHẾ ĐỘ 1: LẬT THẺ 3D -->
+      <!-- ===============================================================
+           CHẾ ĐỘ 1: LẬT THẺ 3D (CHIA PHIÊN 12 THẺ + TÁCH LIÊN THÔNG N4/N3)
+           =============================================================== -->
       <section id="flashcard-view" class="flashcard-view" style="display: none;">
         <div class="card-meta">
-          <span id="card-position-text">Thẻ 1 / 1</span>
-          <span class="hint-text">Chạm lật thẻ • Vuốt trái/phải đổi thẻ</span>
+          <span id="card-position-text">Thẻ 1 / 12</span>
+          <button type="button" id="session-scope-btn" class="scope-chip" onclick="toggleSessionScope()">
+            Phiên 12 thẻ ▾
+          </button>
         </div>
 
-        <!-- Khi không có thẻ nào khớp bộ lọc -->
         <div id="empty-filter-state" class="empty-box" style="display: none;">
           <div class="empty-icon success">✓</div>
-          <h3>Không còn thẻ nào trong bộ lọc này!</h3>
-          <p>Bạn đã thuộc hết thẻ ở phạm vi này hoặc cấp độ đang chọn chưa có dữ liệu.</p>
+          <h3>Không còn thẻ từ vựng trong bộ lọc này!</h3>
+          <p>Bạn đã thuộc hết từ vựng ở phạm vi này hoặc chưa nạp từ vựng cho cấp độ này.</p>
           <button type="button" class="btn-primary" onclick="resetFilters()">
             Xem toàn bộ kho từ vựng
           </button>
         </div>
 
-        <!-- Khung Thẻ 3D -->
+        <div id="session-complete-box" class="empty-box" style="display: none;">
+          <div class="empty-icon success">🎉</div>
+          <h3>Hoàn thành phiên 12 thẻ!</h3>
+          <p id="session-complete-summary">Bạn vừa ôn xong 12 thẻ trọng tâm. Bạn có thể chuyển sang tab <strong>🧩 Bài Tập Câu</strong> để luyện đặt câu ngay!</p>
+          <div class="summary-actions">
+            <button type="button" class="btn-primary" onclick="setMode('exercise')">
+              🧩 Luyện Bài Tập Câu của các từ vừa học
+            </button>
+            <button type="button" class="btn-outline full" onclick="startNextFlashcardBatch()">
+              Học tiếp 12 thẻ từ vựng tiếp theo ▶
+            </button>
+          </div>
+        </div>
+
         <div id="card-stage-wrapper" class="perspective-stage">
           <div id="flashcard-inner" class="card-3d-inner" onclick="flipCard()">
             <!-- MẶT TRƯỚC -->
@@ -160,7 +195,8 @@
               <div class="card-top-bar">
                 <div class="badge-group">
                   <span id="front-level-badge" class="level-tag n5">N5</span>
-                  <span id="front-status-badge" class="badge">Chưa học</span>
+                  <span id="front-pos-badge" class="pos-tag">Từ vựng</span>
+                  <span id="front-status-badge" class="badge">Mới</span>
                 </div>
                 <button type="button" class="audio-btn" onclick="event.stopPropagation(); speakCurrentCard()">
                   🔊 Nghe
@@ -173,8 +209,8 @@
                 <p id="front-sub-tag" class="sub-tag">Chủ đề</p>
               </div>
 
-              <div class="card-bottom-hint">
-                ↻ Chạm để xem Romaji, Nghĩa &amp; Mẹo nhớ
+              <div class="card-bottom-hint" id="front-bottom-hint">
+                ↻ Chạm để xem Romaji, Nghĩa &amp; Chiết tự Kanji
               </div>
             </div>
 
@@ -192,41 +228,52 @@
               </div>
 
               <div class="card-center">
-                <p class="label-small">Cách đọc &amp; Nghĩa tiếng Việt</p>
                 <div id="back-romaji-main" class="romaji-main">/a/</div>
                 <div id="back-meaning-vi" class="meaning-vi">Nghĩa tiếng Việt</div>
               </div>
 
-              <div class="mnemonic-box">
-                <div class="mnemonic-title">💡 Mẹo nhớ / Chiết tự Kanji</div>
-                <p id="back-mnemonic-text" class="mnemonic-text">Ghi chú...</p>
+              <div class="back-notes-stack">
+                <div class="mnemonic-box">
+                  <div class="mnemonic-title">💡 Chiết tự Kanji &amp; Mẹo nhớ</div>
+                  <p id="back-mnemonic-text" class="mnemonic-text">Ghi chú...</p>
+                </div>
+
+                <div id="back-bridge-box" class="bridge-box" style="display: none;">
+                  <div class="bridge-title">🔗 Mở rộng lên N4 / N3</div>
+                  <p id="back-bridge-text" class="bridge-text"></p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- THANH ĐIỀU KHIỂN DƯỚI CÙNG -->
         <div id="flashcard-controls" class="bottom-controls">
           <button type="button" class="nav-arrow-btn" onclick="prevCard()" aria-label="Thẻ trước">◀</button>
-          <button type="button" class="rate-btn review" onclick="rateCurrentCard('review')">Cần ôn lại</button>
+          <button type="button" class="rate-btn review" onclick="rateCurrentCard('review')">↻ Chưa nhớ</button>
           <button type="button" class="rate-btn known" onclick="rateCurrentCard('known')">✓ Đã thuộc</button>
           <button type="button" class="nav-arrow-btn" onclick="nextCard()" aria-label="Thẻ tiếp">▶</button>
         </div>
       </section>
 
-      <!-- CHẾ ĐỘ 2: TRẮC NGHIỆM THÔNG MINH THEO CẤP ĐỘ (N5 -> N3) -->
+      <!-- ===============================================================
+           CHẾ ĐỘ 2: TRẮC NGHIỆM TỪ VỰNG ĐA CHIỀU
+           =============================================================== -->
       <section id="quiz-view" class="quiz-view" style="display: none;">
         <div id="quiz-active-box" class="quiz-active">
           <div class="card-meta">
-            <span id="quiz-question-num">Câu 1/1</span>
-            <span id="quiz-type-badge" class="quiz-type-pill">Chọn nghĩa Việt</span>
+            <span id="quiz-question-num">Câu 1/10</span>
+            <span id="quiz-type-badge" class="quiz-type-pill">Nghĩa Việt</span>
             <span id="quiz-score-badge" class="score-badge">Điểm: 0</span>
           </div>
 
           <div class="quiz-prompt-card">
             <span id="quiz-card-level" class="level-tag n5 quiz-lvl">N5</span>
+            <button type="button" class="quiz-audio-mini" onclick="speakQuizCard()" title="Nghe phát âm">🔊</button>
             <p id="quiz-instruction-text" class="quiz-instruction">Chọn nghĩa tiếng Việt đúng:</p>
             <div id="quiz-jp-prompt" class="jp-main">あ</div>
+            <button type="button" id="quiz-big-listen-btn" class="big-listen-btn" style="display: none;" onclick="speakQuizCard()">
+              🔊 Bấm để nghe từ tiếng Nhật
+            </button>
             <div id="quiz-romaji-hint" class="romaji-hint" style="display: none;">a</div>
           </div>
 
@@ -242,14 +289,14 @@
 
         <div id="quiz-summary-box" class="empty-box" style="display: none;">
           <div class="empty-icon success">★</div>
-          <h3>Hoàn thành bài luyện tập!</h3>
+          <h3>Hoàn thành bài trắc nghiệm!</h3>
           <p id="quiz-final-score-text" class="final-score">Đúng 0 / 0 câu</p>
           <div class="summary-actions">
             <button id="retry-wrong-btn" type="button" class="btn-danger" style="display: none;" onclick="startQuiz(true)">
               Ôn lại câu làm sai
             </button>
             <button type="button" class="btn-outline full" onclick="startQuiz(false)">
-              Làm lại từ đầu
+              Làm lượt 10 câu mới
             </button>
             <button type="button" class="btn-primary" onclick="setMode('flashcard')">
               Quay lại Lật Thẻ
@@ -258,86 +305,317 @@
         </div>
       </section>
 
-      <!-- CHẾ ĐỘ 3: DỊCH CÂU GHÉP TỪ (PHONG CÁCH DUOLINGO) -->
-      <section id="translate-view" class="duo-view" style="display: none;">
-        <!-- Bài luyện đang diễn ra -->
-        <div id="duo-active-box" class="duo-active">
-          <!-- Thanh tiến độ vàng + điểm năng lượng -->
-          <div class="duo-top-bar">
-            <span id="duo-step-label" class="duo-step-text">1/5</span>
-            <div class="duo-progress-track">
-              <div id="duo-progress-fill" class="duo-progress-fill" style="width: 0%;"></div>
+      <!-- ===============================================================
+           CHẾ ĐỘ 3: NGHE & GÕ PHẢN XẠ (AUDIO DICTATION)
+           =============================================================== -->
+      <section id="dictation-view" class="dictation-view" style="display: none;">
+        <div id="dict-active-box" class="dict-active">
+          <div class="card-meta">
+            <span id="dict-step-text">Câu 1/10</span>
+            <span class="quiz-type-pill">🎧 Nghe &amp; Chép âm</span>
+            <span id="dict-score-badge" class="score-badge">Điểm: 0</span>
+          </div>
+
+          <div class="dict-prompt-card">
+            <span id="dict-level-tag" class="level-tag n5 quiz-lvl">N5</span>
+            <p class="quiz-instruction">Nghe phát âm và gõ lại bằng <strong>Romaji</strong> hoặc <strong>Hiragana/Katakana</strong>:</p>
+
+            <div class="dict-audio-row">
+              <button type="button" class="dict-play-btn" onclick="speakDictationCard(false)">
+                🔊 Nghe chuẩn
+              </button>
+              <button type="button" class="dict-play-btn slow" onclick="speakDictationCard(true)">
+                🐢 Đọc chậm
+              </button>
             </div>
-            <div class="duo-energy-pill" title="Điểm năng lượng bài dịch">
+
+            <div id="dict-hint-line" class="dict-hint-line" style="display: none;"></div>
+          </div>
+
+          <div class="dict-input-box">
+            <input
+              type="text"
+              id="dict-answer-input"
+              class="dict-input"
+              placeholder="Gõ romaji (vd: ikimasu) hoặc ひらがな..."
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              onkeydown="if (event.key === 'Enter') handleDictationEnter()"
+            />
+            <div class="dict-btn-row">
+              <button type="button" class="duo-hint-btn" onclick="revealDictationHint()">
+                💡 Gợi ý chữ đầu
+              </button>
+              <button type="button" id="dict-submit-btn" class="btn-primary" onclick="checkDictationAnswer()">
+                Kiểm tra
+              </button>
+            </div>
+          </div>
+
+          <div id="dict-feedback-card" class="dict-feedback-card" style="display: none;">
+            <div id="dict-fb-status" class="dict-fb-status">✓ Chính xác!</div>
+            <div id="dict-fb-word" class="dict-fb-word">行きます (いきます)</div>
+            <div id="dict-fb-meaning" class="dict-fb-meaning">/ikimasu/ — Đi</div>
+            <p id="dict-fb-mnemonic" class="dict-fb-mnemonic"></p>
+            <button type="button" class="btn-primary" onclick="nextDictationQuestion()">
+              Từ tiếp theo ▶
+            </button>
+          </div>
+        </div>
+
+        <div id="dict-summary-box" class="empty-box" style="display: none;">
+          <div class="empty-icon success">🎧</div>
+          <h3>Hoàn thành luyện Nghe &amp; Gõ!</h3>
+          <p id="dict-final-score-text" class="final-score">Đúng 0 / 10 từ</p>
+          <div class="summary-actions">
+            <button type="button" class="btn-primary" onclick="startDictationLesson()">
+              Luyện 10 từ tiếp theo ↻
+            </button>
+            <button type="button" class="btn-outline full" onclick="setMode('flashcard')">
+              Quay lại Lật Thẻ
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===============================================================
+           CHẾ ĐỘ 4: BÀI TẬP NGỮ CẢNH CHUẨN 100% (TỪ EXERCISE_DATA.JS)
+           GỒM 3 DẠNG: ĐIỀN KHUYẾT • DỊCH CÂU GHÉP TỪ • BẪY TỪ DỄ NHẦM
+           =============================================================== -->
+      <section id="exercise-view" class="duo-view" style="display: none;">
+        <!-- TRẠNG THÁI CHƯA CÓ BÀI TẬP (THÀ BÁO THIẾU CÒN HƠN BỊA CÂU SAI) -->
+        <div id="ex-empty-box" class="empty-box" style="display: none;">
+          <div class="empty-icon">🛡️</div>
+          <h3>Nhóm này chưa có bài tập câu</h3>
+          <p>Để bảo đảm <strong>không bao giờ ghép câu sai ngữ pháp</strong>, ứng dụng chỉ sử dụng bài tập chuẩn trong tệp <strong>exercise_data.js</strong>. Bạn có thể nạp thêm bài tập JSON hoặc chuyển sang luyện Từ vựng.</p>
+          <div class="summary-actions">
+            <button type="button" class="btn-primary" onclick="openImportModal()">
+              + Nạp Dữ Liệu Bài Tập JSON
+            </button>
+            <button type="button" class="btn-outline full" onclick="resetExerciseScope()">
+              Xem tất cả bài tập hiện có trong kho
+            </button>
+            <button type="button" class="btn-outline full" onclick="setMode('flashcard')">
+              Quay lại Lật Thẻ Từ Vựng
+            </button>
+          </div>
+        </div>
+
+        <!-- KHUNG LÀM BÀI TẬP LIÊN KẾT 2 CHIỀU -->
+        <div id="ex-active-box" class="duo-active" style="display: none;">
+          <div class="duo-top-bar">
+            <span id="ex-step-label" class="duo-step-text">1/10</span>
+            <div class="duo-progress-track">
+              <div id="ex-progress-fill" class="duo-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div class="duo-energy-pill" title="Điểm luyện tập">
               <span class="duo-bolt">⚡</span>
-              <span id="duo-energy-count">0</span>
+              <span id="ex-energy-count">0</span>
             </div>
           </div>
 
           <div class="duo-heading-row">
-            <h2 class="duo-heading">Dịch câu này</h2>
-            <span id="duo-source-badge" class="duo-source-tag">N5</span>
-          </div>
-
-          <!-- Dòng câu tiếng Nhật có loa xanh & từ gạch chân nét đứt -->
-          <div class="duo-prompt-row">
-            <button type="button" class="duo-speaker-btn" onclick="speakTranslateSentence()" aria-label="Nghe cả câu">
-              🔊
-            </button>
-            <div id="duo-tokens-wrap" class="duo-tokens-wrap"></div>
-          </div>
-
-          <!-- Popover giải nghĩa khi chạm vào từng từ tiếng Nhật -->
-          <div id="duo-token-tooltip" class="duo-token-tooltip" style="display: none;">
-            <div class="duo-tip-top">
-              <span id="duo-tip-jp" class="duo-tip-jp">ちいさい</span>
-              <span id="duo-tip-romaji" class="duo-tip-romaji">chiisai</span>
+            <div class="badge-group">
+              <span id="ex-kind-pill" class="quiz-type-pill">Điền khuyết</span>
+              <span id="ex-priority-badge" class="priority-pill" style="display: none;">🎯 Từ đang ôn</span>
             </div>
-            <div id="duo-tip-vi" class="duo-tip-vi">nhỏ, bé</div>
-          </div>
-
-          <!-- Khu vực 2 dòng kẻ để ghép câu trả lời -->
-          <div class="duo-answer-stage" onclick="hideTokenTooltip()">
-            <div id="duo-answer-slots" class="duo-answer-slots"></div>
-            <div class="duo-ruled-line"></div>
-            <div class="duo-ruled-line second"></div>
-          </div>
-
-          <!-- Ngân hàng thẻ từ (Word Bank) -->
-          <div id="duo-word-bank" class="duo-word-bank"></div>
-
-          <!-- Khu vực kiểm tra & phản hồi dưới cùng -->
-          <div class="duo-bottom-area">
-            <button id="duo-check-btn" type="button" class="duo-check-btn" disabled onclick="checkTranslateAnswer()">
-              KIỂM TRA
+            <button type="button" id="ex-kind-filter-btn" class="scope-chip" onclick="cycleExerciseKindFilter()">
+              Tất cả dạng ⇄
             </button>
+          </div>
 
-            <div id="duo-feedback-sheet" class="duo-feedback-sheet" style="display: none;">
+          <!-- THANH TỪ VỰNG LIÊN KẾT (CHẠM ĐỂ TRA NGƯỢC THẺ KANJI TRONG VOCAB_DATA) -->
+          <div id="ex-refs-row" class="ex-refs-row" style="display: none;"></div>
+
+          <!-- DẠNG A & C: ĐIỀN KHUYẾT NGỮ CẢNH & BẪY TỪ DỄ NHẦM -->
+          <div id="ex-choice-panel" class="ex-choice-panel" style="display: none;">
+            <div class="ex-prompt-box">
+              <div class="ex-prompt-top">
+                <span id="ex-source-badge" class="duo-source-tag">N5</span>
+                <button type="button" class="quiz-audio-mini static" onclick="speakCurrentExercise()" title="Nghe câu tiếng Nhật">🔊</button>
+              </div>
+              <div id="ex-choice-prompt-jp" class="ex-jp-sentence">...</div>
+              <div id="ex-choice-prompt-vi" class="ex-vi-hint">...</div>
+            </div>
+
+            <div id="ex-choice-options" class="quiz-options"></div>
+
+            <div id="ex-choice-feedback" class="duo-feedback-sheet" style="display: none;">
               <div class="duo-fb-header">
-                <span id="duo-fb-icon" class="duo-fb-icon">✓</span>
+                <span id="ex-choice-fb-icon" class="duo-fb-icon">✓</span>
                 <div>
-                  <div id="duo-fb-title" class="duo-fb-title">Tuyệt vời!</div>
-                  <div id="duo-fb-subtitle" class="duo-fb-subtitle"></div>
+                  <div id="ex-choice-fb-title" class="duo-fb-title">Chính xác!</div>
+                  <div id="ex-choice-fb-exp" class="duo-fb-subtitle"></div>
+                  <div id="ex-choice-sync-note" class="sync-review-note" style="display: none;"></div>
                 </div>
               </div>
-              <button id="duo-continue-btn" type="button" class="duo-continue-btn" onclick="nextTranslateQuestion()">
+              <button type="button" class="duo-continue-btn" onclick="nextExerciseQuestion()">
                 TIẾP TỤC
               </button>
             </div>
           </div>
+
+          <!-- DẠNG B: DỊCH CÂU GHÉP TỪ (PHONG CÁCH DUOLINGO) -->
+          <div id="ex-sentence-panel" class="ex-sentence-panel" style="display: none;">
+            <div class="duo-prompt-row">
+              <button type="button" class="duo-speaker-btn" onclick="speakCurrentExercise()" aria-label="Nghe cả câu">
+                🔊
+              </button>
+              <div id="duo-tokens-wrap" class="duo-tokens-wrap"></div>
+            </div>
+
+            <div id="duo-token-tooltip" class="duo-token-tooltip" style="display: none;">
+              <div class="duo-tip-top">
+                <span id="duo-tip-jp" class="duo-tip-jp">ちいさい</span>
+                <span id="duo-tip-romaji" class="duo-tip-romaji">chiisai</span>
+                <button type="button" id="duo-tip-vocab-btn" class="tip-vocab-btn" style="display: none;" onclick="openPeekFromActiveToken()">
+                  📖 Thẻ Kanji
+                </button>
+              </div>
+              <div id="duo-tip-vi" class="duo-tip-vi">nhỏ, bé</div>
+            </div>
+
+            <div class="duo-answer-stage" onclick="hideTokenTooltip()">
+              <div id="duo-answer-slots" class="duo-answer-slots"></div>
+              <div class="duo-ruled-line"></div>
+              <div class="duo-ruled-line second"></div>
+            </div>
+
+            <div id="duo-word-bank" class="duo-word-bank"></div>
+
+            <div class="duo-bottom-area">
+              <div id="duo-action-row" class="duo-action-row">
+                <button id="duo-hint-btn" type="button" class="duo-hint-btn" onclick="useTranslateHint()" title="Điền giúp 1 từ tiếp theo">
+                  💡 Gợi ý
+                </button>
+                <button id="duo-check-btn" type="button" class="duo-check-btn" disabled onclick="checkTranslateAnswer()">
+                  KIỂM TRA
+                </button>
+              </div>
+
+              <div id="duo-feedback-sheet" class="duo-feedback-sheet" style="display: none;">
+                <div class="duo-fb-header">
+                  <span id="duo-fb-icon" class="duo-fb-icon">✓</span>
+                  <div>
+                    <div id="duo-fb-title" class="duo-fb-title">Tuyệt vời!</div>
+                    <div id="duo-fb-subtitle" class="duo-fb-subtitle"></div>
+                    <div id="duo-fb-sync-note" class="sync-review-note" style="display: none;"></div>
+                  </div>
+                </div>
+                <button id="duo-continue-btn" type="button" class="duo-continue-btn" onclick="nextExerciseQuestion()">
+                  TIẾP TỤC
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <!-- Màn hình tổng kết bài Dịch Câu -->
-        <div id="duo-summary-box" class="empty-box" style="display: none;">
+        <!-- TỔNG KẾT BÀI TẬP -->
+        <div id="ex-summary-box" class="empty-box" style="display: none;">
           <div class="empty-icon success">⚡</div>
-          <h3>Hoàn thành bài luyện Dịch Câu!</h3>
-          <p id="duo-final-score-text" class="final-score">Đạt 0 điểm năng lượng</p>
+          <h3>Hoàn thành phiên Bài Tập Ngữ Cảnh!</h3>
+          <p id="ex-final-score-text" class="final-score">Đạt 0 điểm năng lượng</p>
           <div class="summary-actions">
-            <button type="button" class="btn-primary" onclick="startTranslateLesson()">
-              Luyện bài dịch mới ↻
+            <button type="button" class="btn-primary" onclick="startExerciseLesson()">
+              Luyện lượt bài tập mới ↻
             </button>
             <button type="button" class="btn-outline full" onclick="setMode('flashcard')">
-              Quay lại Lật Thẻ 3D
+              Quay lại Lật Thẻ Từ Vựng
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===============================================================
+           CHẾ ĐỘ 5: GHÉP ĐÔI TỪ VỰNG (NHẬT-VIỆT HOẶC KANJI-CÁCH ĐỌC)
+           =============================================================== -->
+      <section id="match-view" class="match-view" style="display: none;">
+        <div id="match-active-box" class="match-active">
+          <div class="duo-top-bar">
+            <span id="match-round-label" class="duo-step-text">Lượt 1</span>
+            <div class="duo-progress-track">
+              <div id="match-progress-fill" class="duo-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div class="duo-energy-pill">
+              <span class="duo-bolt">⚡</span>
+              <span id="match-score-count">0</span>
+            </div>
+          </div>
+
+          <div class="duo-heading-row">
+            <h2 class="duo-heading">Chạm ghép cặp</h2>
+            <button type="button" id="match-variant-btn" class="scope-chip" onclick="toggleMatchVariant()">
+              Nhật ↔ Việt ⇄
+            </button>
+          </div>
+
+          <div class="match-columns">
+            <div id="match-left-col" class="match-col"></div>
+            <div id="match-right-col" class="match-col"></div>
+          </div>
+        </div>
+
+        <div id="match-summary-box" class="empty-box" style="display: none;">
+          <div class="empty-icon success">⚡</div>
+          <h3>Tuyệt vời! Bạn đã ghép xong!</h3>
+          <p id="match-final-text" class="final-score">Phản xạ cực nhanh!</p>
+          <div class="summary-actions">
+            <button type="button" class="btn-primary" onclick="startMatchRound()">
+              Ghép 5 cặp tiếp theo ▶
+            </button>
+            <button type="button" class="btn-outline full" onclick="setMode('flashcard')">
+              Quay lại Lật Thẻ
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===============================================================
+           CHẾ ĐỘ 6: LUYỆN KANJI CHIẾT TỰ & CHIA THỂ ĐỘNG TỪ / TÍNH TỪ
+           =============================================================== -->
+      <section id="drill-view" class="quiz-view" style="display: none;">
+        <div id="drill-active-box" class="quiz-active">
+          <div class="card-meta">
+            <span id="drill-step-num">Câu 1/10</span>
+            <button type="button" id="drill-submode-btn" class="scope-chip" onclick="cycleDrillSubmode()">
+              Hỗn hợp (Kanji + Chia thể) ⇄
+            </button>
+            <span id="drill-score-badge" class="score-badge">Điểm: 0</span>
+          </div>
+
+          <div class="drill-prompt-card">
+            <div class="drill-card-top">
+              <span id="drill-level-tag" class="level-tag n5">N5</span>
+              <span id="drill-kind-pill" class="quiz-type-pill">Chiết tự Kanji</span>
+              <button type="button" class="quiz-audio-mini static" onclick="speakDrillCard()" title="Nghe từ gốc">🔊</button>
+            </div>
+
+            <p id="drill-instruction" class="quiz-instruction">Dựa vào gợi ý chiết tự, chọn chữ Kanji tương ứng:</p>
+            <div id="drill-main-prompt" class="drill-main-text">...</div>
+            <div id="drill-sub-hint" class="drill-sub-hint"></div>
+          </div>
+
+          <div id="drill-options-list" class="quiz-options"></div>
+
+          <div id="drill-feedback-box" class="quiz-feedback" style="display: none;">
+            <p id="drill-feedback-note" class="mnemonic-feedback"></p>
+            <button type="button" class="btn-primary" onclick="nextDrillQuestion()">
+              Câu tiếp theo ▶
+            </button>
+          </div>
+        </div>
+
+        <div id="drill-summary-box" class="empty-box" style="display: none;">
+          <div class="empty-icon success">🧠</div>
+          <h3>Hoàn thành luyện Kanji &amp; Chia Thể!</h3>
+          <p id="drill-final-score-text" class="final-score">Đúng 0 / 10 câu</p>
+          <div class="summary-actions">
+            <button type="button" class="btn-primary" onclick="startDrillLesson()">
+              Luyện tiếp 10 câu mới ↻
+            </button>
+            <button type="button" class="btn-outline full" onclick="setMode('flashcard')">
+              Quay lại Lật Thẻ
             </button>
           </div>
         </div>
@@ -345,15 +623,24 @@
     </main>
   </div>
 
-  <!-- MODAL 1: NHẬP DỮ LIỆU JSON + DÒNG CHECK TRÙNG LẶP TRỰC TIẾP -->
+  <!-- ===================================================================
+       MODAL 1: NHẬP DỮ LIỆU (TỰ NHẬN DIỆN TỪ VỰNG HAY BÀI TẬP)
+       =================================================================== -->
   <div id="import-modal" class="modal-backdrop" style="display: none;">
     <div class="modal-panel">
       <div class="modal-header">
         <div>
-          <h2>Nhập Dữ Liệu Vào Kho Chung</h2>
-          <p>Hỗ trợ từ vựng N5–N3 &amp; bài tập Dịch Câu (Duolingo)</p>
+          <h2>Nhập Dữ Liệu Vào 2 Kho</h2>
+          <p>Tự động phân luồng Từ vựng (vocab_data) &amp; Bài tập (exercise_data)</p>
         </div>
         <button type="button" class="close-btn" onclick="closeImportModal()">✕</button>
+      </div>
+
+      <div class="file-upload-bar">
+        <label for="json-file-input" class="file-upload-label">
+          📂 Chọn tệp .json, vocab_data.js hoặc exercise_data.js
+        </label>
+        <input type="file" id="json-file-input" accept=".json,.js,.txt,application/json,text/javascript" onchange="handleImportFileUpload(event)" style="display: none;" />
       </div>
 
       <div class="form-row-2">
@@ -367,59 +654,31 @@
         </div>
 
         <div class="form-group">
-          <label for="import-default-topic">Chủ đề / Bài mặc định</label>
-          <input type="text" id="import-default-topic" placeholder="VD: Bài 1, Hội thoại..." oninput="runLiveDuplicateCheck()" />
+          <label for="import-default-topic">Chủ đề mặc định</label>
+          <input type="text" id="import-default-topic" placeholder="VD: Động từ cốt lõi..." oninput="runLiveDuplicateCheck()" />
         </div>
       </div>
 
       <div class="form-group">
         <div class="label-row">
-          <label for="import-json-text">Dữ liệu JSON <span class="required">*</span></label>
+          <label for="import-json-text">Dán 1 hoặc nhiều khối JSON <span class="required">*</span></label>
           <div class="label-actions">
             <button type="button" class="link-btn" onclick="runLiveDuplicateCheck(true)">🔍 Check trùng</button>
             <span class="dot">•</span>
-            <button type="button" class="link-btn" onclick="fillSampleJson()">Điền mẫu Từ &amp; Câu</button>
+            <button type="button" class="link-btn" onclick="fillSampleJson()">Điền mẫu thử</button>
           </div>
         </div>
         <textarea
           id="import-json-text"
-          rows="7"
+          rows="6"
           oninput="runLiveDuplicateCheck()"
-          placeholder='[
-  {
-    "level": "N5",
-    "topic": "Tính từ & Quốc gia",
-    "jp": "ちいさい",
-    "kanji": "小さい",
-    "romaji": "chiisai",
-    "vi": "Nhỏ, bé",
-    "mnemonic": "Chữ Tiểu (小)"
-  },
-  {
-    "type": "sentence",
-    "level": "N5",
-    "topic": "Tính từ & Quốc gia",
-    "jp": "ベトナムはちいさいですか。",
-    "romaji": "Betonamu wa chiisai desu ka.",
-    "tokens": [
-      { "jp": "ベトナム", "romaji": "Betonamu", "vi": "Việt Nam" },
-      { "jp": "は", "romaji": "wa", "vi": "thì" },
-      { "jp": "ちいさい", "romaji": "chiisai", "vi": "nhỏ" },
-      { "jp": "です", "romaji": "desu", "vi": "là/thì" },
-      { "jp": "か", "romaji": "ka", "vi": "không?" }
-    ],
-    "vi": "Việt Nam có nhỏ không?",
-    "vi_blocks": ["Việt", "Nam", "có", "nhỏ", "không"],
-    "distractors": ["người Nhật", "người Canada"]
-  }
-]'
+          placeholder='Dán mảng JSON từ vựng hoặc mảng JSON bài tập (cloze, sentence, trap) vào đây...'
         ></textarea>
       </div>
 
-      <!-- DÒNG CHECK TỪ VỰNG BỊ TRÙNG TRỰC TIẾP -->
       <div id="import-dup-check-box" class="dup-check-box neutral">
         <div class="dup-check-header">
-          <span id="import-dup-summary">🔍 Dán JSON để tự động kiểm tra trùng lặp với kho hiện tại.</span>
+          <span id="import-dup-summary">🔍 Dán JSON hoặc chọn tệp để tự động phân luồng &amp; kiểm tra trùng.</span>
         </div>
         <div id="import-dup-list" class="dup-detail-list" style="display: none;"></div>
         <div id="import-dup-policy-row" class="dup-policy-row" style="display: none;">
@@ -435,19 +694,54 @@
 
       <div class="modal-footer">
         <button type="button" class="btn-primary" onclick="importJsonToRepo()">
-          Thêm Vào Kho Chung
+          Nạp Vào Kho Dữ Liệu
         </button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL 2: KIỂM TRA TRÙNG LẶP TOÀN KHO -->
+  <!-- ===================================================================
+       MODAL 2: TRA CỨU TỪ VỰNG NHANH TRONG KHO
+       =================================================================== -->
+  <div id="search-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-panel search-modal-panel">
+      <div class="modal-header">
+        <div>
+          <h2>Tra Cứu Kho Từ Vựng</h2>
+          <p id="search-repo-subtitle">Tìm theo Kanji, Hiragana, Romaji, Nghĩa Việt hoặc [N4/N3]</p>
+        </div>
+        <button type="button" class="close-btn" onclick="closeSearchModal()">✕</button>
+      </div>
+
+      <div class="search-controls">
+        <input
+          type="text"
+          id="repo-search-input"
+          placeholder="Gõ từ cần tìm (vd: 行きます, ikimasu, đi, N4)..."
+          oninput="renderSearchResults()"
+        />
+        <select id="repo-search-level" class="form-select search-lvl-select" onchange="renderSearchResults()">
+          <option value="ALL">Tất cả cấp</option>
+          <option value="N5">N5</option>
+          <option value="N4">N4</option>
+          <option value="N3">N3</option>
+        </select>
+      </div>
+
+      <div id="search-results-count" class="search-count-bar">Hiển thị 0 kết quả</div>
+      <div id="search-results-list" class="search-results-list"></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL 3: KIỂM TRA TRÙNG LẶP TOÀN KHO (CẢ 2 TỆP)
+       =================================================================== -->
   <div id="dup-modal" class="modal-backdrop" style="display: none;">
     <div class="modal-panel">
       <div class="modal-header">
         <div>
-          <h2>Kiểm Tra Trùng Lặp Trong Kho</h2>
-          <p>Quét toàn bộ dữ liệu từ data.js và bộ nhớ trình duyệt</p>
+          <h2>Kiểm Tra Trùng Lặp (2 Kho)</h2>
+          <p>Quét riêng biệt kho Từ vựng &amp; kho Bài tập ngữ cảnh</p>
         </div>
         <button type="button" class="close-btn" onclick="closeDuplicateCheckerModal()">✕</button>
       </div>
@@ -465,24 +759,98 @@
     </div>
   </div>
 
+  <!-- ===================================================================
+       MODAL 4: XUẤT ĐỘC LẬP 2 TỆP DỮ LIỆU (VOCAB_DATA.JS & EXERCISE_DATA.JS)
+       =================================================================== -->
+  <div id="export-modal" class="modal-backdrop" style="display: none;">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div>
+          <h2>Xuất Tệp Dữ Liệu Độc Lập</h2>
+          <p>Tải về từng tệp riêng để cập nhật lên GitHub Repository</p>
+        </div>
+        <button type="button" class="close-btn" onclick="closeExportModal()">✕</button>
+      </div>
+
+      <div class="export-card-list">
+        <div class="export-card">
+          <div>
+            <strong>1. vocab_data.js</strong>
+            <p id="export-vocab-count" class="text-muted">0 từ vựng &amp; Kanji</p>
+          </div>
+          <button type="button" class="btn-primary" onclick="exportVocabDataJsFile()">
+            ⬇ Tải vocab_data.js
+          </button>
+        </div>
+
+        <div class="export-card">
+          <div>
+            <strong>2. exercise_data.js</strong>
+            <p id="export-ex-count" class="text-muted">0 câu bài tập ngữ cảnh</p>
+          </div>
+          <button type="button" class="btn-primary" onclick="exportExerciseDataJsFile()">
+            ⬇ Tải exercise_data.js
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+       MODAL 5: THẺ TRA NGƯỢC CHIẾT TỰ KANJI KHI ĐANG LÀM BÀI TẬP
+       =================================================================== -->
+  <div id="vocab-peek-modal" class="modal-backdrop" style="display: none;" onclick="if (event.target === this) closeVocabPeekModal()">
+    <div class="modal-panel peek-panel">
+      <div class="modal-header">
+        <div class="badge-group">
+          <span id="peek-level-tag" class="level-tag n5">N5</span>
+          <span id="peek-pos-tag" class="pos-tag">Động từ</span>
+        </div>
+        <button type="button" class="close-btn" onclick="closeVocabPeekModal()">✕</button>
+      </div>
+
+      <div class="peek-main-box">
+        <div>
+          <div id="peek-jp-title" class="peek-jp-title">行きます (いきます)</div>
+          <div id="peek-romaji" class="peek-romaji">/ikimasu/</div>
+        </div>
+        <button type="button" id="peek-speak-btn" class="audio-btn solid">🔊 Nghe</button>
+      </div>
+
+      <div id="peek-vi" class="peek-vi">Đi</div>
+
+      <div class="mnemonic-box">
+        <div class="mnemonic-title">💡 Chiết tự Kanji &amp; Mẹo nhớ</div>
+        <p id="peek-mnemonic" class="mnemonic-text"></p>
+      </div>
+
+      <div id="peek-bridge-box" class="bridge-box" style="display: none;">
+        <div class="bridge-title">🔗 Mở rộng lên N4 / N3</div>
+        <p id="peek-bridge-text" class="bridge-text"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- THÔNG BÁO TOAST -->
   <div id="toast-banner" class="toast">Đã lưu</div>
 
-  <!-- BẮT LỖI CÚ PHÁP NẾU DATA.JS BỊ SAI KHI CHỈNH SỬA -->
+  <!-- BẮT LỖI CÚ PHÁP NẾU TỆP DỮ LIỆU BỊ SAI KHI CHỈNH SỬA -->
   <script>
     window.addEventListener('error', function(e) {
-      if (e && e.filename && e.filename.indexOf('data.js') !== -1) {
+      if (e && e.filename && (e.filename.indexOf('vocab_data.js') !== -1 || e.filename.indexOf('exercise_data.js') !== -1)) {
+        var fileName = e.filename.split('/').pop();
         var banner = document.getElementById('data-error-banner');
         if (banner) {
           banner.style.display = 'block';
-          banner.innerHTML = '⚠️ <strong>Lỗi cú pháp trong tệp data.js (dòng ' + e.lineno + '):</strong> ' + e.message + '<br/>Hãy kiểm tra xem có thiếu dấu phẩy (,) giữa các mục hoặc còn dính ký tự thừa ở đầu/cuối tệp không.';
+          banner.innerHTML = '⚠️ <strong>Lỗi cú pháp trong tệp ' + fileName + ' (dòng ' + e.lineno + '):</strong> ' + e.message + '<br/>Hãy kiểm tra xem có thiếu dấu phẩy (,) giữa các mục hoặc còn dính ký tự thừa ở đầu/cuối tệp không.';
         }
       }
     });
   </script>
 
-  <!-- TẢI TỆP DỮ LIỆU & LOGIC RỜI -->
-  <script src="data.js"></script>
+  <!-- TẢI 2 TỆP DỮ LIỆU ĐỘC LẬP & LOGIC RỜI -->
+  <script src="vocab_data.js"></script>
+  <script src="exercise_data.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
