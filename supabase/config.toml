@@ -1,0 +1,13 @@
+# Supabase CLI project configuration.
+# Run `supabase link --project-ref <YOUR_PROJECT_REF>` before deploying functions.
+project_id = "japanese-learning-app"
+
+# Public registration endpoint: the function performs its own anon-key check,
+# username validation and IP rate limit. It must be callable before login.
+[functions.j_register]
+verify_jwt = false
+
+# Admin endpoint requires a valid Supabase user JWT; the function additionally
+# checks the user's UUID in public.j_admins and the separate admin gate secret.
+[functions.j_admin_users]
+verify_jwt = true
