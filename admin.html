@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7fb">
+  <title>Quản trị học liệu — Nhật Ngữ</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./config.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script defer src="./js/store.js"></script>
+  <script defer src="./js/db.js"></script>
+  <script defer src="./js/admin.js"></script>
+</head>
+<body class="admin-body">
+  <main class="admin-shell">
+    <header class="admin-top">
+      <div><a class="brand" href="./index.html"><span class="brand-mark">文</span><span class="brand-copy"><strong>Nhật Ngữ · Quản trị</strong><small>Trang nạp học liệu độc lập</small></span></a><h1>Quản lý dữ liệu học tập</h1><p>Nạp từng đợt từ vựng, ngữ pháp và bài tập lên Supabase.</p></div>
+      <div class="admin-top-actions"><a class="button button-outline" href="./index.html">← Về ứng dụng</a><button id="admin-logout" class="button button-outline" type="button" hidden>Đăng xuất</button></div>
+    </header>
+
+    <section id="admin-setup-warning" class="panel admin-panel" hidden>
+      <h2>Chưa cấu hình Supabase</h2>
+      <p>Trang quản trị cần Supabase để xác thực và nạp dữ liệu. Mở <code>config.js</code>, nhập Project URL và anon/public key. Không sử dụng service_role key trong trình duyệt.</p>
+      <div class="admin-warning">Tiến độ học ngoại tuyến và giao diện học vẫn hoạt động khi chưa cấu hình Supabase. Chức năng quản trị dữ liệu sẽ chỉ khả dụng sau khi kết nối và chạy <code>supabase/schema.sql</code>.</div>
+    </section>
+
+    <section id="admin-login-panel" class="panel admin-login" hidden>
+      <p class="eyebrow">XÁC THỰC QUẢN TRỊ</p><h2>Đăng nhập</h2><p class="muted">Dùng tài khoản Supabase đã được cấp quyền quản trị.</p>
+      <form id="admin-login-form">
+        <label>Email<input id="admin-email" type="email" required autocomplete="username" placeholder="admin@email.com"></label>
+        <label>Mật khẩu<input id="admin-password" type="password" required autocomplete="current-password" placeholder="Mật khẩu"></label>
+        <button class="button button-primary" type="submit">Đăng nhập</button>
+        <p id="admin-login-error" class="form-error" role="alert"></p>
+      </form>
+      <p class="admin-footer">Nếu chưa có tài khoản: tạo tài khoản từ ứng dụng học, sau đó thêm UUID người dùng vào bảng <code>j_admins</code> theo hướng dẫn trong README.</p>
+    </section>
+
+    <section id="admin-denied-panel" class="panel admin-panel" hidden>
+      <h2>Tài khoản chưa có quyền quản trị</h2><p>Đăng nhập thành công nhưng UUID tài khoản chưa được thêm vào bảng <code>j_admins</code>. Hãy cấp quyền trong Supabase SQL Editor rồi tải lại trang.</p><p id="admin-current-user" class="admin-message"></p>
+    </section>
+
+    <div id="admin-workspace" class="admin-grid" hidden>
+      <section class="panel admin-panel">
+        <p class="eyebrow">NẠP DỮ LIỆU THEO ĐỢT</p><h2>Tạo đợt học liệu mới</h2><p>Nhận mảng JSON, object có các khóa vocabulary/grammar/exercises hoặc tệp JS xuất từ kho cũ (VOCAB_DATA, EXERCISE_DATA, GRAMMAR_DATA). Dữ liệu chỉ được xuất bản sau khi xác nhận nạp.</p>
+        <form id="admin-import-form" class="admin-form">
+          <div class="admin-row"><label>Tên đợt nhập<input id="batch-label" required maxlength="100" placeholder="Ví dụ: N5 – Chủ đề gia đình – Phần 1"></label><label>Mã đợt<input id="batch-code" required maxlength="80" placeholder="N5-family-01"></label></div>
+          <label>Chọn tệp JSON / JS<input id="admin-file" type="file" accept=".json,.js,.txt,application/json,text/javascript"></label>
+          <label>Dữ liệu JSON<textarea id="admin-json" required spellcheck="false" placeholder='Dán dữ liệu vào đây…
+
+[
+  {"level":"N5","topic":"Gia đình","jp":"かぞく","kanji":"家族","romaji":"kazoku","vi":"Gia đình"}
+]
+
+Hoặc object: {"vocabulary":[],"grammar":[],"exercises":[]}'></textarea></label>
+          <label class="admin-check"><input id="admin-update-existing" type="checkbox"> Cho phép cập nhật nội dung trùng đã có (chỉ bật khi chủ động sửa dữ liệu cũ)</label>
+          <div class="admin-row"><button id="admin-preview-button" class="button button-outline" type="button">Kiểm tra & xem trước</button><button id="admin-import-button" class="button button-primary" type="submit" disabled>Nạp và xuất bản</button></div>
+        </form>
+        <div id="admin-preview" class="admin-preview" hidden></div>
+        <p id="admin-import-message" class="admin-message" hidden role="status"></p>
+      </section>
+
+      <aside class="panel admin-panel">
+        <p class="eyebrow">LỊCH SỬ</p><h2>Các đợt đã nạp</h2><p>Mỗi lần nạp tạo một mã đợt riêng. Nội dung mới được ứng dụng học tải về ngay khi làm mới hoặc đồng bộ.</p>
+        <button id="admin-refresh-history" class="button button-outline button-full" type="button">Làm mới lịch sử</button>
+        <div id="admin-history" class="history-list" style="margin-top:14px"><div class="empty-message">Đang tải lịch sử…</div></div>
+        <div class="version-heading"><h2>Bản lưu trước khi cập nhật</h2><button id="admin-refresh-versions" class="text-button" type="button">Làm mới</button></div>
+        <div id="admin-versions" class="history-list"><div class="empty-message">Chưa có bản lưu phiên bản.</div></div>
+        <div class="admin-footer">Chính sách mặc định: không ghi đè nội dung trùng. Nếu bật cập nhật, bản cũ được lưu vào j_content_versions trước khi cập nhật. Có thể khôi phục bản lưu; tiến độ người học vẫn được giữ theo ID.</div>
+      </aside>
+    </div>
+  </main>
+</body>
+</html>

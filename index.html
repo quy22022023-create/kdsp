@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f7fb">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Nhật Ngữ">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <meta name="description" content="Ứng dụng học tiếng Nhật JLPT N5–N3 theo lộ trình, có từ vựng, ngữ pháp, luyện tập và ôn tập thông minh.">
+  <title>Nhật Ngữ — Lộ trình N5–N3</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./config.js"></script>
+  <script defer src="./js/store.js"></script>
+  <script defer src="./js/db.js"></script>
+  <script defer src="./js/app.js"></script>
+</head>
+<body>
+  <div class="app-frame">
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="Trang chủ">
+        <span class="brand-mark">文</span>
+        <span class="brand-copy"><strong>Nhật Ngữ</strong><small>Lộ trình JLPT N5–N3</small></span>
+      </a>
+      <div class="topbar-actions">
+        <span id="connection-state" class="connection-pill" aria-live="polite">Đang khởi tạo…</span>
+        <button id="account-button" class="account-button" type="button">Tài khoản</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar" aria-label="Điều hướng chính">
+        <div class="sidebar-label">HỌC TẬP</div>
+        <nav class="side-nav">
+          <button class="nav-item active" data-page="home"><span>⌂</span>Tổng quan</button>
+          <button class="nav-item" data-page="roadmap"><span>▤</span>Lộ trình</button>
+          <button class="nav-item" data-page="vocab"><span>文</span>Từ vựng</button>
+          <button class="nav-item" data-page="grammar"><span>あ</span>Ngữ pháp</button>
+          <button class="nav-item" data-page="kana"><span>ア</span>Bảng chữ cái</button>
+          <button class="nav-item" data-page="practice"><span>✎</span>Luyện tập</button>
+          <button class="nav-item" data-page="review"><span>↻</span>Ôn tập</button>
+        </nav>
+        <div class="sidebar-note">
+          <span class="note-icon">✦</span>
+          <strong>Học đều, nhớ lâu</strong>
+          <p>Nội dung được bổ sung theo từng đợt. Tiến độ được lưu ngay trên thiết bị.</p>
+        </div>
+        <a class="admin-link" href="./admin.html">Quản trị dữ liệu ↗</a>
+      </aside>
+
+      <main id="main-content" class="main-content">
+        <section id="page-home" class="page active" aria-labelledby="home-title">
+          <div class="page-heading">
+            <div><p class="eyebrow">KHÔNG GIAN HỌC TẬP</p><h1 id="home-title">Tiếp tục hành trình tiếng Nhật</h1><p class="muted">Học theo lộ trình nếu bạn mới bắt đầu, hoặc tập trung ôn từ nếu đã có nền tảng.</p></div>
+            <div class="today-chip" id="today-label">Hôm nay</div>
+          </div>
+
+          <div class="welcome-panel">
+            <div class="welcome-copy"><span class="welcome-kicker">MỤC TIÊU MỖI NGÀY</span><h2>Một bước nhỏ mỗi ngày.</h2><p id="welcome-summary">Chọn lộ trình phù hợp và bắt đầu với một phiên học ngắn.</p><button class="button button-light" id="continue-learning" type="button">Bắt đầu học <span>→</span></button></div>
+            <div class="welcome-art" aria-hidden="true"><span class="sun-disc"></span><span class="art-kanji">学</span><span class="art-caption">まいにち</span></div>
+          </div>
+
+          <div class="stats-grid" id="home-stats">
+            <article class="stat-card"><span class="stat-icon purple">文</span><div><strong id="stat-vocab">0</strong><span>Từ trong kho</span></div></article>
+            <article class="stat-card"><span class="stat-icon green">✓</span><div><strong id="stat-mastered">0</strong><span>Từ đã nhớ</span></div></article>
+            <article class="stat-card"><span class="stat-icon amber">↻</span><div><strong id="stat-due">0</strong><span>Từ đến hạn ôn</span></div></article>
+            <article class="stat-card"><span class="stat-icon blue">🔥</span><div><strong id="stat-streak">0</strong><span>Ngày học liên tiếp</span></div></article>
+          </div>
+
+          <div class="content-grid home-grid">
+            <section class="panel roadmap-preview">
+              <div class="panel-heading"><div><p class="eyebrow">LỘ TRÌNH CỦA BẠN</p><h2>Học theo cấp độ</h2></div><button class="text-button" data-goto="roadmap" type="button">Xem lộ trình →</button></div>
+              <div id="home-levels" class="level-progress-list"></div>
+            </section>
+            <section class="panel quick-panel">
+              <div class="panel-heading"><div><p class="eyebrow">BẮT ĐẦU NHANH</p><h2>Chọn cách học</h2></div></div>
+              <button class="quick-action" data-goto="vocab" type="button"><span class="quick-icon lilac">文</span><span><strong>Học từ mới</strong><small>Flashcard và phát âm</small></span><b>→</b></button>
+              <button class="quick-action" data-goto="review" type="button"><span class="quick-icon mint">↻</span><span><strong>Ôn từ đến hạn</strong><small>Ưu tiên từ chưa nhớ</small></span><b>→</b></button>
+              <button class="quick-action" data-goto="practice" type="button"><span class="quick-icon peach">✎</span><span><strong>Luyện tập</strong><small>Kiểm tra khả năng ghi nhớ</small></span><b>→</b></button>
+              <button class="quick-action" data-goto="grammar" type="button"><span class="quick-icon sky">あ</span><span><strong>Học ngữ pháp</strong><small>Cấu trúc và ví dụ</small></span><b>→</b></button>
+            </section>
+          </div>
+
+          <section class="panel data-empty-panel" id="empty-content-panel" hidden>
+            <div class="empty-symbol">文</div><div><h2>Kho học liệu chưa có dữ liệu</h2><p>Kết nối Supabase để tải nội dung đã xuất bản, hoặc nạp bộ minh họa để kiểm tra giao diện và luồng học.</p></div>
+            <div class="empty-actions"><button id="load-demo-button" class="button button-primary" type="button">Dùng dữ liệu minh họa</button><button id="refresh-content-button" class="button button-outline" type="button">Tải dữ liệu từ máy chủ</button></div>
+          </section>
+        </section>
+
+        <section id="page-roadmap" class="page" aria-labelledby="roadmap-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">LỘ TRÌNH HỌC</p><h1 id="roadmap-title">Chọn điểm bắt đầu</h1><p class="muted">Đi từ nền tảng đến nâng cao. Bạn có thể chuyển cấp độ bất cứ lúc nào.</p></div></div>
+          <div class="level-tabs" id="roadmap-level-tabs"><button class="level-tab active" data-level="N5">N5 · Sơ cấp 1</button><button class="level-tab" data-level="N4">N4 · Sơ cấp 2</button><button class="level-tab" data-level="N3">N3 · Trung cấp</button></div>
+          <div id="roadmap-summary" class="roadmap-summary"></div>
+          <div id="roadmap-lessons" class="lesson-list"></div>
+        </section>
+
+        <section id="page-vocab" class="page" aria-labelledby="vocab-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">KHO TỪ VỰNG</p><h1 id="vocab-title">Từ vựng & Kanji</h1><p class="muted">Học theo chủ đề, lọc cấp độ hoặc tìm nhanh một từ.</p></div><button id="start-vocab-session" class="button button-primary" type="button">Học một phiên →</button></div>
+          <div class="filter-bar panel"><label class="search-field"><span>⌕</span><input id="vocab-search" type="search" placeholder="Tìm từ Nhật, Romaji hoặc nghĩa Việt…" autocomplete="off"></label><select id="vocab-level-filter" aria-label="Lọc cấp độ"><option value="ALL">Tất cả cấp độ</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select><select id="vocab-topic-filter" aria-label="Lọc chủ đề"><option value="ALL">Tất cả chủ đề</option></select></div>
+          <div class="list-meta"><span id="vocab-count-label">0 từ</span><span>Chạm vào một từ để xem chi tiết</span></div>
+          <div id="vocab-list" class="vocab-list"></div>
+        </section>
+
+        <section id="page-grammar" class="page" aria-labelledby="grammar-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">NGỮ PHÁP</p><h1 id="grammar-title">Cấu trúc và cách dùng</h1><p class="muted">Mỗi điểm ngữ pháp gồm ý nghĩa, cấu trúc, ví dụ và lỗi thường gặp.</p></div></div>
+          <div class="filter-bar panel"><select id="grammar-level-filter" aria-label="Lọc cấp độ ngữ pháp"><option value="ALL">Tất cả cấp độ</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select><input id="grammar-search" type="search" placeholder="Tìm cấu trúc hoặc ý nghĩa…"></div>
+          <div id="grammar-list" class="grammar-list"></div>
+        </section>
+
+        <section id="page-kana" class="page" aria-labelledby="kana-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">NỀN TẢNG CHO NGƯỜI MỚI</p><h1 id="kana-title">Hiragana & Katakana</h1><p class="muted">Chọn một chữ để xem Romaji và nghe phát âm. Đây là phần học nền tảng có sẵn, không phụ thuộc dữ liệu Supabase.</p></div></div>
+          <div class="level-tabs kana-tabs"><button class="level-tab active" data-kana-script="hiragana">あ Hiragana</button><button class="level-tab" data-kana-script="katakana">ア Katakana</button></div>
+          <div class="kana-detail panel"><strong id="kana-selected-char">あ</strong><span id="kana-selected-romaji">a</span><button id="kana-audio-button" class="button button-outline" type="button">🔊 Nghe</button></div>
+          <div id="kana-grid" class="kana-grid"></div>
+        </section>
+
+        <section id="page-practice" class="page" aria-labelledby="practice-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">KIỂM TRA KIẾN THỨC</p><h1 id="practice-title">Luyện tập phản xạ</h1><p class="muted">Câu hỏi lấy từ kho bài tập; nếu chưa có, ứng dụng tạo câu hỏi ôn từ vựng.</p></div></div>
+          <div id="practice-start-panel" class="panel practice-start"><div class="practice-illustration">問</div><div><h2>Một phiên luyện tập ngắn</h2><p id="practice-source-note">Tối đa 10 câu, có giải thích sau mỗi câu.</p><div class="practice-options"><label>Cấp độ<select id="practice-level"><option value="ALL">Tất cả</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select></label><label>Số câu<select id="practice-count"><option value="10">10 câu</option><option value="5">5 câu</option><option value="20">20 câu</option></select></label></div><button id="start-practice-button" class="button button-primary" type="button">Bắt đầu luyện tập →</button></div></div>
+          <div id="practice-session" class="panel practice-session" hidden></div>
+        </section>
+
+        <section id="page-review" class="page" aria-labelledby="review-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow">ÔN TẬP CÁ NHÂN</p><h1 id="review-title">Ôn đúng lúc, nhớ lâu hơn</h1><p class="muted">Từ sai được gặp lại sớm; từ đã nhớ được giãn khoảng cách ôn dần.</p></div></div>
+          <div class="review-hero panel"><div><span class="eyebrow">HÀNG ĐỢI ÔN TẬP</span><label class="review-level-select">Phạm vi<select id="review-level-filter"><option value="ALL">Tất cả N5–N3</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select></label><strong id="review-due-count">0</strong><p id="review-description">Chưa có từ đến hạn ôn.</p><button id="start-review-button" class="button button-primary" type="button">Bắt đầu ôn tập →</button></div><div class="review-clock" aria-hidden="true">↻</div></div>
+          <div class="review-columns"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">CẦN CHÚ Ý</p><h2>Từ chưa vững</h2></div></div><div id="review-weak-list" class="compact-list"></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">TIẾN ĐỘ</p><h2>Trạng thái ghi nhớ</h2></div></div><div id="review-breakdown" class="review-breakdown"></div></section></div>
+        </section>
+
+        <section id="page-learn" class="page" aria-labelledby="learn-title" hidden>
+          <div class="page-heading"><div><p class="eyebrow" id="learn-eyebrow">PHIÊN HỌC</p><h1 id="learn-title">Flashcard từ vựng</h1><p class="muted" id="learn-subtitle">Chạm vào thẻ để xem nghĩa và thông tin ghi nhớ.</p></div><button id="exit-learning" class="button button-outline" type="button">Kết thúc phiên</button></div>
+          <div class="study-progress-row"><span id="study-position">0 / 0</span><div class="progress-track"><span id="study-progress-bar"></span></div><span id="study-level-label">N5</span></div>
+          <div id="study-empty" class="panel empty-state" hidden><div class="empty-symbol">✓</div><h2>Chưa có thẻ trong phiên</h2><p>Hãy nạp thêm dữ liệu hoặc chọn cấp độ khác.</p><button class="button button-primary" data-goto="vocab" type="button">Quay lại kho từ vựng</button></div>
+          <div id="study-card-area" class="study-card-area">
+            <button id="study-audio" class="audio-button" type="button" aria-label="Nghe phát âm">🔊 Nghe phát âm</button>
+            <button id="study-card" class="study-card" type="button" aria-label="Lật thẻ để xem nghĩa">
+              <span class="study-card-front"><span class="card-badges"><span id="study-card-level" class="tag">N5</span><span id="study-card-topic" class="tag tag-muted">Chủ đề</span></span><span id="study-card-jp" class="japanese-word">日本語</span><span id="study-card-kanji" class="card-kanji"></span><span class="flip-hint">Chạm để lật thẻ</span></span>
+              <span class="study-card-back"><span class="back-label">CÁCH ĐỌC</span><strong id="study-card-romaji" class="romaji-word">nihongo</strong><span class="back-label">NGHĨA TIẾNG VIỆT</span><strong id="study-card-meaning" class="meaning-word">Tiếng Nhật</strong><span id="study-card-mnemonic" class="mnemonic-note"></span><span class="flip-hint">Chạm để trở lại</span></span>
+            </button>
+            <div class="study-controls"><button id="study-prev" class="icon-button" type="button" aria-label="Từ trước">←</button><button id="study-again" class="button button-review" type="button">Chưa nhớ</button><button id="study-known" class="button button-known" type="button">Đã nhớ ✓</button><button id="study-next" class="icon-button" type="button" aria-label="Từ tiếp">→</button></div>
+            <p class="study-footnote">Đánh giá trung thực giúp lịch ôn tập thích ứng tốt hơn.</p>
+          </div>
+          <div id="study-complete" class="panel completion-panel" hidden><div class="completion-mark">✓</div><h2>Hoàn thành phiên học</h2><p id="study-complete-summary">Bạn đã hoàn thành phiên này.</p><div class="completion-actions"><button id="study-next-batch" class="button button-primary" type="button">Học tiếp</button><button class="button button-outline" data-goto="review" type="button">Xem lịch ôn</button></div></div>
+        </section>
+      </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Điều hướng di động">
+      <button class="mobile-nav-item active" data-page="home"><span>⌂</span><small>Trang chủ</small></button>
+      <button class="mobile-nav-item" data-page="roadmap"><span>▤</span><small>Lộ trình</small></button>
+      <button class="mobile-nav-item" data-page="vocab"><span>文</span><small>Từ vựng</small></button>
+      <button class="mobile-nav-item" data-page="grammar"><span>あ</span><small>Ngữ pháp</small></button>
+      <button class="mobile-nav-item" data-page="review"><span>↻</span><small>Ôn tập</small></button>
+    </nav>
+  </div>
+
+  <div id="account-modal" class="modal-backdrop" hidden>
+    <section class="modal-card account-modal" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
+      <button class="modal-close" data-close-modal="account-modal" type="button" aria-label="Đóng">×</button>
+      <p class="eyebrow">ĐỒNG BỘ TIẾN ĐỘ</p><h2 id="account-modal-title">Học không cần tài khoản</h2>
+      <p id="account-modal-description" class="muted">Tiến độ hiện tại được lưu trên thiết bị. Đăng nhập để đồng bộ sang thiết bị khác.</p>
+      <div id="account-user-panel" hidden><div class="signed-in-card"><span class="signed-in-mark">✓</span><div><strong id="account-user-email"></strong><small>Đã kết nối tài khoản</small></div></div><button id="sync-now-button" class="button button-primary button-full" type="button">Đồng bộ ngay</button><button id="sign-out-button" class="button button-outline button-full" type="button">Đăng xuất</button></div>
+      <form id="account-form"><label>Email<input id="account-email" type="email" required autocomplete="email" placeholder="ban@email.com"></label><label>Mật khẩu<input id="account-password" type="password" required minlength="6" autocomplete="current-password" placeholder="Tối thiểu 6 ký tự"></label><p id="account-error" class="form-error" role="alert"></p><button id="account-submit" class="button button-primary button-full" type="submit">Đăng nhập và đồng bộ</button><button id="account-mode-toggle" class="text-button button-full" type="button">Chưa có tài khoản? Tạo tài khoản</button></form>
+      <p class="privacy-note">Không đăng nhập vẫn học được. Dữ liệu tiến độ khách được giữ trên trình duyệt hiện tại; hãy đăng nhập nếu muốn đồng bộ nhiều thiết bị.</p>
+    </section>
+  </div>
+
+  <div id="vocab-modal" class="modal-backdrop" hidden>
+    <section class="modal-card vocab-detail-modal" role="dialog" aria-modal="true" aria-labelledby="vocab-detail-jp">
+      <button class="modal-close" data-close-modal="vocab-modal" type="button" aria-label="Đóng">×</button>
+      <div class="detail-tags"><span id="detail-level" class="tag">N5</span><span id="detail-topic" class="tag tag-muted">Chủ đề</span></div>
+      <h2 id="vocab-detail-jp" class="detail-japanese">日本語</h2><p id="vocab-detail-reading" class="detail-reading"></p><h3 id="vocab-detail-meaning"></h3><p id="vocab-detail-mnemonic" class="detail-note"></p><button id="detail-audio" class="button button-outline button-full" type="button">🔊 Nghe phát âm</button><button id="detail-study" class="button button-primary button-full" type="button">Học từ này</button>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    }
+  </script>
+</body>
+</html>

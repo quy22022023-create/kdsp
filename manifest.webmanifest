@@ -1,0 +1,25 @@
+{
+  "name": "Nhật Ngữ — Lộ trình JLPT N5–N3",
+  "short_name": "Nhật Ngữ",
+  "lang": "vi",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#f6f7fb",
+  "description": "Ứng dụng học tiếng Nhật theo lộ trình, có từ vựng, ngữ pháp, luyện tập và ôn tập.",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
