@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jp-learning-shell-v3';
+const CACHE_NAME = 'jp-learning-shell-v4';
 const SHELL_FILES = [
   './', './index.html', './admin.html', './styles.css', './config.js',
   './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './js/store.js', './js/db.js', './js/app.js', './js/admin.js'

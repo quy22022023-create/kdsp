@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#f6f7fb">
+  <meta name="theme-color" content="#fff8fc">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Nhật Ngữ">
@@ -110,10 +110,44 @@
         </section>
 
         <section id="page-kana" class="page" aria-labelledby="kana-title" hidden>
-          <div class="page-heading"><div><p class="eyebrow">NỀN TẢNG CHO NGƯỜI MỚI</p><h1 id="kana-title">Hiragana & Katakana</h1><p class="muted">Chọn một chữ để xem Romaji và nghe phát âm. Đây là phần học nền tảng có sẵn, không phụ thuộc dữ liệu Supabase.</p></div></div>
-          <div class="level-tabs kana-tabs"><button class="level-tab active" data-kana-script="hiragana">あ Hiragana</button><button class="level-tab" data-kana-script="katakana">ア Katakana</button></div>
-          <div class="kana-detail panel"><strong id="kana-selected-char">あ</strong><span id="kana-selected-romaji">a</span><button id="kana-audio-button" class="button button-outline" type="button">🔊 Nghe</button></div>
+          <div class="page-heading"><div><p class="eyebrow">NỀN TẢNG CHO NGƯỜI MỚI</p><h1 id="kana-title">Bảng chữ cái Nhật Bản <span class="heading-sparkle">✿</span></h1><p class="muted">Học từng nhóm nhỏ, chạm vào chữ để nghe cách đọc và luyện nhận diện ngay sau đó.</p></div></div>
+          <div class="level-tabs kana-tabs"><button class="level-tab active" data-kana-script="hiragana" type="button">あ Hiragana</button><button class="level-tab" data-kana-script="katakana" type="button">ア Katakana</button></div>
+          <div id="kana-category-tabs" class="kana-category-tabs" aria-label="Nhóm chữ cái">
+            <button class="kana-category active" data-kana-group="basic" type="button">Cơ bản · 46</button>
+            <button class="kana-category" data-kana-group="dakuten" type="button">Biến âm</button>
+            <button class="kana-category" data-kana-group="handakuten" type="button">Âm P</button>
+            <button class="kana-category" data-kana-group="combo" type="button">Âm ghép</button>
+            <button class="kana-category" data-kana-group="special" type="button">Âm ngắt & dài</button>
+          </div>
+          <div id="kana-group-note" class="kana-group-note">46 âm cơ bản, học theo từng hàng あ・か・さ・た・な…</div>
+          <div class="kana-detail panel">
+            <div class="kana-detail-character"><strong id="kana-selected-char">あ</strong><small id="kana-selected-romaji">a</small></div>
+            <span id="kana-selected-note">Chạm vào một chữ bên dưới để xem cách đọc.</span>
+            <button id="kana-audio-button" class="button button-outline" type="button">🔊 Nghe</button>
+          </div>
           <div id="kana-grid" class="kana-grid"></div>
+          <section class="panel kana-practice-launch">
+            <div><span class="kana-practice-icon">✧</span><div><strong>Thử xem bạn nhớ được bao nhiêu?</strong><p>10 câu ngắn · có chế độ nhìn chữ hoặc nghe âm.</p></div></div>
+            <div class="kana-practice-actions"><button class="button button-outline" data-kana-quiz-mode="read" type="button">Nhìn chữ → chọn âm</button><button class="button button-primary" data-kana-quiz-mode="listen" type="button">Nghe âm → chọn chữ</button></div>
+          </section>
+          <section id="kana-quiz-panel" class="panel kana-quiz-panel" hidden>
+            <div class="kana-quiz-heading"><div><p class="eyebrow">LUYỆN NHẬN DIỆN</p><h2 id="kana-quiz-title">Nhìn chữ, chọn cách đọc</h2></div><span id="kana-quiz-progress" class="tag">Câu 1 / 10</span></div>
+            <p id="kana-quiz-instruction" class="muted">Chữ này đọc như thế nào?</p>
+            <div class="kana-quiz-prompt"><strong id="kana-quiz-prompt">あ</strong><button id="kana-quiz-audio" class="audio-button" type="button" hidden>🔊 Nghe lại</button></div>
+            <div id="kana-quiz-options" class="kana-quiz-options"></div>
+            <p id="kana-quiz-feedback" class="kana-quiz-feedback" aria-live="polite"></p>
+            <button id="kana-quiz-next" class="button button-primary button-full" type="button" hidden>Câu tiếp theo →</button>
+          </section>
+          <details class="panel voice-settings" id="voice-settings-panel">
+            <summary><span><strong>🎧 Cài đặt giọng đọc</strong><small>Chọn giọng Nhật và điều chỉnh tốc độ, cao độ.</small></span><span class="voice-settings-chevron">⌄</span></summary>
+            <div class="voice-settings-body">
+              <label class="voice-field">Giọng tiếng Nhật<select id="speech-voice-select"><option value="">Đang tìm giọng đọc…</option></select></label>
+              <div class="voice-slider-row"><label for="speech-rate">Tốc độ đọc <strong id="speech-rate-value">0.84×</strong></label><input id="speech-rate" type="range" min="0.70" max="1.05" step="0.01" value="0.84"></div>
+              <div class="voice-slider-row"><label for="speech-pitch">Độ cao giọng <strong id="speech-pitch-value">1.10</strong></label><input id="speech-pitch" type="range" min="0.85" max="1.30" step="0.01" value="1.10"></div>
+              <button id="speech-preview-button" class="button button-outline button-full" type="button">♡ Nghe thử giọng đọc</button>
+              <p class="voice-note">Giọng khả dụng phụ thuộc vào iPhone, Android hoặc trình duyệt. Nếu chưa có giọng Nhật, hãy cài thêm Japanese trong cài đặt giọng nói của thiết bị.</p>
+            </div>
+          </details>
         </section>
 
         <section id="page-practice" class="page" aria-labelledby="practice-title" hidden>
@@ -129,17 +163,19 @@
         </section>
 
         <section id="page-learn" class="page" aria-labelledby="learn-title" hidden>
-          <div class="page-heading"><div><p class="eyebrow" id="learn-eyebrow">PHIÊN HỌC</p><h1 id="learn-title">Flashcard từ vựng</h1><p class="muted" id="learn-subtitle">Chạm vào thẻ để xem nghĩa và thông tin ghi nhớ.</p></div><button id="exit-learning" class="button button-outline" type="button">Kết thúc phiên</button></div>
+          <div class="page-heading"><div><p class="eyebrow" id="learn-eyebrow">PHIÊN HỌC</p><h1 id="learn-title">Flashcard từ vựng <span class="heading-sparkle">✿</span></h1><p class="muted" id="learn-subtitle">Chạm để lật thẻ. Vuốt phải nếu đã nhớ, vuốt trái nếu cần ôn lại.</p></div><button id="exit-learning" class="button button-outline" type="button">Kết thúc phiên</button></div>
           <div class="study-progress-row"><span id="study-position">0 / 0</span><div class="progress-track"><span id="study-progress-bar"></span></div><span id="study-level-label">N5</span></div>
           <div id="study-empty" class="panel empty-state" hidden><div class="empty-symbol">✓</div><h2>Chưa có thẻ trong phiên</h2><p>Hãy nạp thêm dữ liệu hoặc chọn cấp độ khác.</p><button class="button button-primary" data-goto="vocab" type="button">Quay lại kho từ vựng</button></div>
           <div id="study-card-area" class="study-card-area">
             <button id="study-audio" class="audio-button" type="button" aria-label="Nghe phát âm">🔊 Nghe phát âm</button>
             <button id="study-card" class="study-card" type="button" aria-label="Lật thẻ để xem nghĩa">
+              <span class="study-swipe-hint" aria-hidden="true"></span>
               <span class="study-card-front"><span class="card-badges"><span id="study-card-level" class="tag">N5</span><span id="study-card-topic" class="tag tag-muted">Chủ đề</span></span><span id="study-card-jp" class="japanese-word">日本語</span><span id="study-card-kanji" class="card-kanji"></span><span class="flip-hint">Chạm để lật thẻ</span></span>
               <span class="study-card-back"><span class="back-label">CÁCH ĐỌC</span><strong id="study-card-romaji" class="romaji-word">nihongo</strong><span class="back-label">NGHĨA TIẾNG VIỆT</span><strong id="study-card-meaning" class="meaning-word">Tiếng Nhật</strong><span id="study-card-mnemonic" class="mnemonic-note"></span><span class="flip-hint">Chạm để trở lại</span></span>
             </button>
             <div class="study-controls"><button id="study-prev" class="icon-button" type="button" aria-label="Từ trước">←</button><button id="study-again" class="button button-review" type="button">Chưa nhớ</button><button id="study-known" class="button button-known" type="button">Đã nhớ ✓</button><button id="study-next" class="icon-button" type="button" aria-label="Từ tiếp">→</button></div>
-            <p class="study-footnote">Đánh giá trung thực giúp lịch ôn tập thích ứng tốt hơn.</p>
+            <p class="study-swipe-guide"><span>← Chưa nhớ</span><span>Vuốt thẻ để chuyển · Chạm để lật</span><span>Đã nhớ →</span></p>
+            <p class="study-footnote">Vuốt trái để ôn lại sau · Vuốt phải để ghi nhận đã nhớ. Bạn vẫn có thể dùng nút bên dưới.</p>
           </div>
           <div id="study-complete" class="panel completion-panel" hidden><div class="completion-mark">✓</div><h2>Hoàn thành phiên học</h2><p id="study-complete-summary">Bạn đã hoàn thành phiên này.</p><div class="completion-actions"><button id="study-next-batch" class="button button-primary" type="button">Học tiếp</button><button class="button button-outline" data-goto="review" type="button">Xem lịch ôn</button></div></div>
         </section>
@@ -150,7 +186,8 @@
       <button class="mobile-nav-item active" data-page="home"><span>⌂</span><small>Trang chủ</small></button>
       <button class="mobile-nav-item" data-page="roadmap"><span>▤</span><small>Lộ trình</small></button>
       <button class="mobile-nav-item" data-page="vocab"><span>文</span><small>Từ vựng</small></button>
-      <button class="mobile-nav-item" data-page="grammar"><span>あ</span><small>Ngữ pháp</small></button>
+      <button class="mobile-nav-item" data-page="kana"><span>あ</span><small>Bảng chữ</small></button>
+      <button class="mobile-nav-item" data-page="grammar"><span>✿</span><small>Ngữ pháp</small></button>
       <button class="mobile-nav-item" data-page="review"><span>↻</span><small>Ôn tập</small></button>
     </nav>
   </div>
