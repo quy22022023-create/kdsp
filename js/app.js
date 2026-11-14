@@ -4,6 +4,7 @@
   const CONTENT_CACHE_KEY = 'jp_app_content_cache_v1';
   const PROGRESS_KEY = 'jp_app_progress_v1';
   const META_KEY = 'jp_app_meta_v1';
+  const SPEECH_SETTINGS_KEY = 'jp_app_speech_settings_v1';
   const SESSION_SIZE = 12;
   const $ = (id) => document.getElementById(id);
 
@@ -52,7 +53,14 @@
   let toastTimer = null;
   let authMode = 'signin';
   let kanaScript = 'hiragana';
+  let kanaGroup = 'basic';
   let selectedKana = null;
+  let kanaQuiz = null;
+  let speechVoices = [];
+  let speechSettings = { voiceURI: '', rate: 0.84, pitch: 1.10 };
+  let studyPointer = null;
+  let suppressStudyClick = false;
+  let studyAdvanceLocked = false;
   let currentUser = null;
   let accountSyncPromise = null;
   let isDemoMode = false;
@@ -72,6 +80,48 @@
       ['マ','ma'],['ミ','mi'],['ム','mu'],['メ','me'],['モ','mo'],['ヤ','ya'],['ユ','yu'],['ヨ','yo'],['ラ','ra'],['リ','ri'],
       ['ル','ru'],['レ','re'],['ロ','ro'],['ワ','wa'],['ヲ','o'],['ン','n']
     ]
+  };
+
+  const KANA_GROUPS = {
+    basic: {
+      note: '46 âm cơ bản, học theo từng hàng あ・か・さ・た・な…',
+      hiragana: KANA.hiragana,
+      katakana: KANA.katakana
+    },
+    dakuten: {
+      note: 'Dấu ゛ làm thay đổi âm: K → G, S → Z, T → D, H → B. Lưu ý じ thường đọc ji, ぢ gần như ji; ず và づ gần như zu trong tiếng Nhật hiện đại.',
+      hiragana: [['が','ga'],['ぎ','gi'],['ぐ','gu'],['げ','ge'],['ご','go'],['ざ','za'],['じ','ji'],['ず','zu'],['ぜ','ze'],['ぞ','zo'],['だ','da'],['ぢ','ji'],['づ','zu'],['で','de'],['ど','do'],['ば','ba'],['び','bi'],['ぶ','bu'],['べ','be'],['ぼ','bo']],
+      katakana: [['ガ','ga'],['ギ','gi'],['グ','gu'],['ゲ','ge'],['ゴ','go'],['ザ','za'],['ジ','ji'],['ズ','zu'],['ゼ','ze'],['ゾ','zo'],['ダ','da'],['ヂ','ji'],['ヅ','zu'],['デ','de'],['ド','do'],['バ','ba'],['ビ','bi'],['ブ','bu'],['ベ','be'],['ボ','bo']]
+    },
+    handakuten: {
+      note: 'Dấu ゜ trên hàng H tạo thành âm P: ぱ・ぴ・ぷ・ぺ・ぽ.',
+      hiragana: [['ぱ','pa'],['ぴ','pi'],['ぷ','pu'],['ぺ','pe'],['ぽ','po']],
+      katakana: [['パ','pa'],['ピ','pi'],['プ','pu'],['ペ','pe'],['ポ','po']]
+    },
+    combo: {
+      note: 'Âm ghép kết hợp hàng I với ゃ・ゅ・ょ nhỏ. Đọc liền thành một nhịp: きゃ = kya, không đọc tách ki-ya.',
+      hiragana: [['きゃ','kya'],['きゅ','kyu'],['きょ','kyo'],['しゃ','sha'],['しゅ','shu'],['しょ','sho'],['ちゃ','cha'],['ちゅ','chu'],['ちょ','cho'],['にゃ','nya'],['にゅ','nyu'],['にょ','nyo'],['ひゃ','hya'],['ひゅ','hyu'],['ひょ','hyo'],['みゃ','mya'],['みゅ','myu'],['みょ','myo'],['りゃ','rya'],['りゅ','ryu'],['りょ','ryo'],['ぎゃ','gya'],['ぎゅ','gyu'],['ぎょ','gyo'],['じゃ','ja'],['じゅ','ju'],['じょ','jo'],['びゃ','bya'],['びゅ','byu'],['びょ','byo'],['ぴゃ','pya'],['ぴゅ','pyu'],['ぴょ','pyo']],
+      katakana: [['キャ','kya'],['キュ','kyu'],['キョ','kyo'],['シャ','sha'],['シュ','shu'],['ショ','sho'],['チャ','cha'],['チュ','chu'],['チョ','cho'],['ニャ','nya'],['ニュ','nyu'],['ニョ','nyo'],['ヒャ','hya'],['ヒュ','hyu'],['ヒョ','hyo'],['ミャ','mya'],['ミュ','myu'],['ミョ','myo'],['リャ','rya'],['リュ','ryu'],['リョ','ryo'],['ギャ','gya'],['ギュ','gyu'],['ギョ','gyo'],['ジャ','ja'],['ジュ','ju'],['ジョ','jo'],['ビャ','bya'],['ビュ','byu'],['ビョ','byo'],['ピャ','pya'],['ピュ','pyu'],['ピョ','pyo']]
+    },
+    special: {
+      note: 'っ・ッ biểu thị âm ngắt ngắn. Hiragana thường viết trường âm bằng cách lặp hoặc thêm nguyên âm; Katakana dùng dấu ー để kéo dài âm trước đó.',
+      hiragana: [
+        ['っ','âm ngắt','Âm ngắt nhỏ; ví dụ がっこう (trường học).','がっこう'],
+        ['ああ','ā','Trường âm a; ví dụ おばあさん (bà).','おばあさん'],
+        ['いい','ī','Trường âm i; ví dụ おじいさん (ông).','おじいさん'],
+        ['うう','ū','Trường âm u; ví dụ くうき (không khí).','くうき'],
+        ['えい','ē','Trường âm e thường viết えい; ví dụ せんせい (giáo viên).','せんせい'],
+        ['おう','ō','Trường âm o thường viết おう; ví dụ こうこう (trường trung học).','こうこう'],
+        ['おお','ō','Một số từ viết trường âm o bằng おお; ví dụ おおきい (to, lớn).','おおきい']
+      ],
+      katakana: [
+        ['ッ','âm ngắt','Âm ngắt nhỏ; ví dụ ベッド (giường).','ベッド'],
+        ['ー','trường âm','Kéo dài nguyên âm đứng trước; ví dụ コーヒー (cà phê).','コーヒー'],
+        ['コー','kō','Ví dụ trường âm: コート (áo khoác).','コート'],
+        ['ケー','kē','Ví dụ trường âm: ケーキ (bánh kem).','ケーキ'],
+        ['スーパー','sūpā','Ví dụ nhiều trường âm: スーパー (siêu thị).','スーパー']
+      ]
+    }
   };
 
   function escapeHtml(value) {
@@ -291,7 +341,7 @@
     const known = cards.filter((card) => getVocabStatus(card) === 'known').length;
     const pct = cards.length ? Math.round(known / cards.length * 100) : 0;
     $('roadmap-summary').innerHTML = `<strong>${pct}%</strong><span>${known}/${cards.length} từ đã nhớ ở ${roadmapLevel}</span><span>${grammar.length} điểm ngữ pháp</span>`;
-    const kanaCard = roadmapLevel === 'N5' ? `<article class="lesson-card"><span class="lesson-number">あ</span><div><h3>Bảng chữ cái Hiragana & Katakana</h3><p>Học nhận diện 46 âm cơ bản và nghe phát âm.</p></div><button class="button button-outline" data-goto="kana" type="button">Bắt đầu →</button></article>` : '';
+    const kanaCard = roadmapLevel === 'N5' ? `<article class="lesson-card"><span class="lesson-number">あ</span><div><h3>Bảng chữ cái Hiragana & Katakana</h3><p>Học chữ cơ bản, biến âm, âm ghép và nghe phát âm.</p></div><button class="button button-outline" data-goto="kana" type="button">Bắt đầu →</button></article>` : '';
     const topicCards = topicList.map((topic, index) => {
       const topicCards = cards.filter((card) => card.topic === topic);
       const topicGrammar = grammar.filter((item) => item.topic === topic);
@@ -342,25 +392,147 @@
     }).join('') : '<div class="empty-message">Chưa có dữ liệu ngữ pháp phù hợp. Quản trị viên có thể bổ sung từng đợt qua admin.html.</div>';
   }
 
+  function getKanaRows() {
+    const group = KANA_GROUPS[kanaGroup] || KANA_GROUPS.basic;
+    return group[kanaScript] || KANA_GROUPS.basic[kanaScript];
+  }
+
+  function getAllKanaRows() {
+    const rows = [];
+    Object.keys(KANA_GROUPS).forEach((groupKey) => {
+      (KANA_GROUPS[groupKey][kanaScript] || []).forEach((row) => rows.push(row));
+    });
+    return rows;
+  }
+
   function renderKana() {
-    const rows = KANA[kanaScript];
+    const rows = getKanaRows();
     if (!selectedKana || !rows.some((row) => row[0] === selectedKana[0])) selectedKana = rows[0];
     $('kana-selected-char').textContent = selectedKana[0];
     $('kana-selected-romaji').textContent = selectedKana[1];
-    $('kana-grid').innerHTML = rows.map(([char, romaji]) => `<button class="kana-cell ${selectedKana[0] === char ? 'active' : ''}" data-kana-char="${char}" data-kana-romaji="${romaji}" type="button"><strong>${char}</strong><small>${romaji}</small></button>`).join('');
+    $('kana-selected-note').textContent = selectedKana[2] || 'Chạm vào chữ để nghe phát âm và luyện nhận diện.';
+    $('kana-grid').innerHTML = rows.map(([char, romaji, note, audioText]) => `<button class="kana-cell ${selectedKana[0] === char ? 'active' : ''}" data-kana-char="${escapeHtml(char)}" data-kana-romaji="${escapeHtml(romaji)}" data-kana-note="${escapeHtml(note || '')}" data-kana-audio="${escapeHtml(audioText || '')}" type="button"><strong>${escapeHtml(char)}</strong><small>${escapeHtml(romaji)}</small></button>`).join('');
+    $('kana-group-note').textContent = KANA_GROUPS[kanaGroup].note;
     document.querySelectorAll('[data-kana-script]').forEach((button) => button.classList.toggle('active', button.dataset.kanaScript === kanaScript));
+    document.querySelectorAll('[data-kana-group]').forEach((button) => button.classList.toggle('active', button.dataset.kanaGroup === kanaGroup));
+    document.querySelectorAll('[data-kana-quiz-mode]').forEach((button) => button.classList.toggle('selected', kanaQuiz && button.dataset.kanaQuizMode === kanaQuiz.mode));
+    if (kanaQuiz) renderKanaQuiz();
+  }
+
+  function getJapaneseVoices() {
+    if (!('speechSynthesis' in window)) return [];
+    return window.speechSynthesis.getVoices().filter((voice) => String(voice.lang || '').toLowerCase().startsWith('ja'));
+  }
+
+  function getPreferredJapaneseVoice(voices) {
+    if (!voices.length) return null;
+    const saved = voices.find((voice) => voice.voiceURI === speechSettings.voiceURI);
+    if (saved) return saved;
+    const femaleLike = voices.find((voice) => /(female|woman|kyoko|haruka|sayaka|nanami|otoya.*female)/i.test(`${voice.name} ${voice.voiceURI}`));
+    return femaleLike || voices[0];
+  }
+
+  function renderVoiceOptions() {
+    const select = $('speech-voice-select');
+    if (!select) return;
+    speechVoices = getJapaneseVoices();
+    if (!speechVoices.length) {
+      select.innerHTML = '<option value="">Thiết bị chưa có giọng tiếng Nhật</option>';
+      select.disabled = true;
+    } else {
+      const preferred = getPreferredJapaneseVoice(speechVoices);
+      if (!speechSettings.voiceURI || !speechVoices.some((voice) => voice.voiceURI === speechSettings.voiceURI)) {
+        speechSettings.voiceURI = preferred ? preferred.voiceURI : '';
+      }
+      select.disabled = false;
+      select.innerHTML = speechVoices.map((voice) => `<option value="${escapeHtml(voice.voiceURI)}">${escapeHtml(voice.name)} · ${escapeHtml(voice.lang)}</option>`).join('');
+      select.value = speechSettings.voiceURI;
+    }
+    $('speech-rate').value = String(speechSettings.rate);
+    $('speech-rate-value').textContent = `${Number(speechSettings.rate).toFixed(2)}×`;
+    $('speech-pitch').value = String(speechSettings.pitch);
+    $('speech-pitch-value').textContent = Number(speechSettings.pitch).toFixed(2);
+  }
+
+  function saveSpeechSettings() {
+    AppStore.set(SPEECH_SETTINGS_KEY, speechSettings);
   }
 
   function speakJapanese(text) {
-    if (!text || !('speechSynthesis' in window)) {
+    if (!text || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
       showToast('Trình duyệt này chưa hỗ trợ phát âm tự động.');
       return;
     }
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(String(text));
     utterance.lang = 'ja-JP';
-    utterance.rate = 0.82;
+    utterance.rate = Math.max(0.7, Math.min(1.05, Number(speechSettings.rate) || 0.84));
+    utterance.pitch = Math.max(0.85, Math.min(1.3, Number(speechSettings.pitch) || 1.10));
+    utterance.volume = 1;
+    const voices = getJapaneseVoices();
+    const voice = getPreferredJapaneseVoice(voices);
+    if (voice) utterance.voice = voice;
     window.speechSynthesis.speak(utterance);
+  }
+
+  function startKanaQuiz(mode) {
+    const rows = getKanaRows();
+    if (!rows || rows.length < 4) {
+      showToast('Nhóm chữ này chưa đủ dữ liệu để tạo câu hỏi.');
+      return;
+    }
+    kanaQuiz = { mode: mode === 'listen' ? 'listen' : 'read', total: 0, correct: 0, answered: false, complete: false, answer: null, options: [] };
+    $('kana-quiz-panel').hidden = false;
+    nextKanaQuizQuestion();
+    $('kana-quiz-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function nextKanaQuizQuestion() {
+    if (!kanaQuiz) return;
+    if (kanaQuiz.total >= 10) {
+      kanaQuiz.complete = true;
+      renderKanaQuiz();
+      return;
+    }
+    const pool = getKanaRows();
+    const answer = pool[Math.floor(Math.random() * pool.length)];
+    const distractors = shuffle(getAllKanaRows().filter((row) => row[0] !== answer[0] && row[1] !== answer[1]).filter((row, index, list) => list.findIndex((candidate) => candidate[1] === row[1]) === index)).slice(0, 3);
+    const options = shuffle([answer, ...distractors]);
+    kanaQuiz.answer = answer;
+    kanaQuiz.options = options;
+    kanaQuiz.answered = false;
+    renderKanaQuiz();
+  }
+
+  function renderKanaQuiz() {
+    if (!kanaQuiz) return;
+    $('kana-quiz-title').textContent = kanaQuiz.mode === 'listen' ? 'Nghe âm, chọn mặt chữ' : 'Nhìn chữ, chọn cách đọc';
+    $('kana-quiz-progress').textContent = kanaQuiz.complete ? `${kanaQuiz.correct}/10 đúng` : `Câu ${kanaQuiz.total + 1} / 10`;
+    $('kana-quiz-instruction').textContent = kanaQuiz.complete ? 'Bạn đã hoàn thành lượt luyện tập này.' : kanaQuiz.mode === 'listen' ? 'Nghe phát âm rồi chọn chữ tương ứng.' : 'Chữ này được đọc như thế nào?';
+    $('kana-quiz-prompt').textContent = kanaQuiz.complete ? 'よくできました！' : kanaQuiz.mode === 'listen' ? '？' : kanaQuiz.answer[0];
+    $('kana-quiz-audio').hidden = kanaQuiz.complete || kanaQuiz.mode !== 'listen';
+    $('kana-quiz-options').innerHTML = kanaQuiz.complete ? '' : kanaQuiz.options.map((row, index) => {
+      const label = kanaQuiz.mode === 'listen' ? row[0] : row[1];
+      const correct = kanaQuiz.answered && row[0] === kanaQuiz.answer[0];
+      const wrong = kanaQuiz.answered && index === kanaQuiz.selectedIndex && !correct;
+      return `<button class="kana-quiz-option ${correct ? 'correct' : ''} ${wrong ? 'wrong' : ''}" data-kana-quiz-option="${index}" type="button" ${kanaQuiz.answered ? 'disabled' : ''}>${escapeHtml(label)}</button>`;
+    }).join('');
+    $('kana-quiz-feedback').textContent = kanaQuiz.complete ? `Bạn trả lời đúng ${kanaQuiz.correct}/10 câu. Cứ luyện từng chút một nhé!` : kanaQuiz.answered ? (kanaQuiz.lastCorrect ? 'Chính xác! すごい！' : `Đáp án đúng là ${kanaQuiz.answer[0]} · ${kanaQuiz.answer[1]}. Hãy thử lại nhé!`) : '';
+    $('kana-quiz-next').hidden = !kanaQuiz.answered;
+    $('kana-quiz-next').textContent = kanaQuiz.complete ? 'Luyện lại từ đầu ↻' : kanaQuiz.total >= 10 ? 'Xem kết quả' : 'Câu tiếp theo →';
+    $('kana-quiz-next').hidden = !kanaQuiz.answered && !kanaQuiz.complete;
+  }
+
+  function answerKanaQuiz(optionIndex) {
+    if (!kanaQuiz || kanaQuiz.answered || !kanaQuiz.options[optionIndex]) return;
+    const selected = kanaQuiz.options[optionIndex];
+    const correct = selected[0] === kanaQuiz.answer[0];
+    kanaQuiz.answered = true;
+    kanaQuiz.selectedIndex = optionIndex;
+    kanaQuiz.lastCorrect = correct;
+    kanaQuiz.total += 1;
+    if (correct) kanaQuiz.correct += 1;
+    renderKanaQuiz();
   }
 
   function buildPracticeQuestion(exercise) {
@@ -508,7 +680,7 @@
     studyRated = new Set();
     $('learn-title').textContent = studyTitle;
     $('learn-eyebrow').textContent = `${unique.length} THẺ TRONG PHIÊN`;
-    $('learn-subtitle').textContent = 'Chạm vào thẻ để xem nghĩa, cách đọc và mẹo ghi nhớ.';
+    $('learn-subtitle').textContent = 'Chạm để lật thẻ. Vuốt phải nếu đã nhớ, vuốt trái nếu cần ôn lại.';
     setPage('learn');
     renderStudyCard();
   }
@@ -537,19 +709,30 @@
     $('study-card-romaji').textContent = card.romaji || 'Chưa có Romaji';
     $('study-card-meaning').textContent = card.vi;
     $('study-card-mnemonic').textContent = card.mnemonic || 'Hãy chú ý cách đọc và ngữ cảnh sử dụng của từ.';
-    $('study-card').classList.remove('flipped');
+    $('study-card').classList.remove('flipped', 'swipe-preview-left', 'swipe-preview-right', 'swipe-out-left', 'swipe-out-right');
     $('study-card').setAttribute('aria-pressed', 'false');
   }
 
-  function rateCurrentCard(correct) {
+  function rateCurrentCard(correct, fromSwipe) {
     const card = studyCards[studyIndex];
-    if (!card || studyRated.has(card.id)) return;
+    if (!card || studyRated.has(card.id) || studyAdvanceLocked) return;
+    studyAdvanceLocked = true;
     recordVocabReview(card, correct);
     studyRated.add(card.id);
-    studyIndex += 1;
-    renderStudyCard();
-    renderHome();
-    if (currentPage === 'review') renderReview();
+    const advance = () => {
+      studyIndex += 1;
+      studyAdvanceLocked = false;
+      renderStudyCard();
+      renderHome();
+      if (currentPage === 'review') renderReview();
+    };
+    if (fromSwipe) {
+      $('study-card').classList.remove('swipe-preview-left', 'swipe-preview-right');
+      $('study-card').classList.add(correct ? 'swipe-out-right' : 'swipe-out-left');
+      window.setTimeout(advance, 190);
+    } else {
+      advance();
+    }
   }
 
   function moveStudy(delta) {
@@ -823,6 +1006,8 @@
       progress = savedProgress && typeof savedProgress === 'object' ? savedProgress : {};
       const savedMeta = await AppStore.get(META_KEY, null);
       if (savedMeta && typeof savedMeta === 'object') meta = { ...meta, ...savedMeta };
+      const savedSpeech = await AppStore.get(SPEECH_SETTINGS_KEY, null);
+      if (savedSpeech && typeof savedSpeech === 'object') speechSettings = { ...speechSettings, ...savedSpeech };
       const cached = await AppStore.get(CONTENT_CACHE_KEY, null);
       if (cached) content = normalizeContent(cached);
     } catch (error) {
@@ -830,6 +1015,11 @@
     }
 
     renderAll();
+    renderVoiceOptions();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = renderVoiceOptions;
+      window.setTimeout(renderVoiceOptions, 350);
+    }
     if (AppDB.isConfigured()) {
       setConnectionState('Đang kết nối…', '');
       connectSupabaseInBackground();
@@ -863,12 +1053,18 @@
       }
       const kanaButton = event.target.closest('[data-kana-char]');
       if (kanaButton) {
-        selectedKana = [kanaButton.dataset.kanaChar, kanaButton.dataset.kanaRomaji];
+        selectedKana = [kanaButton.dataset.kanaChar, kanaButton.dataset.kanaRomaji, kanaButton.dataset.kanaNote || '', kanaButton.dataset.kanaAudio || ''];
         renderKana();
         return;
       }
       const kanaScriptButton = event.target.closest('[data-kana-script]');
-      if (kanaScriptButton) { kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; renderKana(); return; }
+      if (kanaScriptButton) { kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      const kanaGroupButton = event.target.closest('[data-kana-group]');
+      if (kanaGroupButton) { kanaGroup = kanaGroupButton.dataset.kanaGroup; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      const kanaQuizModeButton = event.target.closest('[data-kana-quiz-mode]');
+      if (kanaQuizModeButton) { startKanaQuiz(kanaQuizModeButton.dataset.kanaQuizMode); return; }
+      const kanaQuizOption = event.target.closest('[data-kana-quiz-option]');
+      if (kanaQuizOption) { answerKanaQuiz(Number(kanaQuizOption.dataset.kanaQuizOption)); return; }
       const practiceOption = event.target.closest('[data-practice-option]');
       if (practiceOption) { answerPractice(Number(practiceOption.dataset.practiceOption)); return; }
     });
@@ -902,9 +1098,42 @@
     });
     $('start-review-button').addEventListener('click', startReviewSession);
     $('review-level-filter').addEventListener('change', renderReview);
-    $('study-card').addEventListener('click', () => {
-      $('study-card').classList.toggle('flipped');
-      $('study-card').setAttribute('aria-pressed', $('study-card').classList.contains('flipped') ? 'true' : 'false');
+    const studyCardElement = $('study-card');
+    studyCardElement.addEventListener('pointerdown', (event) => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      studyPointer = { id: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0 };
+      if (studyCardElement.setPointerCapture) {
+        try { studyCardElement.setPointerCapture(event.pointerId); } catch (_) { /* Pointer capture is optional. */ }
+      }
+    });
+    studyCardElement.addEventListener('pointermove', (event) => {
+      if (!studyPointer || studyPointer.id !== event.pointerId) return;
+      studyPointer.dx = event.clientX - studyPointer.x;
+      studyPointer.dy = event.clientY - studyPointer.y;
+      const horizontal = Math.abs(studyPointer.dx) > 22 && Math.abs(studyPointer.dx) > Math.abs(studyPointer.dy) * 1.15;
+      studyCardElement.classList.toggle('swipe-preview-right', horizontal && studyPointer.dx > 0);
+      studyCardElement.classList.toggle('swipe-preview-left', horizontal && studyPointer.dx < 0);
+    });
+    studyCardElement.addEventListener('pointerup', (event) => {
+      if (!studyPointer || studyPointer.id !== event.pointerId) return;
+      const { dx, dy } = studyPointer;
+      studyPointer = null;
+      const isSwipe = Math.abs(dx) >= 68 && Math.abs(dx) > Math.abs(dy) * 1.25;
+      studyCardElement.classList.remove('swipe-preview-left', 'swipe-preview-right');
+      if (isSwipe) {
+        suppressStudyClick = true;
+        window.setTimeout(() => { suppressStudyClick = false; }, 450);
+        rateCurrentCard(dx > 0, true);
+      }
+    });
+    studyCardElement.addEventListener('pointercancel', () => {
+      studyPointer = null;
+      studyCardElement.classList.remove('swipe-preview-left', 'swipe-preview-right');
+    });
+    studyCardElement.addEventListener('click', () => {
+      if (suppressStudyClick || studyAdvanceLocked) { suppressStudyClick = false; return; }
+      studyCardElement.classList.toggle('flipped');
+      studyCardElement.setAttribute('aria-pressed', studyCardElement.classList.contains('flipped') ? 'true' : 'false');
     });
     $('study-audio').addEventListener('click', () => { const card = studyCards[studyIndex]; if (card) speakJapanese(card.jp); });
     $('study-again').addEventListener('click', () => rateCurrentCard(false));
@@ -924,7 +1153,13 @@
       closeModal('vocab-modal');
       startStudy([selectedVocab], 'Học một từ');
     });
-    $('kana-audio-button').addEventListener('click', () => selectedKana && speakJapanese(selectedKana[0]));
+    $('kana-audio-button').addEventListener('click', () => selectedKana && speakJapanese(selectedKana[3] || selectedKana[0]));
+    $('kana-quiz-audio').addEventListener('click', () => kanaQuiz && kanaQuiz.answer && speakJapanese(kanaQuiz.answer[3] || kanaQuiz.answer[0]));
+    $('kana-quiz-next').addEventListener('click', () => { if (kanaQuiz && kanaQuiz.complete) startKanaQuiz(kanaQuiz.mode); else nextKanaQuizQuestion(); });
+    $('speech-voice-select').addEventListener('change', () => { speechSettings.voiceURI = $('speech-voice-select').value; saveSpeechSettings(); });
+    $('speech-rate').addEventListener('input', () => { speechSettings.rate = Number($('speech-rate').value); $('speech-rate-value').textContent = `${speechSettings.rate.toFixed(2)}×`; saveSpeechSettings(); });
+    $('speech-pitch').addEventListener('input', () => { speechSettings.pitch = Number($('speech-pitch').value); $('speech-pitch-value').textContent = speechSettings.pitch.toFixed(2); saveSpeechSettings(); });
+    $('speech-preview-button').addEventListener('click', () => speakJapanese('こんにちは。いっしょに日本語を勉強しましょう。'));
     document.querySelectorAll('.modal-backdrop').forEach((modal) => modal.addEventListener('click', (event) => {
       if (event.target === modal) modal.hidden = true;
     }));
