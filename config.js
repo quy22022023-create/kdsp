@@ -4,6 +4,6 @@
  * TUYỆT ĐỐI KHÔNG đặt service_role key hoặc secret key trong tệp này.
  */
 window.APP_CONFIG = {
-  SUPABASE_URL: 'https://YOUR_PROJECT.supabase.co',
+  SUPABASE_URL: 'https://dtdknettwfgilklaqeae.supabase.co',
   SUPABASE_ANON_KEY: 'YOUR_SUPABASE_ANON_KEY'
 };
