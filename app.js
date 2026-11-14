@@ -1,23 +1,25 @@
 /**
  * =========================================================================
- * KHO TỪ VỰNG CHUNG PHÂN CẤP N5 -> N3 (KẾT HỢP DATA.JS & LOCALSTORAGE)
+ * KHO TỪ VỰNG CHUNG PHÂN CẤP N5 -> N3 & LUYỆN DỊCH CÂU (DUOLINGO MODE)
  * =========================================================================
  */
 const EXTRA_CARDS_STORAGE_KEY = 'jlpt_n5_n3_extra_cards_v1';
+const EXTRA_SENTENCES_STORAGE_KEY = 'jlpt_n5_n3_extra_sentences_v1';
 const PROGRESS_STORAGE_KEY = 'jlpt_n5_n3_progress_v1';
 const ALLOWED_LEVELS = ['N5', 'N4', 'N3'];
 
 let REPO_CARDS = [];
+let REPO_SENTENCES = [];
 
 let state = {
   selectedLevel: 'ALL',    // 'ALL' | 'N5' | 'N4' | 'N3'
   selectedTopic: 'ALL',    // 'ALL' | tên chủ đề
-  mode: 'flashcard',       // 'flashcard' | 'quiz'
+  mode: 'flashcard',       // 'flashcard' | 'quiz' | 'translate'
   filterUnmastered: false,
   voiceMode: 'normal',     // 'normal' | 'slow'
   currentCardIndex: 0,
   isFlipped: false,
-  customOrderIds: null,    // Mảng ID khi người dùng xáo trộn
+  customOrderIds: null,
   progress: {},
   quiz: {
     questions: [],
@@ -25,12 +27,23 @@ let state = {
     score: 0,
     answered: false,
     wrongCards: []
+  },
+  translate: {
+    queue: [],
+    currentIndex: 0,
+    completedCount: 0,
+    energy: 0,
+    bankChips: [],      // [{ bankIdx, text, used }]
+    selectedBankIds: [], // [bankIdx, ...] theo thứ tự người dùng chạm
+    checked: false,
+    isCorrect: false,
+    activeTokenIdx: -1
   }
 };
 
 /**
  * =========================================================================
- * 1. CHUẨN HÓA DỮ LIỆU & KHÓA KIỂM TRA TRÙNG LẶP
+ * 1. CHUẨN HÓA DỮ LIỆU (TỪ VỰNG & CÂU DỊCH) + KHÓA KIỂM TRA TRÙNG LẶP
  * =========================================================================
  */
 function normalizeLevel(rawLevel) {
@@ -38,7 +51,16 @@ function normalizeLevel(rawLevel) {
   return ALLOWED_LEVELS.includes(upper) ? upper : 'N5';
 }
 
+function isSentenceItem(raw) {
+  if (!raw || typeof raw !== 'object') return false;
+  return raw.type === 'sentence' || Array.isArray(raw.tokens) || Array.isArray(raw.vi_blocks);
+}
+
 function getDuplicateSignature(item) {
+  if (isSentenceItem(item)) {
+    const jp = String(item.jp || '').replace(/[。．.！!？?]/g, '').trim();
+    return `SENT||${jp}`;
+  }
   const jp = String(item.jp || '').trim();
   const kanji = String(item.kanji || '').trim();
   return `${jp}||${kanji}`;
@@ -46,7 +68,7 @@ function getDuplicateSignature(item) {
 
 function generateStableCardId(item, fallbackIdx = 0) {
   const sig = getDuplicateSignature(item);
-  if (sig !== '||') {
+  if (sig !== '||' && sig !== 'SENT||') {
     return 'card_' + encodeURIComponent(sig);
   }
   return `card_idx_${fallbackIdx}_${Date.now()}`;
@@ -56,6 +78,7 @@ function normalizeCardObject(raw, idx = 0) {
   const jp = String(raw.jp || raw.kanji || '').trim();
   const kanji = String(raw.kanji || '').trim();
   const normalized = {
+    type: 'vocab',
     level: normalizeLevel(raw.level),
     topic: String(raw.topic || 'Từ vựng chung').trim() || 'Từ vựng chung',
     jp: jp || '???',
@@ -63,6 +86,40 @@ function normalizeCardObject(raw, idx = 0) {
     romaji: String(raw.romaji || '').trim(),
     vi: String(raw.vi || 'Chưa có nghĩa').trim(),
     mnemonic: String(raw.mnemonic || 'Ghi nhớ qua lật thẻ và trắc nghiệm.').trim()
+  };
+  normalized.id = raw.id || generateStableCardId(normalized, idx);
+  return normalized;
+}
+
+function normalizeSentenceObject(raw, idx = 0) {
+  const jp = String(raw.jp || '').trim();
+  const vi = String(raw.vi || '').trim();
+  const tokens = Array.isArray(raw.tokens) && raw.tokens.length > 0
+    ? raw.tokens.map(t => ({
+        jp: String(t.jp || '').trim(),
+        romaji: String(t.romaji || '').trim(),
+        vi: String(t.vi || '').trim()
+      })).filter(t => t.jp)
+    : [{ jp: jp.replace(/[。．.！!？?]+$/g, ''), romaji: String(raw.romaji || '').trim(), vi }];
+
+  const viBlocks = Array.isArray(raw.vi_blocks) && raw.vi_blocks.length > 0
+    ? raw.vi_blocks.map(w => String(w).trim()).filter(Boolean)
+    : vi.replace(/[.,!?？。]+$/g, '').split(/\s+/).filter(Boolean);
+
+  const distractors = Array.isArray(raw.distractors)
+    ? raw.distractors.map(w => String(w).trim()).filter(Boolean)
+    : [];
+
+  const normalized = {
+    type: 'sentence',
+    level: normalizeLevel(raw.level),
+    topic: String(raw.topic || 'Luyện dịch câu').trim() || 'Luyện dịch câu',
+    jp: jp || tokens.map(t => t.jp).join(''),
+    romaji: String(raw.romaji || tokens.map(t => t.romaji).filter(Boolean).join(' ')).trim(),
+    tokens,
+    vi: vi || viBlocks.join(' '),
+    vi_blocks: viBlocks,
+    distractors
   };
   normalized.id = raw.id || generateStableCardId(normalized, idx);
   return normalized;
@@ -78,21 +135,41 @@ function loadRepository() {
     ? VOCAB_DATA
     : (typeof window !== 'undefined' && Array.isArray(window.VOCAB_DATA) ? window.VOCAB_DATA : []);
 
-  const fileCards = sourceArray.map((item, idx) => ({
-    ...normalizeCardObject(item, idx),
-    source: 'data.js'
-  }));
+  const fileVocab = [];
+  const fileSentences = [];
 
-  let extraCards = [];
+  sourceArray.forEach((item, idx) => {
+    if (isSentenceItem(item)) {
+      fileSentences.push({ ...normalizeSentenceObject(item, idx), source: 'data.js' });
+    } else {
+      fileVocab.push({ ...normalizeCardObject(item, idx), source: 'data.js' });
+    }
+  });
+
+  let extraVocab = [];
+  let extraSentences = [];
   try {
     const savedExtra = localStorage.getItem(EXTRA_CARDS_STORAGE_KEY);
     if (savedExtra) {
       const parsed = JSON.parse(savedExtra);
       if (Array.isArray(parsed)) {
-        extraCards = parsed.map((item, idx) => ({
-          ...normalizeCardObject(item, idx),
-          source: 'json'
-        }));
+        parsed.forEach((item, idx) => {
+          if (isSentenceItem(item)) {
+            extraSentences.push({ ...normalizeSentenceObject(item, idx), source: 'json' });
+          } else {
+            extraVocab.push({ ...normalizeCardObject(item, idx), source: 'json' });
+          }
+        });
+      }
+    }
+
+    const savedSentences = localStorage.getItem(EXTRA_SENTENCES_STORAGE_KEY);
+    if (savedSentences) {
+      const parsedSent = JSON.parse(savedSentences);
+      if (Array.isArray(parsedSent)) {
+        parsedSent.forEach((item, idx) => {
+          extraSentences.push({ ...normalizeSentenceObject(item, idx), source: 'json' });
+        });
       }
     }
 
@@ -104,11 +181,13 @@ function loadRepository() {
       }
     }
   } catch (e) {
-    extraCards = [];
+    extraVocab = [];
+    extraSentences = [];
     state.progress = {};
   }
 
-  REPO_CARDS = [...fileCards, ...extraCards];
+  REPO_CARDS = [...fileVocab, ...extraVocab];
+  REPO_SENTENCES = [...fileSentences, ...extraSentences];
 }
 
 function saveExtraCardsToStorage() {
@@ -117,6 +196,11 @@ function saveExtraCardsToStorage() {
       .filter(c => c.source === 'json')
       .map(({ source, ...rest }) => rest);
     localStorage.setItem(EXTRA_CARDS_STORAGE_KEY, JSON.stringify(extraOnly));
+
+    const extraSentOnly = REPO_SENTENCES
+      .filter(s => s.source === 'json')
+      .map(({ source, ...rest }) => rest);
+    localStorage.setItem(EXTRA_SENTENCES_STORAGE_KEY, JSON.stringify(extraSentOnly));
   } catch (e) {
     showToast('Không thể lưu vào bộ nhớ trình duyệt');
   }
@@ -130,14 +214,15 @@ function saveProgressStorage() {
 
 /**
  * =========================================================================
- * 3. KIỂM TRA TRÙNG LẶP TỪ VỰNG (TRONG KHO & KHI NHẬP JSON)
+ * 3. KIỂM TRA TRÙNG LẶP TỪ VỰNG & CÂU DỊCH
  * =========================================================================
  */
 function findRepositoryDuplicates() {
   const seenMap = new Map();
   const duplicateGroups = [];
+  const allItems = [...REPO_CARDS, ...REPO_SENTENCES];
 
-  REPO_CARDS.forEach((card, index) => {
+  allItems.forEach((card, index) => {
     const sig = getDuplicateSignature(card);
     if (!seenMap.has(sig)) {
       seenMap.set(sig, [{ card, index }]);
@@ -148,10 +233,7 @@ function findRepositoryDuplicates() {
 
   seenMap.forEach((entries, sig) => {
     if (entries.length > 1) {
-      duplicateGroups.push({
-        signature: sig,
-        entries
-      });
+      duplicateGroups.push({ signature: sig, entries });
     }
   });
 
@@ -165,11 +247,11 @@ function updateRepoDuplicateBanner() {
 
   if (groups.length === 0) {
     lineEl.classList.remove('has-dup');
-    statusTextEl.textContent = '✓ Kiểm tra trùng: Kho sạch, không có từ trùng lặp';
+    statusTextEl.textContent = '✓ Kiểm tra trùng: Kho sạch, không có mục trùng lặp';
   } else {
     const extraCount = groups.reduce((sum, g) => sum + (g.entries.length - 1), 0);
     lineEl.classList.add('has-dup');
-    statusTextEl.textContent = `⚠️ Phát hiện ${groups.length} từ bị trùng (${extraCount} bản thừa)`;
+    statusTextEl.textContent = `⚠️ Phát hiện ${groups.length} mục bị trùng (${extraCount} bản thừa)`;
   }
 }
 
@@ -177,11 +259,12 @@ function openDuplicateCheckerModal() {
   const groups = findRepositoryDuplicates();
   const bodyEl = document.getElementById('repo-dup-modal-body');
   const dedupeBtn = document.getElementById('dedupe-repo-btn');
+  const totalRepoCount = REPO_CARDS.length + REPO_SENTENCES.length;
 
   if (groups.length === 0) {
     bodyEl.innerHTML = `
       <div class="dup-check-box clean">
-        ✓ Toàn bộ ${REPO_CARDS.length} từ vựng trong kho hiện tại đều là duy nhất, không có từ nào bị trùng lặp.
+        ✓ Toàn bộ ${totalRepoCount} mục trong kho hiện tại đều là duy nhất, không có mục nào bị trùng lặp.
       </div>
     `;
     dedupeBtn.style.display = 'none';
@@ -189,7 +272,7 @@ function openDuplicateCheckerModal() {
     const hasFileDuplicates = groups.some(g => g.entries.filter(e => e.card.source === 'data.js').length > 1);
     bodyEl.innerHTML = `
       <div class="dup-check-box warning">
-        ⚠️ Tìm thấy ${groups.length} từ vựng xuất hiện nhiều hơn 1 lần trong kho:
+        ⚠️ Tìm thấy ${groups.length} mục xuất hiện nhiều hơn 1 lần trong kho:
       </div>
       ${groups.map(g => {
         const first = g.entries[0].card;
@@ -217,6 +300,7 @@ function closeDuplicateCheckerModal() {
 function deduplicateRepository() {
   const seen = new Set();
   const uniqueCards = [];
+  const uniqueSentences = [];
   let removedCount = 0;
 
   REPO_CARDS.forEach(card => {
@@ -231,7 +315,20 @@ function deduplicateRepository() {
     }
   });
 
+  REPO_SENTENCES.forEach(sent => {
+    const sig = getDuplicateSignature(sent);
+    if (!seen.has(sig)) {
+      seen.add(sig);
+      uniqueSentences.push(sent);
+    } else if (sent.source === 'json') {
+      removedCount++;
+    } else {
+      uniqueSentences.push(sent);
+    }
+  });
+
   REPO_CARDS = uniqueCards;
+  REPO_SENTENCES = uniqueSentences;
   saveExtraCardsToStorage();
   closeDuplicateCheckerModal();
   refreshUI();
@@ -240,7 +337,7 @@ function deduplicateRepository() {
 
 /**
  * =========================================================================
- * 4. BỘ PHÁT ÂM TIẾNG NHẬT TỰ NHIÊN 2 TẦNG (NEURAL VOICE + OFFLINE SIRI/KYOKO)
+ * 4. BỘ PHÁT ÂM TIẾNG NHẬT TỰ NHIÊN 2 TẦNG & HIỆU ỨNG ÂM THANH PHẢN HỒI
  * =========================================================================
  */
 let cachedJaVoice = null;
@@ -250,7 +347,6 @@ let fallbackTimerId = null;
 let audioUnlocked = false;
 const neuralAudioCache = new Map();
 
-// Mở khóa hệ thống âm thanh trên iPhone Safari ngay lần chạm đầu tiên
 function unlockMobileAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
@@ -267,6 +363,44 @@ function unlockMobileAudio() {
   } catch (e) {}
 }
 
+function playFeedbackTone(isSuccess) {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    if (isSuccess) {
+      // Hai nốt vui tươi (C5 -> E5) giống Duolingo
+      [523.25, 659.25].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + idx * 0.11);
+        gain.gain.setValueAtTime(0.12, now + idx * 0.11);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.11);
+        osc.stop(now + idx * 0.11 + 0.26);
+      });
+    } else {
+      // Nốt trầm nhẹ báo chưa đúng
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(220, now);
+      osc.frequency.linearRampToValueAtTime(175, now + 0.25);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.29);
+    }
+  } catch (e) {}
+}
+
 function resolveBestJapaneseVoice() {
   if (!('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices() || [];
@@ -278,15 +412,8 @@ function resolveBestJapaneseVoice() {
   if (!jaVoices.length) return null;
 
   const preferredKeywords = [
-    'siri',
-    'kyoko',
-    'o-ren',
-    'nanami',
-    'haruka',
-    'ayumi',
-    'google 日本語',
-    'sayaka',
-    'ichika'
+    'siri', 'kyoko', 'o-ren', 'nanami', 'haruka',
+    'ayumi', 'google 日本語', 'sayaka', 'ichika'
   ];
 
   for (const kw of preferredKeywords) {
@@ -304,9 +431,7 @@ function resolveBestJapaneseVoice() {
 if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
   resolveBestJapaneseVoice();
   if (typeof window.speechSynthesis.onvoiceschanged !== 'undefined') {
-    window.speechSynthesis.onvoiceschanged = () => {
-      resolveBestJapaneseVoice();
-    };
+    window.speechSynthesis.onvoiceschanged = () => resolveBestJapaneseVoice();
   }
 }
 
@@ -384,7 +509,6 @@ function speakJapanese(text) {
 
   const targetRate = state.voiceMode === 'slow' ? 0.72 : 0.96;
 
-  // Nếu đã có trong bộ nhớ đệm -> phát lại ngay lập tức (0ms độ trễ)
   if (neuralAudioCache.has(cleanText)) {
     const cachedSrc = neuralAudioCache.get(cleanText);
     playHtml5AudioSrc(cachedSrc, targetRate, () => {
@@ -397,7 +521,6 @@ function speakJapanese(text) {
   const urls = buildNeuralTtsUrls(cleanText);
   let settled = false;
 
-  // Bộ hẹn giờ an toàn: nếu mạng chậm quá 1.8 giây tự chuyển sang giọng thiết bị để không bị im lặng
   fallbackTimerId = setTimeout(() => {
     if (!settled) {
       settled = true;
@@ -439,9 +562,7 @@ function speakJapanese(text) {
     };
 
     audio.onerror = () => {
-      if (!settled) {
-        tryUrl(idx + 1);
-      }
+      if (!settled) tryUrl(idx + 1);
     };
 
     audio.src = url;
@@ -485,12 +606,10 @@ function playHtml5AudioSrc(src, rate, onFail) {
 function speakWithDeviceVoice(cleanText) {
   if (!('speechSynthesis' in window)) {
     setAudioButtonsPlaying(false);
-    showToast('Thiết bị không hỗ trợ phát âm tiếng Nhật');
     return;
   }
 
   try {
-    // Thêm dấu phẩy Nhật nhẹ cho từ 1-2 ký tự để giọng đọc hệ thống không bị cắt cụt đuôi
     const paddedText = cleanText.length <= 2 ? `${cleanText}、` : cleanText;
     const utterance = new SpeechSynthesisUtterance(paddedText);
     const voice = cachedJaVoice || resolveBestJapaneseVoice();
@@ -528,7 +647,12 @@ function toggleSpeechRate() {
   const btn = document.getElementById('speech-rate-btn');
   btn.textContent = state.voiceMode === 'normal' ? 'Đọc: Chuẩn' : 'Đọc: Chậm';
   showToast(state.voiceMode === 'normal' ? 'Tốc độ đọc chuẩn' : 'Tốc độ đọc chậm rõ âm');
-  speakCurrentCard();
+
+  if (state.mode === 'translate') {
+    speakTranslateSentence();
+  } else {
+    speakCurrentCard();
+  }
 }
 
 /**
@@ -539,6 +663,11 @@ function toggleSpeechRate() {
 function getCardsByLevel(level) {
   if (level === 'ALL') return REPO_CARDS;
   return REPO_CARDS.filter(c => c.level === level);
+}
+
+function getSentencesByLevel(level) {
+  if (level === 'ALL') return REPO_SENTENCES;
+  return REPO_SENTENCES.filter(s => s.level === level);
 }
 
 function getFilteredCards() {
@@ -583,7 +712,8 @@ function selectTopic(topic) {
   state.isFlipped = false;
 
   if (state.mode === 'flashcard') renderFlashcard();
-  else startQuiz(false);
+  else if (state.mode === 'quiz') startQuiz(false);
+  else startTranslateLesson();
 }
 
 function toggleUnmasteredFilter() {
@@ -595,7 +725,8 @@ function toggleUnmasteredFilter() {
   btn.classList.toggle('filter-active', state.filterUnmastered);
 
   if (state.mode === 'flashcard') renderFlashcard();
-  else startQuiz(false);
+  else if (state.mode === 'quiz') startQuiz(false);
+  else startTranslateLesson();
 }
 
 function resetFilters() {
@@ -622,9 +753,10 @@ function shuffleCurrentCards() {
   state.currentCardIndex = 0;
   state.isFlipped = false;
 
-  showToast('Đã xáo trộn thứ tự thẻ');
+  showToast('Đã xáo trộn thứ tự bài học');
   if (state.mode === 'flashcard') renderFlashcard();
-  else startQuiz(false);
+  else if (state.mode === 'quiz') startQuiz(false);
+  else startTranslateLesson();
 }
 
 /**
@@ -633,21 +765,28 @@ function shuffleCurrentCards() {
  * =========================================================================
  */
 function refreshUI() {
-  const hasCards = REPO_CARDS.length > 0;
+  const totalCount = REPO_CARDS.length + REPO_SENTENCES.length;
+  const hasData = totalCount > 0;
 
-  document.getElementById('count-ALL').textContent = REPO_CARDS.length;
-  document.getElementById('count-N5').textContent = REPO_CARDS.filter(c => c.level === 'N5').length;
-  document.getElementById('count-N4').textContent = REPO_CARDS.filter(c => c.level === 'N4').length;
-  document.getElementById('count-N3').textContent = REPO_CARDS.filter(c => c.level === 'N3').length;
+  const countAll = REPO_CARDS.length + REPO_SENTENCES.length;
+  const countN5 = REPO_CARDS.filter(c => c.level === 'N5').length + REPO_SENTENCES.filter(s => s.level === 'N5').length;
+  const countN4 = REPO_CARDS.filter(c => c.level === 'N4').length + REPO_SENTENCES.filter(s => s.level === 'N4').length;
+  const countN3 = REPO_CARDS.filter(c => c.level === 'N3').length + REPO_SENTENCES.filter(s => s.level === 'N3').length;
 
-  document.getElementById('empty-app-state').style.display = hasCards ? 'none' : 'flex';
-  document.getElementById('deck-stats-card').style.display = hasCards ? 'flex' : 'none';
-  document.getElementById('toolbar-section').style.display = hasCards ? 'block' : 'none';
-  document.getElementById('export-data-btn').style.display = hasCards ? 'inline-block' : 'none';
+  document.getElementById('count-ALL').textContent = countAll;
+  document.getElementById('count-N5').textContent = countN5;
+  document.getElementById('count-N4').textContent = countN4;
+  document.getElementById('count-N3').textContent = countN3;
 
-  if (!hasCards) {
+  document.getElementById('empty-app-state').style.display = hasData ? 'none' : 'flex';
+  document.getElementById('deck-stats-card').style.display = hasData ? 'flex' : 'none';
+  document.getElementById('toolbar-section').style.display = hasData ? 'block' : 'none';
+  document.getElementById('export-data-btn').style.display = hasData ? 'inline-block' : 'none';
+
+  if (!hasData) {
     document.getElementById('flashcard-view').style.display = 'none';
     document.getElementById('quiz-view').style.display = 'none';
+    document.getElementById('translate-view').style.display = 'none';
     return;
   }
 
@@ -655,21 +794,27 @@ function refreshUI() {
   updateStatsHeader();
   updateRepoDuplicateBanner();
 
+  document.getElementById('flashcard-view').style.display = state.mode === 'flashcard' ? 'flex' : 'none';
+  document.getElementById('quiz-view').style.display = state.mode === 'quiz' ? 'flex' : 'none';
+  document.getElementById('translate-view').style.display = state.mode === 'translate' ? 'flex' : 'none';
+
   if (state.mode === 'flashcard') {
-    document.getElementById('flashcard-view').style.display = 'flex';
-    document.getElementById('quiz-view').style.display = 'none';
     renderFlashcard();
-  } else {
-    document.getElementById('flashcard-view').style.display = 'none';
-    document.getElementById('quiz-view').style.display = 'flex';
+  } else if (state.mode === 'quiz') {
     startQuiz(false);
+  } else {
+    startTranslateLesson();
   }
 }
 
 function populateTopicDropdown() {
   const selectEl = document.getElementById('topic-select');
   const cardsInLevel = getCardsByLevel(state.selectedLevel);
-  const topics = Array.from(new Set(cardsInLevel.map(c => c.topic)));
+  const sentsInLevel = getSentencesByLevel(state.selectedLevel);
+  const topics = Array.from(new Set([
+    ...cardsInLevel.map(c => c.topic),
+    ...sentsInLevel.map(s => s.topic)
+  ]));
 
   selectEl.innerHTML = `<option value="ALL">Tất cả chủ đề (${topics.length})</option>` +
     topics.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
@@ -827,7 +972,7 @@ function rateCurrentCard(rating) {
 
 /**
  * =========================================================================
- * 7. TRẮC NGHIỆM THÔNG MINH THEO PHÂN CẤP (N5 -> N3)
+ * 7. CHẾ ĐỘ 2: TRẮC NGHIỆM THÔNG MINH THEO PHÂN CẤP (N5 -> N3)
  * =========================================================================
  */
 function setMode(newMode) {
@@ -835,6 +980,7 @@ function setMode(newMode) {
   state.mode = newMode;
   document.getElementById('mode-flashcard-btn').classList.toggle('active', newMode === 'flashcard');
   document.getElementById('mode-quiz-btn').classList.toggle('active', newMode === 'quiz');
+  document.getElementById('mode-translate-btn').classList.toggle('active', newMode === 'translate');
   refreshUI();
 }
 
@@ -1044,9 +1190,437 @@ function showQuizSummary() {
 
 /**
  * =========================================================================
- * 8. NHẬP JSON + DÒNG CHECK TRÙNG LẶP TRỰC TIẾP + XUẤT TỆP DATA.JS
+ * 8. CHẾ ĐỘ 3: DỊCH CÂU GHÉP TỪ (DUOLINGO SENTENCE BUILDER)
  * =========================================================================
  */
+const DEFAULT_VI_DISTRACTORS = [
+  'người Nhật', 'người Canada', 'không phải', 'rất', 'hôm qua',
+  'trường học', 'của tôi', 'bạn bè', 'mỗi ngày', 'ở đâu', 'cái này'
+];
+
+function extractPrimaryMeaning(viRaw) {
+  const cleaned = String(viRaw || '')
+    .replace(/\([^)]*\)/g, '')
+    .split(/[,;/]/)[0]
+    .trim();
+  return cleaned || String(viRaw || '').trim();
+}
+
+function lowerFirstChar(str) {
+  if (!str) return '';
+  return str.charAt(0).toLowerCase() + str.slice(1);
+}
+
+function synthesizeSentenceFromVocabCard(card, idx) {
+  const jpWord = card.jp;
+  const romajiWord = card.romaji;
+  const viShort = lowerFirstChar(extractPrimaryMeaning(card.vi));
+  const viWords = viShort.split(/\s+/).filter(Boolean);
+
+  const isVerb = jpWord.endsWith('ます') || jpWord.endsWith('します');
+  const naAdjExceptions = ['きれい', 'きらい', 'ゆうめい', 'ていねい'];
+  const isNaAdj = card.mnemonic.toLowerCase().includes('đuôi na') ||
+    ['げんき', 'きれい', 'すき', 'じょうず', 'べんり', 'しずか', 'ゆうめい', 'ひま', 'しんせつ', 'たいせつ', 'だいじょうぶ', 'かんたん'].includes(jpWord);
+  const isIAdj = !isVerb && !isNaAdj && !naAdjExceptions.includes(jpWord) && jpWord.endsWith('い') && jpWord.length >= 2;
+
+  if (isVerb) {
+    return {
+      type: 'sentence',
+      id: `auto_sent_${card.id}`,
+      level: card.level,
+      topic: card.topic,
+      jp: `わたしはまいにち${jpWord}。`,
+      romaji: `Watashi wa mainichi ${romajiWord}.`,
+      tokens: [
+        { jp: 'わたし', romaji: 'watashi', vi: 'tôi' },
+        { jp: 'は', romaji: 'wa', vi: 'thì (trợ từ chủ đề)' },
+        { jp: 'まいにち', romaji: 'mainichi', vi: 'mỗi ngày' },
+        { jp: jpWord, romaji: romajiWord, vi: viShort }
+      ],
+      vi: `Tôi ${viShort} mỗi ngày.`,
+      vi_blocks: ['Tôi', ...viWords, 'mỗi', 'ngày'],
+      distractors: ['không', 'hôm qua', 'người Nhật']
+    };
+  }
+
+  if (isIAdj || isNaAdj) {
+    const subjects = [
+      { jp: 'ベトナム', romaji: 'Betonamu', vi: 'Việt Nam', blocks: ['Việt', 'Nam'] },
+      { jp: 'このまち', romaji: 'kono machi', vi: 'thành phố này', blocks: ['thành phố', 'này'] },
+      { jp: 'にほん', romaji: 'Nihon', vi: 'Nhật Bản', blocks: ['Nhật', 'Bản'] }
+    ];
+    const subj = subjects[idx % subjects.length];
+    const subjText = subj.blocks.join(' ');
+    return {
+      type: 'sentence',
+      id: `auto_sent_${card.id}`,
+      level: card.level,
+      topic: card.topic,
+      jp: `${subj.jp}は${jpWord}ですか。`,
+      romaji: `${subj.romaji} wa ${romajiWord} desu ka.`,
+      tokens: [
+        { jp: subj.jp, romaji: subj.romaji, vi: subj.vi },
+        { jp: 'は', romaji: 'wa', vi: 'thì (trợ từ chủ đề)' },
+        { jp: jpWord, romaji: romajiWord, vi: viShort },
+        { jp: 'です', romaji: 'desu', vi: 'là / thì' },
+        { jp: 'か', romaji: 'ka', vi: 'không? (nghi vấn)' }
+      ],
+      vi: `${subjText} có ${viShort} không?`,
+      vi_blocks: [...subj.blocks, 'có', ...viWords, 'không'],
+      distractors: ['người Canada', 'người Nhật', 'không phải']
+    };
+  }
+
+  // Mặc định cho Danh từ / Đại từ
+  return {
+    type: 'sentence',
+    id: `auto_sent_${card.id}`,
+    level: card.level,
+    topic: card.topic,
+    jp: `これは${jpWord}ですか。`,
+    romaji: `Kore wa ${romajiWord} desu ka.`,
+    tokens: [
+      { jp: 'これ', romaji: 'kore', vi: 'đây / cái này' },
+      { jp: 'は', romaji: 'wa', vi: 'thì (trợ từ)' },
+      { jp: jpWord, romaji: romajiWord, vi: viShort },
+      { jp: 'です', romaji: 'desu', vi: 'là' },
+      { jp: 'か', romaji: 'ka', vi: 'không? (nghi vấn)' }
+    ],
+    vi: `Đây có phải là ${viShort} không?`,
+    vi_blocks: ['Đây', 'có', 'phải', 'là', ...viWords, 'không'],
+    distractors: ['người Nhật', 'của bạn', 'nhỏ']
+  };
+}
+
+function buildTranslateLessonPool() {
+  let explicitSentences = getSentencesByLevel(state.selectedLevel);
+  if (state.selectedTopic !== 'ALL') {
+    explicitSentences = explicitSentences.filter(s => s.topic === state.selectedTopic);
+  }
+
+  const filteredVocab = getFilteredCards();
+  const synthesized = filteredVocab.map((card, i) => synthesizeSentenceFromVocabCard(card, i));
+
+  let combined = [...explicitSentences, ...synthesized];
+  if (combined.length === 0) {
+    combined = [
+      ...REPO_SENTENCES,
+      ...REPO_CARDS.map((card, i) => synthesizeSentenceFromVocabCard(card, i))
+    ];
+  }
+
+  for (let i = combined.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [combined[i], combined[j]] = [combined[j], combined[i]];
+  }
+
+  return combined.slice(0, 8);
+}
+
+function startTranslateLesson() {
+  const queue = buildTranslateLessonPool();
+  state.translate = {
+    queue,
+    currentIndex: 0,
+    completedCount: 0,
+    energy: state.translate.energy || 0,
+    bankChips: [],
+    selectedBankIds: [],
+    checked: false,
+    isCorrect: false,
+    activeTokenIdx: -1
+  };
+
+  document.getElementById('duo-summary-box').style.display = 'none';
+  document.getElementById('duo-active-box').style.display = 'flex';
+  loadTranslateQuestion();
+}
+
+function loadTranslateQuestion() {
+  const tState = state.translate;
+  if (tState.currentIndex >= tState.queue.length) {
+    showTranslateSummary();
+    return;
+  }
+
+  const sentence = tState.queue[tState.currentIndex];
+  const correctBlocks = [...sentence.vi_blocks];
+
+  // Tạo danh sách từ gây nhiễu không trùng đáp án
+  const usedLower = new Set(correctBlocks.map(w => w.toLowerCase()));
+  const distractorPool = [
+    ...(sentence.distractors || []),
+    ...REPO_CARDS.map(c => lowerFirstChar(extractPrimaryMeaning(c.vi))),
+    ...DEFAULT_VI_DISTRACTORS
+  ];
+
+  const chosenDistractors = [];
+  for (const d of distractorPool) {
+    const clean = String(d || '').trim();
+    if (clean && !usedLower.has(clean.toLowerCase())) {
+      usedLower.add(clean.toLowerCase());
+      chosenDistractors.push(clean);
+    }
+    if (chosenDistractors.length >= 3) break;
+  }
+
+  const allChips = [...correctBlocks, ...chosenDistractors];
+  for (let i = allChips.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allChips[i], allChips[j]] = [allChips[j], allChips[i]];
+  }
+
+  tState.bankChips = allChips.map((text, idx) => ({
+    bankIdx: idx,
+    text,
+    used: false
+  }));
+  tState.selectedBankIds = [];
+  tState.checked = false;
+  tState.isCorrect = false;
+  tState.activeTokenIdx = -1;
+
+  renderTranslateView();
+  // Tự động đọc câu tiếng Nhật khi vào câu mới
+  speakJapanese(sentence.jp);
+}
+
+function renderTranslateView() {
+  const tState = state.translate;
+  const total = tState.queue.length;
+  const sentence = tState.queue[tState.currentIndex];
+  if (!sentence) return;
+
+  const pct = total > 0 ? Math.round((tState.completedCount / total) * 100) : 0;
+  document.getElementById('duo-step-label').textContent = `${tState.currentIndex + 1}/${total}`;
+  document.getElementById('duo-progress-fill').style.width = `${pct}%`;
+  document.getElementById('duo-energy-count').textContent = tState.energy;
+  document.getElementById('duo-source-badge').textContent = `${sentence.level} • ${sentence.topic}`;
+
+  // 1. Render các từ tiếng Nhật có gạch chân nét đứt
+  const tokensWrap = document.getElementById('duo-tokens-wrap');
+  tokensWrap.innerHTML = sentence.tokens.map((tok, idx) => `
+    <button
+      type="button"
+      class="duo-token-btn ${tState.activeTokenIdx === idx ? 'active-token' : ''}"
+      onclick="handleTokenTap(event, ${idx})"
+    >${escapeHtml(tok.jp)}</button>
+  `).join('') + `<span class="duo-punct">。</span>`;
+
+  // 2. Render các thẻ từ đã xếp lên 2 dòng kẻ
+  const answerSlots = document.getElementById('duo-answer-slots');
+  answerSlots.innerHTML = tState.selectedBankIds.map((bankIdx, slotPos) => {
+    const chip = tState.bankChips[bankIdx];
+    return `
+      <button
+        type="button"
+        class="duo-chip placed"
+        ${tState.checked ? 'disabled' : ''}
+        onclick="event.stopPropagation(); removeAnswerChip(${slotPos})"
+      >${escapeHtml(chip.text)}</button>
+    `;
+  }).join('');
+
+  // 3. Render ngân hàng thẻ từ bên dưới (giữ chỗ xám khi đã chọn)
+  const bankWrap = document.getElementById('duo-word-bank');
+  bankWrap.innerHTML = tState.bankChips.map(chip => `
+    <button
+      type="button"
+      class="duo-chip ${chip.used ? 'used-placeholder' : ''}"
+      ${chip.used || tState.checked ? 'disabled' : ''}
+      onclick="selectBankChip(${chip.bankIdx})"
+    >${escapeHtml(chip.text)}</button>
+  `).join('');
+
+  // 4. Cập nhật nút KIỂM TRA / Bảng phản hồi
+  const checkBtn = document.getElementById('duo-check-btn');
+  const fbSheet = document.getElementById('duo-feedback-sheet');
+
+  if (!tState.checked) {
+    checkBtn.style.display = 'block';
+    checkBtn.disabled = tState.selectedBankIds.length === 0;
+    fbSheet.style.display = 'none';
+  } else {
+    checkBtn.style.display = 'none';
+    fbSheet.style.display = 'flex';
+    fbSheet.className = `duo-feedback-sheet ${tState.isCorrect ? 'correct' : 'wrong'}`;
+    document.getElementById('duo-fb-icon').textContent = tState.isCorrect ? '✓' : '✕';
+    document.getElementById('duo-fb-title').textContent = tState.isCorrect ? 'Tuyệt vời! Chính xác!' : 'Chưa chính xác';
+    document.getElementById('duo-fb-subtitle').innerHTML = tState.isCorrect
+      ? `<strong>${escapeHtml(sentence.vi)}</strong> (${escapeHtml(sentence.romaji)})`
+      : `Đáp án đúng: <strong>${escapeHtml(sentence.vi)}</strong>`;
+  }
+}
+
+function handleTokenTap(event, tokenIdx) {
+  event.stopPropagation();
+  const sentence = state.translate.queue[state.translate.currentIndex];
+  if (!sentence || !sentence.tokens[tokenIdx]) return;
+
+  const tok = sentence.tokens[tokenIdx];
+  state.translate.activeTokenIdx = tokenIdx;
+
+  const tipBox = document.getElementById('duo-token-tooltip');
+  document.getElementById('duo-tip-jp').textContent = tok.jp;
+  document.getElementById('duo-tip-romaji').textContent = tok.romaji ? `/${tok.romaji}/` : '';
+  document.getElementById('duo-tip-vi').textContent = tok.vi || '---';
+  tipBox.style.display = 'flex';
+
+  speakJapanese(tok.jp);
+  renderTranslateView();
+}
+
+function hideTokenTooltip() {
+  state.translate.activeTokenIdx = -1;
+  const tipBox = document.getElementById('duo-token-tooltip');
+  if (tipBox) tipBox.style.display = 'none';
+  document.querySelectorAll('.duo-token-btn').forEach(btn => btn.classList.remove('active-token'));
+}
+
+function speakTranslateSentence() {
+  const sentence = state.translate.queue[state.translate.currentIndex];
+  if (sentence) speakJapanese(sentence.jp);
+}
+
+function selectBankChip(bankIdx) {
+  if (state.translate.checked) return;
+  const chip = state.translate.bankChips[bankIdx];
+  if (!chip || chip.used) return;
+
+  hideTokenTooltip();
+  chip.used = true;
+  state.translate.selectedBankIds.push(bankIdx);
+  renderTranslateView();
+}
+
+function removeAnswerChip(slotPos) {
+  if (state.translate.checked) return;
+  const bankIdx = state.translate.selectedBankIds[slotPos];
+  if (bankIdx === undefined) return;
+
+  hideTokenTooltip();
+  state.translate.selectedBankIds.splice(slotPos, 1);
+  if (state.translate.bankChips[bankIdx]) {
+    state.translate.bankChips[bankIdx].used = false;
+  }
+  renderTranslateView();
+}
+
+function normalizeVietnameseSentence(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[.,!?？。]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function checkTranslateAnswer() {
+  const tState = state.translate;
+  if (tState.checked || tState.selectedBankIds.length === 0) return;
+
+  hideTokenTooltip();
+  const sentence = tState.queue[tState.currentIndex];
+  const userSentence = tState.selectedBankIds
+    .map(id => tState.bankChips[id].text)
+    .join(' ');
+
+  const normUser = normalizeVietnameseSentence(userSentence);
+  const normExpectedBlocks = normalizeVietnameseSentence(sentence.vi_blocks.join(' '));
+  const normExpectedVi = normalizeVietnameseSentence(sentence.vi);
+
+  const isCorrect = normUser === normExpectedBlocks || normUser === normExpectedVi;
+
+  tState.checked = true;
+  tState.isCorrect = isCorrect;
+
+  if (isCorrect) {
+    tState.completedCount += 1;
+    tState.energy += 5;
+    playFeedbackTone(true);
+    speakJapanese(sentence.jp);
+  } else {
+    playFeedbackTone(false);
+    // Đưa câu sai xuống cuối hàng đợi để người học luyện lại giống Duolingo
+    tState.queue.push(sentence);
+  }
+
+  renderTranslateView();
+}
+
+function nextTranslateQuestion() {
+  stopSpeech();
+  state.translate.currentIndex += 1;
+  loadTranslateQuestion();
+}
+
+function showTranslateSummary() {
+  document.getElementById('duo-active-box').style.display = 'none';
+  document.getElementById('duo-summary-box').style.display = 'flex';
+  document.getElementById('duo-final-score-text').textContent =
+    `Bạn đạt tổng cộng ⚡ ${state.translate.energy} điểm năng lượng!`;
+}
+
+/**
+ * =========================================================================
+ * 9. NHẬP JSON + DÒNG CHECK TRÙNG LẶP + BÀI MẪU NHANH + XUẤT DATA.JS
+ * =========================================================================
+ */
+function loadQuickDemoSession() {
+  const demoItems = [
+    {
+      level: 'N5',
+      topic: 'Tính từ & Quốc gia',
+      jp: 'ちいさい',
+      kanji: '小さい',
+      romaji: 'chiisai',
+      vi: 'Nhỏ, bé',
+      mnemonic: 'Chữ Tiểu (小 - vật bị chia nhỏ) -> Nhỏ bé'
+    },
+    {
+      level: 'N5',
+      topic: 'Tính từ & Quốc gia',
+      jp: 'おおきい',
+      kanji: '大きい',
+      romaji: 'ookii',
+      vi: 'To, lớn',
+      mnemonic: 'Chữ Đại (大 - người dang rộng tay chân) -> To lớn'
+    },
+    {
+      type: 'sentence',
+      level: 'N5',
+      topic: 'Tính từ & Quốc gia',
+      jp: 'ベトナムはちいさいですか。',
+      romaji: 'Betonamu wa chiisai desu ka.',
+      tokens: [
+        { jp: 'ベトナム', romaji: 'Betonamu', vi: 'Việt Nam' },
+        { jp: 'は', romaji: 'wa', vi: 'thì (trợ từ chủ đề)' },
+        { jp: 'ちいさい', romaji: 'chiisai', vi: 'nhỏ' },
+        { jp: 'です', romaji: 'desu', vi: 'là / thì' },
+        { jp: 'か', romaji: 'ka', vi: 'không? (nghi vấn)' }
+      ],
+      vi: 'Việt Nam có nhỏ không?',
+      vi_blocks: ['Việt', 'Nam', 'có', 'nhỏ', 'không'],
+      distractors: ['người Nhật', 'người Canada']
+    }
+  ];
+
+  demoItems.forEach((raw, idx) => {
+    if (isSentenceItem(raw)) {
+      REPO_SENTENCES.push({ ...normalizeSentenceObject(raw, idx), source: 'json' });
+    } else {
+      REPO_CARDS.push({ ...normalizeCardObject(raw, idx), source: 'json' });
+    }
+  });
+
+  saveExtraCardsToStorage();
+  state.mode = 'translate';
+  document.getElementById('mode-flashcard-btn').classList.remove('active');
+  document.getElementById('mode-quiz-btn').classList.remove('active');
+  document.getElementById('mode-translate-btn').classList.add('active');
+  refreshUI();
+  showToast('Đã nạp bài mẫu! Chạm vào từng từ hoặc xếp câu dịch nhé.');
+}
+
 function openImportModal() {
   document.getElementById('import-error-msg').style.display = 'none';
   runLiveDuplicateCheck(false);
@@ -1061,12 +1635,29 @@ function fillSampleJson() {
   const sample = [
     {
       level: 'N5',
-      topic: 'Động từ cơ bản',
-      jp: 'たべます',
-      kanji: '食べます',
-      romaji: 'tabemasu',
-      vi: 'Ăn',
-      mnemonic: 'Bộ Thực (食 - ăn) đi kèm đuôi masu'
+      topic: 'Tính từ & Quốc gia',
+      jp: 'ちいさい',
+      kanji: '小さい',
+      romaji: 'chiisai',
+      vi: 'Nhỏ, bé',
+      mnemonic: 'Chữ Tiểu (小 - vật bị chia nhỏ)'
+    },
+    {
+      type: 'sentence',
+      level: 'N5',
+      topic: 'Tính từ & Quốc gia',
+      jp: 'ベトナムはちいさいですか。',
+      romaji: 'Betonamu wa chiisai desu ka.',
+      tokens: [
+        { jp: 'ベトナム', romaji: 'Betonamu', vi: 'Việt Nam' },
+        { jp: 'は', romaji: 'wa', vi: 'thì (trợ từ)' },
+        { jp: 'ちいさい', romaji: 'chiisai', vi: 'nhỏ' },
+        { jp: 'です', romaji: 'desu', vi: 'là / thì' },
+        { jp: 'か', romaji: 'ka', vi: 'không? (nghi vấn)' }
+      ],
+      vi: 'Việt Nam có nhỏ không?',
+      vi_blocks: ['Việt', 'Nam', 'có', 'nhỏ', 'không'],
+      distractors: ['người Nhật', 'người Canada']
     },
     {
       level: 'N4',
@@ -1094,13 +1685,16 @@ function fillSampleJson() {
 function analyzeIncomingJson(rawText) {
   const parsed = JSON.parse(rawText);
   if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error('Dữ liệu JSON phải là một mảng [...] có ít nhất 1 từ vựng.');
+    throw new Error('Dữ liệu JSON phải là một mảng [...] có ít nhất 1 mục.');
   }
 
   const defaultLevel = normalizeLevel(document.getElementById('import-default-level').value);
   const defaultTopic = document.getElementById('import-default-topic').value.trim() || 'Từ vựng chung';
 
-  const existingMap = new Map(REPO_CARDS.map(c => [getDuplicateSignature(c), c]));
+  const existingMap = new Map([
+    ...REPO_CARDS.map(c => [getDuplicateSignature(c), c]),
+    ...REPO_SENTENCES.map(s => [getDuplicateSignature(s), s])
+  ]);
   const batchSeen = new Set();
 
   const newItems = [];
@@ -1108,15 +1702,14 @@ function analyzeIncomingJson(rawText) {
   const dupInBatch = [];
 
   parsed.forEach((raw, idx) => {
-    const item = normalizeCardObject({
+    const enriched = {
+      ...raw,
       level: raw.level || defaultLevel,
-      topic: raw.topic || defaultTopic,
-      jp: raw.jp,
-      kanji: raw.kanji,
-      romaji: raw.romaji,
-      vi: raw.vi,
-      mnemonic: raw.mnemonic
-    }, idx);
+      topic: raw.topic || defaultTopic
+    };
+    const item = isSentenceItem(enriched)
+      ? normalizeSentenceObject(enriched, idx)
+      : normalizeCardObject(enriched, idx);
 
     const sig = getDuplicateSignature(item);
     if (batchSeen.has(sig)) {
@@ -1146,7 +1739,7 @@ function runLiveDuplicateCheck(explicitClick = false) {
 
   if (!jsonText) {
     boxEl.className = 'dup-check-box neutral';
-    summaryEl.textContent = '🔍 Dán JSON để tự động kiểm tra từ trùng lặp với kho hiện tại.';
+    summaryEl.textContent = '🔍 Dán JSON để tự động kiểm tra trùng lặp với kho hiện tại.';
     listEl.style.display = 'none';
     policyRowEl.style.display = 'none';
     if (explicitClick) showToast('Vui lòng dán JSON trước khi kiểm tra');
@@ -1159,13 +1752,13 @@ function runLiveDuplicateCheck(explicitClick = false) {
 
     if (totalDup === 0) {
       boxEl.className = 'dup-check-box clean';
-      summaryEl.textContent = `✓ Check trùng: Hợp lệ ${result.newItems.length} từ mới, không có từ nào bị trùng!`;
+      summaryEl.textContent = `✓ Check trùng: Hợp lệ ${result.newItems.length} mục mới, không có mục nào bị trùng!`;
       listEl.style.display = 'none';
       policyRowEl.style.display = 'none';
-      if (explicitClick) showToast('Không có từ nào bị trùng lặp!');
+      if (explicitClick) showToast('Không có mục nào bị trùng lặp!');
     } else {
       boxEl.className = 'dup-check-box warning';
-      summaryEl.textContent = `⚠️ Phát hiện ${totalDup} từ trùng (${result.newItems.length} từ mới hợp lệ):`;
+      summaryEl.textContent = `⚠️ Phát hiện ${totalDup} mục trùng (${result.newItems.length} mục mới hợp lệ):`;
 
       const details = [];
       result.dupWithRepo.forEach(d => {
@@ -1180,7 +1773,7 @@ function runLiveDuplicateCheck(explicitClick = false) {
       listEl.innerHTML = details.map(line => `<div>${escapeHtml(line)}</div>`).join('');
       listEl.style.display = 'flex';
       policyRowEl.style.display = result.dupWithRepo.length > 0 ? 'flex' : 'none';
-      if (explicitClick) showToast(`Phát hiện ${totalDup} từ trùng lặp!`);
+      if (explicitClick) showToast(`Phát hiện ${totalDup} mục trùng lặp!`);
     }
 
     return result;
@@ -1221,20 +1814,28 @@ function importJsonToRepo() {
   let updatedCount = 0;
 
   analysis.newItems.forEach(item => {
-    REPO_CARDS.push({ ...item, source: 'json' });
+    if (isSentenceItem(item)) {
+      REPO_SENTENCES.push({ ...item, source: 'json' });
+    } else {
+      REPO_CARDS.push({ ...item, source: 'json' });
+    }
     addedCount++;
   });
 
   if (policy === 'overwrite' && analysis.dupWithRepo.length > 0) {
     analysis.dupWithRepo.forEach(({ incoming, existing }) => {
-      const idx = REPO_CARDS.findIndex(c => c.id === existing.id);
-      if (idx !== -1) {
-        REPO_CARDS[idx] = {
-          ...incoming,
-          id: existing.id,
-          source: existing.source
-        };
-        updatedCount++;
+      if (isSentenceItem(existing)) {
+        const idx = REPO_SENTENCES.findIndex(s => s.id === existing.id);
+        if (idx !== -1) {
+          REPO_SENTENCES[idx] = { ...incoming, id: existing.id, source: existing.source };
+          updatedCount++;
+        }
+      } else {
+        const idx = REPO_CARDS.findIndex(c => c.id === existing.id);
+        if (idx !== -1) {
+          REPO_CARDS[idx] = { ...incoming, id: existing.id, source: existing.source };
+          updatedCount++;
+        }
       }
     });
   }
@@ -1245,17 +1846,20 @@ function importJsonToRepo() {
   refreshUI();
 
   if (updatedCount > 0) {
-    showToast(`Đã thêm ${addedCount} từ mới & cập nhật ${updatedCount} từ!`);
+    showToast(`Đã thêm ${addedCount} mục mới & cập nhật ${updatedCount} mục!`);
   } else {
-    showToast(`Đã thêm ${addedCount} từ mới (bỏ qua ${analysis.dupWithRepo.length + analysis.dupInBatch.length} từ trùng)!`);
+    showToast(`Đã thêm ${addedCount} mục mới (bỏ qua ${analysis.dupWithRepo.length + analysis.dupInBatch.length} mục trùng)!`);
   }
 }
 
 function exportDataJsFile() {
-  const cleanExport = REPO_CARDS.map(({ id, source, ...rest }) => rest);
+  const cleanExport = [
+    ...REPO_CARDS.map(({ id, source, type, ...rest }) => rest),
+    ...REPO_SENTENCES.map(({ id, source, ...rest }) => rest)
+  ];
   const fileContent = `/**
- * TỆP DỮ LIỆU TỪ VỰNG TRUNG TÂM (N5 -> N3)
- * Xuất tự động từ ứng dụng Flashcards (${cleanExport.length} từ vựng)
+ * TỆP DỮ LIỆU TỪ VỰNG & CÂU DỊCH TRUNG TÂM (N5 -> N3)
+ * Xuất tự động từ ứng dụng Flashcards (${cleanExport.length} mục)
  */
 
 var VOCAB_DATA = ${JSON.stringify(cleanExport, null, 2)};
@@ -1275,7 +1879,7 @@ var VOCAB_DATA = ${JSON.stringify(cleanExport, null, 2)};
 
 /**
  * =========================================================================
- * 9. TIỆN ÍCH & CỬ CHỈ VUỐT MÀN HÌNH
+ * 10. TIỆN ÍCH & CỬ CHỈ VUỐT MÀN HÌNH
  * =========================================================================
  */
 function escapeHtml(str) {
