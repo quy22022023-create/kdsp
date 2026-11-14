@@ -1,44 +1,42 @@
 /**
  * =========================================================================
- * ENGINE 2 KHO DỮ LIỆU ĐỘC LẬP (VOCAB_DATA + EXERCISE_DATA) & LIÊN KẾT 2 CHIỀU
+ * 1. QUẢN LÝ 2 KHO DỮ LIỆU ĐỘC LẬP (VOCAB_DATA & EXERCISE_DATA) + INDEXEDDB
  * =========================================================================
  */
-const DB_NAME = 'JLPT_Linked_DualRepo_DB';
-const DB_VERSION = 1;
-const STORE_REPO = 'dual_repo_store';
-
-const EXTRA_CARDS_STORAGE_KEY = 'jlpt_n5_n3_extra_cards_v1';
-const EXTRA_EXERCISES_STORAGE_KEY = 'jlpt_n5_n3_extra_sentences_v1';
-const PROGRESS_STORAGE_KEY = 'jlpt_n5_n3_progress_v1';
-const STREAK_STORAGE_KEY = 'jlpt_n5_n3_streak_v1';
-
-const ALLOWED_LEVELS = ['N5', 'N4', 'N3'];
+const STORAGE_REPO_VOCAB_KEY = 'jp_n5_n3_vocab_v4';
+const STORAGE_REPO_EXERCISE_KEY = 'jp_n5_n3_exercise_v4';
+const STORAGE_PROGRESS_KEY = 'jp_n5_n3_progress_v4';
+const STORAGE_STREAK_KEY = 'jp_n5_n3_streak_v4';
 const SESSION_BATCH_SIZE = 12;
 
-let REPO_CARDS = [];
-let REPO_EXERCISES = [];
+const IDB_NAME = 'JLPT_DualRepo_DB';
+const IDB_VERSION = 1;
+const IDB_STORE = 'kv_store';
+
+let REPO_CARDS = [];      // Kho 1: Từ vựng & Kanji (vocab_data.js)
+let REPO_EXERCISES = [];  // Kho 2: Câu hỏi & Bài tập ngữ cảnh (exercise_data.js)
 
 let state = {
   selectedLevel: 'ALL',     // 'ALL' | 'N5' | 'N4' | 'N3'
   selectedTopic: 'ALL',     // 'ALL' | tên chủ đề
-  mode: 'flashcard',        // 'flashcard' | 'quiz' | 'dictation' | 'exercise' | 'match' | 'drill'
+  studyFocus: 'guided',     // 'guided' (Lộ trình 4 chặng) | 'vocab_only' (Chỉ học từ vựng)
+  guidedStepIndex: 0,       // 0: flashcard -> 1: match -> 2: drill -> 3: exercise
+  mode: 'flashcard',        // 'flashcard' | 'quiz' | 'dictation' | 'exercise' | 'match' | 'drill' | 'kana'
   filterUnmastered: false,
   hideFurigana: false,
   sessionMode: true,
   sessionBatchIds: [],
-  sessionComplete: false,
-  voiceMode: 'normal',      // 'normal' | 'slow'
-  currentCardIndex: 0,
+  currentIndex: 0,
   isFlipped: false,
-  customOrderIds: null,
-  progress: {},
+  voiceMode: 'normal',      // 'normal' | 'slow'
+  progress: {},             // { [cardId]: 'known' | 'review' }
   streak: { count: 0, lastDate: '' },
   quiz: {
     questions: [],
     currentIndex: 0,
     score: 0,
-    answered: false,
-    wrongCards: []
+    wrongCards: [],
+    answered: false
   },
   dictation: {
     questions: [],
@@ -48,26 +46,25 @@ let state = {
     hintUsed: false
   },
   exercise: {
-    queue: [],
+    items: [],
     currentIndex: 0,
-    completedCount: 0,
     energy: 0,
     kindFilter: 'ALL',      // 'ALL' | 'cloze' | 'sentence' | 'trap'
-    answered: false,
-    isCorrect: false,
-    bankChips: [],
-    selectedBankIds: [],
-    activeTokenIdx: -1
+    selectedIndices: [],
+    bankTokens: [],
+    activeTokenIdx: null,
+    checked: false
   },
   match: {
     round: 1,
     score: 0,
-    variant: 'JP_VI',       // 'JP_VI' | 'KANJI_READING'
-    leftTiles: [],
-    rightTiles: [],
-    selectedLeftIdx: -1,
-    selectedRightIdx: -1,
-    matchedCount: 0
+    variant: 'JP_VI',       // 'JP_VI' | 'KANJI_HIRA'
+    pairs: [],
+    leftItems: [],
+    rightItems: [],
+    selectedLeftId: null,
+    selectedRightId: null,
+    matchedIds: []
   },
   drill: {
     questions: [],
@@ -75,495 +72,374 @@ let state = {
     score: 0,
     answered: false,
     submode: 'MIXED'        // 'MIXED' | 'KANJI_CLOZE' | 'CONJUGATION'
+  },
+  kana: {
+    script: 'hiragana',     // 'hiragana' | 'katakana'
+    subtab: 'chart',        // 'chart' | 'quiz'
+    group: 'BASIC',         // 'BASIC' | 'DAKUTEN' | 'YOON'
+    selectedIdx: 0,
+    quizQuestions: [],
+    quizIndex: 0,
+    quizScore: 0,
+    quizAnswered: false
   }
 };
 
-/**
- * =========================================================================
- * 1. KHÓA CỨNG ZOOM TRÊN IPHONE SAFARI (PINCH / DOUBLE-TAP / INPUT FOCUS)
- * =========================================================================
- */
-function initIosZoomLock() {
-  document.addEventListener('gesturestart', function (e) {
-    e.preventDefault();
-  }, { passive: false });
-
-  document.addEventListener('gesturechange', function (e) {
-    e.preventDefault();
-  }, { passive: false });
-
-  document.addEventListener('gestureend', function (e) {
-    e.preventDefault();
-  }, { passive: false });
-
-  document.addEventListener('touchmove', function (e) {
-    if (e.touches && e.touches.length > 1) {
-      e.preventDefault();
-    }
-  }, { passive: false });
-}
+const GUIDED_STEP_MODES = ['flashcard', 'match', 'drill', 'exercise'];
 
 /**
  * =========================================================================
- * 2. INDEXEDDB LƯU TRỮ DỮ LIỆU LỚN CHO CẢ 2 KHO
+ * 2. BỘ NHỚ INDEXEDDB DUNG LƯỢNG LỚN
  * =========================================================================
  */
-function openMassiveDb() {
-  return new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('No IndexedDB'));
+function openDatabase() {
+  return new Promise((resolve) => {
+    if (!('indexedDB' in window)) {
+      resolve(null);
       return;
     }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_REPO)) {
-        db.createObjectStore(STORE_REPO);
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
       }
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => resolve(null);
   });
 }
 
 async function idbGet(key) {
-  try {
-    const db = await openMassiveDb();
-    return await new Promise((resolve) => {
-      const tx = db.transaction(STORE_REPO, 'readonly');
-      const store = tx.objectStore(STORE_REPO);
+  const db = await openDatabase();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
       const req = store.get(key);
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => resolve(req.result ?? null);
       req.onerror = () => resolve(null);
-    });
-  } catch (e) {
-    return null;
-  }
+    } catch (e) {
+      resolve(null);
+    }
+  });
 }
 
 async function idbSet(key, val) {
-  try {
-    const db = await openMassiveDb();
-    await new Promise((resolve) => {
-      const tx = db.transaction(STORE_REPO, 'readwrite');
-      const store = tx.objectStore(STORE_REPO);
+  const db = await openDatabase();
+  if (!db) return false;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
       store.put(val, key);
       tx.oncomplete = () => resolve(true);
       tx.onerror = () => resolve(false);
-    });
-    return true;
-  } catch (e) {
-    return false;
-  }
+    } catch (e) {
+      resolve(false);
+    }
+  });
 }
 
 /**
  * =========================================================================
- * 3. CHUẨN HÓA DỮ LIỆU VOCAB_DATA & EXERCISE_DATA (CHỐNG HỌC SAI)
+ * 3. CHUẨN HÓA DỮ LIỆU TỪ VỰNG (VOCAB) & BÀI TẬP (EXERCISE)
  * =========================================================================
  */
-function normalizeLevel(rawLevel) {
-  const upper = String(rawLevel || 'N5').trim().toUpperCase();
-  return ALLOWED_LEVELS.includes(upper) ? upper : 'N5';
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
-function isExerciseItem(raw) {
-  if (!raw || typeof raw !== 'object') return false;
-  return (
-    raw.type === 'exercise' ||
-    raw.type === 'sentence' ||
-    raw.kind === 'cloze' ||
-    raw.kind === 'sentence' ||
-    raw.kind === 'trap' ||
-    Array.isArray(raw.tokens) ||
-    Array.isArray(raw.vi_blocks) ||
-    (Array.isArray(raw.options) && Boolean(raw.answer))
-  );
+function normalizeKeyText(str) {
+  return String(str || '').trim().toLowerCase().replace(/\s+/g, '');
 }
 
-function getDuplicateSignature(item) {
-  if (isExerciseItem(item)) {
-    const kind = item.kind || (item.type === 'sentence' ? 'sentence' : 'cloze');
-    const baseText = String(item.prompt_jp || item.jp || '')
-      .replace(/[。．.！!？?]/g, '')
-      .trim();
-    const ans = String(item.answer || item.vi || '').trim();
-    return `EX||${kind}||${baseText}||${ans}`;
+function getCardUniqueKey(item) {
+  const jp = normalizeKeyText(item.jp);
+  const kj = normalizeKeyText(item.kanji);
+  return `${jp}__${kj}`;
+}
+
+function getExerciseUniqueKey(item) {
+  const kind = normalizeKeyText(item.kind || 'sentence');
+  const mainJp = normalizeKeyText(item.prompt_jp || item.jp);
+  const ans = normalizeKeyText(item.answer || item.vi);
+  return `EX__${kind}__${mainJp}__${ans}`;
+}
+
+function makeCardId(level, topic, jp, kanji) {
+  const raw = `${level}_${topic}_${jp}_${kanji || ''}`;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash << 5) - hash + raw.charCodeAt(i);
+    hash |= 0;
   }
+  return `vc_${Math.abs(hash)}`;
+}
+
+function makeExerciseId(level, kind, jpText, answerText) {
+  const raw = `ex_${level}_${kind}_${jpText}_${answerText}`;
+  let hash = 0;
+  for (let i = 0; i < raw.length; i++) {
+    hash = (hash << 5) - hash + raw.charCodeAt(i);
+    hash |= 0;
+  }
+  return `ex_${Math.abs(hash)}`;
+}
+
+function isExerciseEntry(raw) {
+  if (!raw || typeof raw !== 'object') return false;
+  if (raw.type === 'exercise' || raw.type === 'sentence') return true;
+  if (raw.kind === 'cloze' || raw.kind === 'sentence' || raw.kind === 'trap') return true;
+  if (raw.prompt_jp && Array.isArray(raw.options)) return true;
+  if (Array.isArray(raw.tokens) && Array.isArray(raw.vi_blocks)) return true;
+  return false;
+}
+
+function normalizeCardItem(item, fallbackLevel = 'N5', fallbackTopic = 'Tổng hợp') {
+  const rawLevel = String(item.level || fallbackLevel).toUpperCase().trim();
+  const level = ['N5', 'N4', 'N3'].includes(rawLevel) ? rawLevel : 'N5';
+  const topic = String(item.topic || fallbackTopic).trim() || 'Tổng hợp';
+  const tag = String(item.tag || '').trim().toLowerCase();
   const jp = String(item.jp || '').trim();
   const kanji = String(item.kanji || '').trim();
-  return `VOC||${jp}||${kanji}`;
-}
+  const romaji = String(item.romaji || '').trim();
+  const vi = String(item.vi || '').trim();
+  const mnemonic = String(item.mnemonic || 'Chưa có ghi chú chiết tự.').trim();
 
-function generateStableItemId(item, fallbackIdx = 0) {
-  const sig = getDuplicateSignature(item);
-  if (sig && !sig.endsWith('||||')) {
-    return 'item_' + encodeURIComponent(sig);
-  }
-  return `item_idx_${fallbackIdx}_${Date.now()}`;
-}
-
-function splitMnemonicAndBridge(rawMnemonic) {
-  const text = String(rawMnemonic || 'Ghi nhớ qua lật thẻ và luyện tập.').trim();
-  const bridgeRegex = /\[N4\/N3\s*:?\s*([^\]]+)\]/i;
-  const match = text.match(bridgeRegex);
-  if (match) {
-    const core = text.replace(bridgeRegex, '').trim();
-    const bridge = match[1].trim();
-    return {
-      coreMnemonic: core || 'Từ vựng cốt lõi.',
-      bridgeNote: bridge
-    };
-  }
   return {
-    coreMnemonic: text,
-    bridgeNote: ''
-  };
-}
-
-/**
- * Nhận diện từ loại & nhóm chia thể (ưu tiên nhãn `tag` nếu có, dự phòng phân tích tự động)
- */
-function inferPartOfSpeech(jp, topic, mnemonic, explicitTag) {
-  const cleanJp = String(jp || '').trim();
-  const tagLower = String(explicitTag || '').trim().toLowerCase();
-  const tLower = String(topic || '').toLowerCase();
-  const mLower = String(mnemonic || '').toLowerCase();
-
-  if (tagLower === 'v1') return { code: 'VERB', vGroup: 1, label: 'Động từ (N1)' };
-  if (tagLower === 'v2') return { code: 'VERB', vGroup: 2, label: 'Động từ (N2)' };
-  if (tagLower === 'v3') return { code: 'VERB', vGroup: 3, label: 'Động từ (N3)' };
-  if (tagLower === 'adj_i') return { code: 'ADJ_I', vGroup: 0, label: 'Tính từ -i' };
-  if (tagLower === 'adj_na') return { code: 'ADJ_NA', vGroup: 0, label: 'Tính từ -na' };
-
-  if (cleanJp.endsWith('ます') || cleanJp.endsWith('します')) {
-    return { code: 'VERB', vGroup: 0, label: 'Động từ' };
-  }
-
-  const naAdjList = [
-    'すき', 'きらい', 'じょうず', 'へた', 'きれい', 'ハンサム', 'しんせつ',
-    'げんき', 'べんり', 'ふべん', 'ひま', 'にぎやか', 'しずか', 'ゆうめい',
-    'たいせつ', 'だいじょうぶ', 'ざんねん', 'かんたん', 'ていねい', 'いろいろ',
-    'すてき', 'じょうぶ'
-  ];
-  if (tLower.includes('đuôi na') || mLower.includes('đuôi na') || naAdjList.includes(cleanJp)) {
-    return { code: 'ADJ_NA', vGroup: 0, label: 'Tính từ -na' };
-  }
-
-  const naExceptionsEndingInI = ['きれい', 'きらい', 'ゆうめい', 'ていねい'];
-  if (!naExceptionsEndingInI.includes(cleanJp) && cleanJp.endsWith('い') && cleanJp.length >= 2 &&
-      (tLower.includes('tính từ') || ['おおきい', 'ちいさい', 'あたらしい', 'ふるい', 'いい', 'わるい', 'あつい', 'さむい', 'つめたい', 'むずかしい', 'やさしい', 'たかい', 'やすい', 'ひくい', 'おもしろい', 'おいしい', 'いそがしい', 'たのしい', 'しろい', 'くろい', 'あかい', 'あおい', 'ちかい', 'とおい', 'はやい', 'おそい', 'おおい', 'すくない', 'あたたかい', 'すずしい', 'あまい', 'からい'].includes(cleanJp))) {
-    return { code: 'ADJ_I', vGroup: 0, label: 'Tính từ -i' };
-  }
-
-  if (tLower.includes('đại từ') || tLower.includes('từ để hỏi')) {
-    return { code: 'PRONOUN', vGroup: 0, label: 'Chỉ định / Hỏi' };
-  }
-
-  return { code: 'NOUN', vGroup: 0, label: 'Danh từ' };
-}
-
-function normalizeCardObject(raw, idx = 0) {
-  const jp = String(raw.jp || raw.kanji || '').trim();
-  const kanji = String(raw.kanji || '').trim();
-  const topic = String(raw.topic || 'Từ vựng chung').trim() || 'Từ vựng chung';
-  const mnemonic = String(raw.mnemonic || 'Ghi nhớ qua lật thẻ và luyện tập.').trim();
-  const tag = String(raw.tag || '').trim();
-  const pos = inferPartOfSpeech(jp, topic, mnemonic, tag);
-
-  const normalized = {
-    type: 'vocab',
-    level: normalizeLevel(raw.level),
+    id: makeCardId(level, topic, jp, kanji),
+    level,
     topic,
-    jp: jp || '???',
-    kanji: kanji === jp ? '' : kanji,
-    romaji: String(raw.romaji || '').trim(),
-    vi: String(raw.vi || 'Chưa có nghĩa').trim(),
-    mnemonic,
-    ...(tag ? { tag } : {}),
-    posCode: pos.code,
-    vGroup: pos.vGroup,
-    posLabel: pos.label
+    tag,
+    jp,
+    kanji,
+    romaji,
+    vi,
+    mnemonic
   };
-  normalized.id = raw.id || generateStableItemId(normalized, idx);
-  return normalized;
 }
 
-function normalizeExerciseObject(raw, idx = 0) {
-  let kind = String(raw.kind || '').trim().toLowerCase();
+function normalizeExerciseItem(item, fallbackLevel = 'N5', fallbackTopic = 'Bài tập ngữ cảnh') {
+  const rawLevel = String(item.level || fallbackLevel).toUpperCase().trim();
+  const level = ['N5', 'N4', 'N3'].includes(rawLevel) ? rawLevel : 'N5';
+  const topic = String(item.topic || fallbackTopic).trim() || 'Bài tập ngữ cảnh';
+
+  let kind = String(item.kind || '').toLowerCase().trim();
   if (!['cloze', 'sentence', 'trap'].includes(kind)) {
-    if (raw.type === 'sentence' || Array.isArray(raw.tokens) || Array.isArray(raw.vi_blocks)) {
+    if (Array.isArray(item.tokens) || Array.isArray(item.vi_blocks) || item.type === 'sentence') {
       kind = 'sentence';
-    } else if (Array.isArray(raw.options) && raw.answer) {
-      kind = 'cloze';
     } else {
-      kind = 'sentence';
+      kind = 'cloze';
     }
   }
 
-  const refs = Array.isArray(raw.refs)
-    ? raw.refs.map(r => String(r).trim()).filter(Boolean)
+  const refs = Array.isArray(item.refs)
+    ? item.refs.map(r => String(r).trim()).filter(Boolean)
     : [];
 
   if (kind === 'sentence') {
-    const jp = String(raw.jp || '').trim();
-    const vi = String(raw.vi || '').trim();
-    const tokens = Array.isArray(raw.tokens) && raw.tokens.length > 0
-      ? raw.tokens.map(t => ({
+    const jp = String(item.jp || item.prompt_jp || '').trim();
+    const romaji = String(item.romaji || '').trim();
+    const vi = String(item.vi || item.prompt_vi || '').trim();
+
+    const tokens = Array.isArray(item.tokens) && item.tokens.length > 0
+      ? item.tokens.map(t => ({
           jp: String(t.jp || '').trim(),
           romaji: String(t.romaji || '').trim(),
           vi: String(t.vi || '').trim(),
           ref: String(t.ref || '').trim()
         })).filter(t => t.jp)
-      : [{ jp: jp.replace(/[。．.！!？?]+$/g, ''), romaji: String(raw.romaji || '').trim(), vi, ref: '' }];
+      : [{ jp, romaji, vi }];
 
-    const viBlocks = Array.isArray(raw.vi_blocks) && raw.vi_blocks.length > 0
-      ? raw.vi_blocks.map(w => String(w).trim()).filter(Boolean)
-      : vi.replace(/[.,!?？。]+$/g, '').split(/\s+/).filter(Boolean);
+    tokens.forEach(t => {
+      if (t.ref && !refs.includes(t.ref)) refs.push(t.ref);
+    });
 
-    const distractors = Array.isArray(raw.distractors)
-      ? raw.distractors.map(w => String(w).trim()).filter(Boolean)
-      : [];
+    const vi_blocks = Array.isArray(item.vi_blocks) && item.vi_blocks.length > 0
+      ? item.vi_blocks.map(w => String(w).trim()).filter(Boolean)
+      : vi.replace(/[.?!。？！,]/g, '').split(/\s+/).filter(Boolean);
 
-    const normalized = {
+    const distractors = Array.isArray(item.distractors)
+      ? item.distractors.map(w => String(w).trim()).filter(Boolean)
+      : ['không', 'hôm qua', 'ở đâu'];
+
+    return {
+      id: makeExerciseId(level, kind, jp, vi),
       type: 'exercise',
       kind: 'sentence',
-      level: normalizeLevel(raw.level),
-      topic: String(raw.topic || 'Bài tập dịch câu').trim() || 'Bài tập dịch câu',
+      level,
+      topic,
       refs,
-      jp: jp || tokens.map(t => t.jp).join(''),
-      romaji: String(raw.romaji || tokens.map(t => t.romaji).filter(Boolean).join(' ')).trim(),
+      jp,
+      romaji,
       tokens,
-      vi: vi || viBlocks.join(' '),
-      vi_blocks: viBlocks,
-      distractors
+      vi,
+      vi_blocks,
+      distractors,
+      explanation: String(item.explanation || '').trim()
     };
-    normalized.id = raw.id || generateStableItemId(normalized, idx);
-    return normalized;
   }
 
-  // kind === 'cloze' hoặc 'trap'
-  const promptJp = String(raw.prompt_jp || raw.jp || '').trim();
-  const promptVi = String(raw.prompt_vi || raw.vi || '').trim();
-  const answer = String(raw.answer || '').trim();
-  const options = Array.isArray(raw.options)
-    ? raw.options.map(o => String(o).trim()).filter(Boolean)
+  const prompt_jp = String(item.prompt_jp || item.jp || '').trim();
+  const prompt_vi = String(item.prompt_vi || item.vi || '').trim();
+  const options = Array.isArray(item.options)
+    ? item.options.map(o => String(o).trim()).filter(Boolean)
     : [];
-  if (answer && !options.includes(answer)) {
-    options.unshift(answer);
-  }
+  const answer = String(item.answer || options[0] || '').trim();
+  const explanation = String(item.explanation || 'Hãy chú ý ngữ cảnh và trợ từ đi kèm trong câu.').trim();
 
-  const fullSentenceJp = String(
-    raw.full_jp || promptJp.replace(/[（(]\s*[　\s]*[）)]/g, answer.replace(/\([^)]*\)/g, '').trim())
-  ).trim();
-
-  const normalized = {
+  return {
+    id: makeExerciseId(level, kind, prompt_jp, answer),
     type: 'exercise',
     kind,
-    level: normalizeLevel(raw.level),
-    topic: String(raw.topic || 'Bài tập ngữ cảnh').trim() || 'Bài tập ngữ cảnh',
+    level,
+    topic,
     refs,
-    prompt_jp: promptJp,
-    prompt_vi: promptVi,
-    full_jp: fullSentenceJp,
+    prompt_jp,
+    prompt_vi,
     options,
     answer,
-    explanation: String(raw.explanation || 'Chọn đáp án phù hợp nhất với ngữ cảnh câu.').trim()
+    explanation
   };
-  normalized.id = raw.id || generateStableItemId(normalized, idx);
-  return normalized;
 }
 
-/**
- * =========================================================================
- * 4. NẠP & LƯU DỮ LIỆU TỪ 2 TỆP VOCAB_DATA.JS & EXERCISE_DATA.JS
- * =========================================================================
- */
-function getTodayKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+function parseMnemonicAndBridge(rawMnemonic) {
+  const text = String(rawMnemonic || 'Chưa có ghi chú.').trim();
+  const regex = /\[(?:N4\/N3|N4|N3)\s*:\s*([^\]]+)\]/i;
+  const match = text.match(regex);
+  if (!match) {
+    return { mainTip: text, bridgeTip: '' };
+  }
+  const bridgeTip = match[1].trim();
+  const mainTip = text.replace(regex, '').trim() || 'Ghi nhớ mặt chữ và ngữ cảnh sử dụng.';
+  return { mainTip, bridgeTip };
 }
 
-function getYesterdayKey() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+function detectWordCategory(card) {
+  const tag = String(card.tag || '').toLowerCase();
+  const jp = String(card.jp || '').trim();
+  const kj = String(card.kanji || '').trim();
+
+  if (tag === 'v3' || jp === 'します' || jp === 'きます' || jp.endsWith('します')) {
+    return { pos: 'VERB', group: 3, label: 'Động từ N3 (Bất quy tắc)' };
+  }
+  if (tag === 'v2') {
+    return { pos: 'VERB', group: 2, label: 'Động từ Nhóm 2' };
+  }
+  if (tag === 'v1') {
+    return { pos: 'VERB', group: 1, label: 'Động từ Nhóm 1' };
+  }
+  if (tag === 'adj_i') {
+    return { pos: 'ADJ_I', group: 0, label: 'Tính từ -i (い)' };
+  }
+  if (tag === 'adj_na') {
+    return { pos: 'ADJ_NA', group: 0, label: 'Tính từ -na (な)' };
+  }
+  if (tag === 'noun') {
+    return { pos: 'NOUN', group: 0, label: 'Danh từ' };
+  }
+
+  if (jp.endsWith('ます')) {
+    const stem = jp.slice(0, -2);
+    const group1Exceptions = ['かえり', 'はいり', 'はしり', 'しり', 'きり', 'いり', 'すべり', 'へり', 'しゃべり'];
+    if (group1Exceptions.includes(stem)) {
+      return { pos: 'VERB', group: 1, label: 'Động từ Nhóm 1 (Đặc biệt)' };
+    }
+    const g2Endings = ['え', 'け', 'せ', 'て', 'ね', 'へ', 'め', 'れ', 'げ', 'ぜ', 'で', 'べ', 'ぺ', 'み', 'き', 'じ', 'び'];
+    if (stem.length === 1 || g2Endings.some(ch => stem.endsWith(ch))) {
+      return { pos: 'VERB', group: 2, label: 'Động từ Nhóm 2' };
+    }
+    return { pos: 'VERB', group: 1, label: 'Động từ Nhóm 1' };
+  }
+
+  const naExceptions = ['きれい', 'ゆうめい', 'きらい', 'とくい', 'ていねい'];
+  if (naExceptions.includes(jp) || jp.endsWith('な')) {
+    return { pos: 'ADJ_NA', group: 0, label: 'Tính từ -na (な)' };
+  }
+
+  if (jp.endsWith('い') && (kj.endsWith('い') || jp === 'いい' || jp === 'かっこいい')) {
+    return { pos: 'ADJ_I', group: 0, label: 'Tính từ -i (い)' };
+  }
+
+  return { pos: 'NOUN', group: 0, label: 'Từ vựng' };
 }
 
-function loadStreak() {
-  try {
-    const raw = localStorage.getItem(STREAK_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const today = getTodayKey();
-      const yesterday = getYesterdayKey();
-      if (parsed.lastDate === today || parsed.lastDate === yesterday) {
-        state.streak = { count: parsed.count || 0, lastDate: parsed.lastDate };
+function generateWordConjugations(card) {
+  const cat = detectWordCategory(card);
+  const jp = String(card.jp || '').trim();
+
+  if (cat.pos === 'VERB' && jp.endsWith('ます')) {
+    const stem = jp.slice(0, -2);
+    const neg = `${stem}ません`;
+    const past = `${stem}ました`;
+    let te = '';
+
+    if (cat.group === 3) {
+      if (jp === 'きます' || jp.endsWith('きます')) te = jp.slice(0, -3) + 'きて';
+      else te = `${stem}て`;
+    } else if (cat.group === 2) {
+      te = `${stem}て`;
+    } else {
+      if (jp === 'いきます' || jp.endsWith('いきます')) {
+        te = `${jp.slice(0, -4)}いって`;
       } else {
-        state.streak = { count: 0, lastDate: '' };
+        const lastChar = stem.slice(-1);
+        const base = stem.slice(0, -1);
+        if (['い', 'ち', 'り'].includes(lastChar)) te = `${base}って`;
+        else if (['み', 'び', 'に'].includes(lastChar)) te = `${base}んで`;
+        else if (lastChar === 'き') te = `${base}いて`;
+        else if (lastChar === 'ぎ') te = `${base}いで`;
+        else if (lastChar === 'し') te = `${base}して`;
+        else te = `${stem}て`;
       }
     }
-  } catch (e) {}
-  renderStreakPill();
-}
 
-function recordStudyActivity() {
-  const today = getTodayKey();
-  if (state.streak.lastDate === today) return;
-
-  const yesterday = getYesterdayKey();
-  if (state.streak.lastDate === yesterday) {
-    state.streak.count += 1;
-  } else {
-    state.streak.count = 1;
-  }
-  state.streak.lastDate = today;
-
-  try {
-    localStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(state.streak));
-  } catch (e) {}
-  renderStreakPill();
-}
-
-function renderStreakPill() {
-  const el = document.getElementById('streak-pill');
-  if (el) el.textContent = `🔥 ${state.streak.count}`;
-}
-
-async function loadRepository() {
-  const vocabSource = (typeof VOCAB_DATA !== 'undefined' && Array.isArray(VOCAB_DATA))
-    ? VOCAB_DATA
-    : (typeof window !== 'undefined' && Array.isArray(window.VOCAB_DATA) ? window.VOCAB_DATA : []);
-
-  const exerciseSource = (typeof EXERCISE_DATA !== 'undefined' && Array.isArray(EXERCISE_DATA))
-    ? EXERCISE_DATA
-    : (typeof window !== 'undefined' && Array.isArray(window.EXERCISE_DATA) ? window.EXERCISE_DATA : []);
-
-  const fileVocab = [];
-  const fileExercises = [];
-
-  vocabSource.forEach((item, idx) => {
-    if (isExerciseItem(item)) {
-      fileExercises.push({ ...normalizeExerciseObject(item, idx), source: 'vocab_data.js' });
-    } else {
-      fileVocab.push({ ...normalizeCardObject(item, idx), source: 'vocab_data.js' });
-    }
-  });
-
-  exerciseSource.forEach((item, idx) => {
-    if (isExerciseItem(item)) {
-      fileExercises.push({ ...normalizeExerciseObject(item, idx), source: 'exercise_data.js' });
-    } else {
-      fileVocab.push({ ...normalizeCardObject(item, idx), source: 'exercise_data.js' });
-    }
-  });
-
-  let idbCards = await idbGet('extra_cards');
-  let idbExercises = await idbGet('extra_exercises');
-  let idbProgress = await idbGet('user_progress');
-
-  if (!Array.isArray(idbCards)) {
-    try {
-      const lsCards = JSON.parse(localStorage.getItem(EXTRA_CARDS_STORAGE_KEY) || '[]');
-      idbCards = Array.isArray(lsCards) ? lsCards : [];
-      if (idbCards.length > 0) await idbSet('extra_cards', idbCards);
-    } catch (e) {
-      idbCards = [];
-    }
+    return [
+      { formName: 'Thể phủ định lịch sự (〜ません)', answer: neg, wrongs: [`${stem}ない`, `${stem}ました`, `${stem}て`] },
+      { formName: 'Thể quá khứ lịch sự (〜ました)', answer: past, wrongs: [`${stem}ません`, `${stem}た`, `${stem}ます`] },
+      { formName: 'Thể nối câu / yêu cầu (〜て)', answer: te, wrongs: [`${stem}て`, `${stem}って`, `${stem}んで`, `${stem}いて`].filter(x => x !== te).slice(0, 3) }
+    ];
   }
 
-  if (!Array.isArray(idbExercises)) {
-    try {
-      const lsEx = JSON.parse(localStorage.getItem(EXTRA_EXERCISES_STORAGE_KEY) || '[]');
-      idbExercises = Array.isArray(lsEx) ? lsEx : [];
-      if (idbExercises.length > 0) await idbSet('extra_exercises', idbExercises);
-    } catch (e) {
-      idbExercises = [];
-    }
+  if (cat.pos === 'ADJ_I') {
+    const base = (jp === 'いい' || jp === 'よい') ? 'よ' : jp.slice(0, -1);
+    return [
+      { formName: 'Phủ định tính từ -i (Không...)', answer: `${base}くないです`, wrongs: [`${jp}じゃないです`, `${base}かったです`, `${base}くないでした`] },
+      { formName: 'Quá khứ tính từ -i (Đã...)', answer: `${base}かったです`, wrongs: [`${jp}でした`, `${base}くないです`, `${base}かったでした`] }
+    ];
   }
 
-  if (!idbProgress || typeof idbProgress !== 'object') {
-    try {
-      const lsProg = JSON.parse(localStorage.getItem(PROGRESS_STORAGE_KEY) || '{}');
-      idbProgress = (lsProg && typeof lsProg === 'object') ? lsProg : {};
-      if (Object.keys(idbProgress).length > 0) await idbSet('user_progress', idbProgress);
-    } catch (e) {
-      idbProgress = {};
-    }
+  if (cat.pos === 'ADJ_NA') {
+    const clean = jp.replace(/な$/, '');
+    return [
+      { formName: 'Phủ định lịch sự (Không...)', answer: `${clean}じゃありません`, wrongs: [`${clean}くないです`, `${clean}でした`, `${clean}ます`] },
+      { formName: 'Quá khứ lịch sự (Đã...)', answer: `${clean}でした`, wrongs: [`${clean}かったです`, `${clean}ました`, `${clean}じゃありません`] }
+    ];
   }
 
-  const extraVocab = [];
-  const extraExercises = [];
-
-  idbCards.forEach((item, idx) => {
-    if (isExerciseItem(item)) {
-      extraExercises.push({ ...normalizeExerciseObject(item, idx), source: 'json' });
-    } else {
-      extraVocab.push({ ...normalizeCardObject(item, idx), source: 'json' });
-    }
-  });
-
-  idbExercises.forEach((item, idx) => {
-    extraExercises.push({ ...normalizeExerciseObject(item, idx), source: 'json' });
-  });
-
-  state.progress = idbProgress || {};
-  REPO_CARDS = [...fileVocab, ...extraVocab];
-  REPO_EXERCISES = [...fileExercises, ...extraExercises];
-}
-
-async function saveExtraReposToStorage() {
-  const extraVocabOnly = REPO_CARDS
-    .filter(c => c.source === 'json')
-    .map(({ source, type, posCode, vGroup, posLabel, ...rest }) => rest);
-
-  const extraExOnly = REPO_EXERCISES
-    .filter(ex => ex.source === 'json')
-    .map(({ source, ...rest }) => rest);
-
-  const savedToIdb = await idbSet('extra_cards', extraVocabOnly);
-  await idbSet('extra_exercises', extraExOnly);
-
-  try {
-    localStorage.setItem(EXTRA_CARDS_STORAGE_KEY, JSON.stringify(extraVocabOnly));
-    localStorage.setItem(EXTRA_EXERCISES_STORAGE_KEY, JSON.stringify(extraExOnly));
-  } catch (e) {
-    if (!savedToIdb) {
-      showToast('Bộ nhớ trình duyệt đã đầy, hãy bấm "Xuất" để lưu tệp!');
-    }
-  }
-}
-
-async function saveProgressStorage() {
-  await idbSet('user_progress', state.progress);
-  try {
-    localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(state.progress));
-  } catch (e) {}
+  return [];
 }
 
 /**
  * =========================================================================
- * 5. LIÊN KẾT CHÉO 2 CHIỀU GIỮA VOCAB_DATA VÀ EXERCISE_DATA
+ * 4. LIÊN KẾT CHÉO 2 CHIỀU GIỮA VOCAB_DATA.JS & EXERCISE_DATA.JS
  * =========================================================================
  */
-function findVocabCardsByKeys(keys) {
-  if (!Array.isArray(keys) || keys.length === 0) return [];
-  const normalizedKeys = keys.map(k => String(k || '').trim()).filter(Boolean);
-  if (normalizedKeys.length === 0) return [];
-
-  const matched = [];
-  const seenIds = new Set();
-
-  normalizedKeys.forEach(key => {
-    REPO_CARDS.forEach(card => {
-      if (!seenIds.has(card.id) && (card.jp === key || card.kanji === key)) {
-        seenIds.add(card.id);
-        matched.push(card);
-      }
-    });
+function findVocabCardsByKeys(refKeys) {
+  if (!Array.isArray(refKeys) || refKeys.length === 0) return [];
+  const normalizedRefs = refKeys.map(k => normalizeKeyText(k)).filter(Boolean);
+  return REPO_CARDS.filter(card => {
+    const jp = normalizeKeyText(card.jp);
+    const kj = normalizeKeyText(card.kanji);
+    return normalizedRefs.includes(jp) || (kj && normalizedRefs.includes(kj));
   });
-
-  return matched;
 }
 
 function resolveLinkedVocabForExercise(ex) {
@@ -577,7 +453,6 @@ function resolveLinkedVocabForExercise(ex) {
   const direct = findVocabCardsByKeys(keys);
   if (direct.length > 0) return direct;
 
-  // Dự phòng tìm từ vựng xuất hiện trong câu bài tập
   const hayStack = `${ex.prompt_jp || ''} ${ex.jp || ''}`;
   return REPO_CARDS.filter(c =>
     (c.kanji && c.kanji.length >= 2 && hayStack.includes(c.kanji)) ||
@@ -585,138 +460,450 @@ function resolveLinkedVocabForExercise(ex) {
   ).slice(0, 4);
 }
 
-async function syncWrongExerciseToVocabReview(ex) {
-  const linkedCards = resolveLinkedVocabForExercise(ex);
-  if (linkedCards.length === 0) return [];
+function generateBaseFormCandidates(rawSurface) {
+  const clean = String(rawSurface || '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/（[^）]*）/g, '')
+    .replace(/[。、．.！!？?「」『』\s]/g, '')
+    .trim();
 
-  let markedLabels = [];
-  linkedCards.forEach(card => {
-    if (state.progress[card.id] !== 'review') {
-      state.progress[card.id] = 'review';
+  if (!clean) return [];
+  const candidates = new Set([clean]);
+
+  const masuEndings = ['ませんでした', 'ました', 'ません', 'ましょう'];
+  for (const end of masuEndings) {
+    if (clean.endsWith(end) && clean.length > end.length) {
+      candidates.add(clean.slice(0, -end.length) + 'ます');
     }
-    markedLabels.push(card.kanji || card.jp);
-  });
+  }
 
-  await saveProgressStorage();
-  updateStatsHeader();
-  return markedLabels;
+  const teNormalized = clean
+    .replace(/(ています|ていました|てください|ている)$/, 'て')
+    .replace(/(でいます|でいました|でください|でいる)$/, 'で');
+
+  if (teNormalized === 'いって') {
+    candidates.add('いきます');
+    candidates.add('いいます');
+  } else if (teNormalized === 'きて') {
+    candidates.add('きます');
+  } else if (teNormalized === 'して') {
+    candidates.add('します');
+  } else if (teNormalized.endsWith('って') && teNormalized.length > 2) {
+    const stem = teNormalized.slice(0, -2);
+    candidates.add(stem + 'います');
+    candidates.add(stem + 'ちます');
+    candidates.add(stem + 'ります');
+  } else if (teNormalized.endsWith('んで') && teNormalized.length > 2) {
+    const stem = teNormalized.slice(0, -2);
+    candidates.add(stem + 'みます');
+    candidates.add(stem + 'びます');
+    candidates.add(stem + 'にます');
+  } else if (teNormalized.endsWith('いて') && teNormalized.length > 2) {
+    candidates.add(teNormalized.slice(0, -2) + 'きます');
+  } else if (teNormalized.endsWith('いで') && teNormalized.length > 2) {
+    candidates.add(teNormalized.slice(0, -2) + 'ぎます');
+  } else if (teNormalized.endsWith('して') && teNormalized.length > 2) {
+    const stem = teNormalized.slice(0, -2);
+    candidates.add(stem + 'します');
+  } else if (teNormalized.endsWith('て') && teNormalized.length > 1) {
+    candidates.add(teNormalized.slice(0, -1) + 'ます');
+  }
+
+  const adjEndings = ['くなかったです', 'くなかった', 'かったです', 'かった', 'くないです', 'くない'];
+  for (const end of adjEndings) {
+    if (clean.endsWith(end) && clean.length > end.length) {
+      const stem = clean.slice(0, -end.length);
+      if (stem === 'よ' || stem === '良') candidates.add('いい');
+      else candidates.add(stem + 'い');
+    }
+  }
+
+  const naEndings = ['じゃありませんでした', 'じゃありません', 'ではありません', 'でした'];
+  for (const end of naEndings) {
+    if (clean.endsWith(end) && clean.length > end.length) {
+      candidates.add(clean.slice(0, -end.length));
+    }
+  }
+
+  return Array.from(candidates);
 }
+
+function findVocabCardForTap(rawSurface) {
+  const candidates = generateBaseFormCandidates(rawSurface);
+  if (candidates.length === 0) return null;
+
+  for (const cand of candidates) {
+    const exact = REPO_CARDS.find(c => c.jp === cand || c.kanji === cand);
+    if (exact) return exact;
+  }
+
+  const mainClean = candidates[0];
+  if (mainClean.length >= 2) {
+    const partial = REPO_CARDS.find(c =>
+      (c.kanji && c.kanji.length >= 2 && mainClean.includes(c.kanji)) ||
+      (c.jp && c.jp.length >= 3 && mainClean.includes(c.jp))
+    );
+    if (partial) return partial;
+  }
+
+  return null;
+}
+
+function handlePromptWordTap(rawSurface) {
+  const cleanWord = String(rawSurface || '').replace(/\([^)]*\)/g, '').trim();
+  if (!cleanWord) return;
+
+  const matchedCard = findVocabCardForTap(cleanWord);
+  if (matchedCard) {
+    openVocabPeekModal(matchedCard.id);
+  } else {
+    speakJapanese(cleanWord);
+    showToast(`🔊 ${cleanWord} (Chưa có thẻ riêng trong kho từ vựng)`);
+  }
+}
+
+function renderInteractiveJapanesePrompt(jpText) {
+  const raw = String(jpText || '').trim();
+  if (!raw) return '';
+
+  const parts = raw.split(/(\s+|（[\s　]*）|\([\s　]*\)|[。、．.！!？?])/g).filter(Boolean);
+
+  return parts.map(part => {
+    if (/^\s+$/.test(part)) return ' ';
+    if (/^(（[\s　]*）|\([\s　]*\)|[。、．.！!？?])$/.test(part)) {
+      return `<span>${escapeHtml(part)}</span>`;
+    }
+    const particleMatch = part.match(/^(.{2,})(は|が|を|に|へ|で|と|も|から|まで)$/);
+    if (particleMatch) {
+      const wordCore = particleMatch[1];
+      const particle = particleMatch[2];
+      return `<button type="button" class="ex-tap-word" onclick="handlePromptWordTap('${escapeHtml(wordCore)}')">${escapeHtml(wordCore)}</button><span>${escapeHtml(particle)}</span>`;
+    }
+    return `<button type="button" class="ex-tap-word" onclick="handlePromptWordTap('${escapeHtml(part)}')">${escapeHtml(part)}</button>`;
+  }).join('');
+}
+
+let activePeekCardId = '';
 
 function openVocabPeekModal(cardId) {
   const card = REPO_CARDS.find(c => c.id === cardId);
   if (!card) return;
 
+  const cat = detectWordCategory(card);
+  const { mainTip, bridgeTip } = parseMnemonicAndBridge(card.mnemonic);
+
   const lvlEl = document.getElementById('peek-level-tag');
   lvlEl.textContent = card.level;
   lvlEl.className = `level-tag ${card.level.toLowerCase()}`;
+  document.getElementById('peek-pos-tag').textContent = cat.label;
 
-  document.getElementById('peek-pos-tag').textContent = card.posLabel || 'Từ vựng';
-  document.getElementById('peek-jp-title').textContent =
-    card.kanji ? `${card.kanji} (${card.jp})` : card.jp;
-  document.getElementById('peek-romaji').textContent = card.romaji ? `/${card.romaji}/` : '';
+  document.getElementById('peek-jp-title').textContent = card.kanji
+    ? `${card.kanji} (${card.jp})`
+    : card.jp;
+  document.getElementById('peek-romaji').textContent = `/${card.romaji}/`;
   document.getElementById('peek-vi').textContent = card.vi;
-
-  const { coreMnemonic, bridgeNote } = splitMnemonicAndBridge(card.mnemonic);
-  document.getElementById('peek-mnemonic').textContent = coreMnemonic;
+  document.getElementById('peek-mnemonic').textContent = mainTip;
 
   const bridgeBox = document.getElementById('peek-bridge-box');
-  if (bridgeNote) {
-    document.getElementById('peek-bridge-text').textContent = bridgeNote;
+  if (bridgeTip) {
     bridgeBox.style.display = 'block';
+    document.getElementById('peek-bridge-text').textContent = bridgeTip;
   } else {
     bridgeBox.style.display = 'none';
   }
 
-  document.getElementById('peek-speak-btn').onclick = () => speakJapanese(card.jp || card.kanji);
+  const speakBtn = document.getElementById('peek-speak-btn');
+  speakBtn.onclick = () => speakJapanese(card.jp);
+
   document.getElementById('vocab-peek-modal').style.display = 'flex';
-  speakJapanese(card.jp || card.kanji);
+  speakJapanese(card.jp);
 }
 
 function closeVocabPeekModal() {
   document.getElementById('vocab-peek-modal').style.display = 'none';
 }
 
+function openPeekFromActiveToken() {
+  if (activePeekCardId) {
+    openVocabPeekModal(activePeekCardId);
+  }
+}
+
+function flagLinkedVocabForReview(ex) {
+  const linked = resolveLinkedVocabForExercise(ex);
+  if (linked.length === 0) return '';
+
+  linked.forEach(card => {
+    state.progress[card.id] = 'review';
+  });
+  saveProgress();
+  updateStatsHeader();
+
+  const names = linked.map(c => c.kanji || c.jp).join(', ');
+  return `🔄 Đã tự động đánh dấu "Cần ôn lại" cho từ vựng: ${names}`;
+}
+
 /**
  * =========================================================================
- * 6. KIỂM TRA TRÙNG LẶP ĐỘC LẬP CHO TỪ VỰNG & BÀI TẬP
+ * 5. KHỞI TẠO & LƯU TRỮ DỮ LIỆU 2 KHO
+ * =========================================================================
+ */
+function parseMultiJsonBlocks(rawText) {
+  const text = String(rawText || '').trim();
+  if (!text) return [];
+
+  const cleaned = text
+    .replace(/^(?:var|let|const)\s+(?:VOCAB_DATA|EXERCISE_DATA)\s*=\s*/i, '')
+    .replace(/;\s*$/, '')
+    .trim();
+
+  try {
+    const direct = JSON.parse(cleaned);
+    if (Array.isArray(direct)) return direct;
+    if (direct && typeof direct === 'object') return [direct];
+  } catch (err) {}
+
+  const combined = [];
+  let depth = 0;
+  let startIdx = -1;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '[') {
+      if (depth === 0) startIdx = i;
+      depth++;
+    } else if (ch === ']') {
+      depth--;
+      if (depth === 0 && startIdx !== -1) {
+        const chunk = cleaned.slice(startIdx, i + 1);
+        try {
+          const parsedChunk = JSON.parse(chunk);
+          if (Array.isArray(parsedChunk)) combined.push(...parsedChunk);
+        } catch (e) {}
+        startIdx = -1;
+      }
+    }
+  }
+
+  if (combined.length > 0) return combined;
+  throw new Error('Cú pháp JSON không hợp lệ. Hãy kiểm tra dấu ngoặc vuông [...] hoặc dấu phẩy.');
+}
+
+async function initRepository() {
+  const staticVocab = Array.isArray(window.VOCAB_DATA) ? window.VOCAB_DATA : [];
+  const staticExercises = Array.isArray(window.EXERCISE_DATA) ? window.EXERCISE_DATA : [];
+
+  let storedVocab = await idbGet(STORAGE_REPO_VOCAB_KEY);
+  let storedEx = await idbGet(STORAGE_REPO_EXERCISE_KEY);
+
+  if (!Array.isArray(storedVocab)) {
+    try {
+      const rawV = localStorage.getItem(STORAGE_REPO_VOCAB_KEY);
+      if (rawV) storedVocab = JSON.parse(rawV);
+    } catch (e) {}
+  }
+  if (!Array.isArray(storedEx)) {
+    try {
+      const rawE = localStorage.getItem(STORAGE_REPO_EXERCISE_KEY);
+      if (rawE) storedEx = JSON.parse(rawE);
+    } catch (e) {}
+  }
+
+  const mergedVocabMap = new Map();
+  const mergedExMap = new Map();
+
+  [...staticVocab, ...(Array.isArray(storedVocab) ? storedVocab : [])].forEach(item => {
+    if (!item) return;
+    if (isExerciseEntry(item)) {
+      const ex = normalizeExerciseItem(item);
+      if (ex.jp || ex.prompt_jp) mergedExMap.set(getExerciseUniqueKey(ex), ex);
+    } else if (item.jp && item.vi) {
+      const card = normalizeCardItem(item);
+      mergedVocabMap.set(getCardUniqueKey(card), card);
+    }
+  });
+
+  [...staticExercises, ...(Array.isArray(storedEx) ? storedEx : [])].forEach(item => {
+    if (!item) return;
+    if (isExerciseEntry(item)) {
+      const ex = normalizeExerciseItem(item);
+      if (ex.jp || ex.prompt_jp) mergedExMap.set(getExerciseUniqueKey(ex), ex);
+    } else if (item.jp && item.vi) {
+      const card = normalizeCardItem(item);
+      mergedVocabMap.set(getCardUniqueKey(card), card);
+    }
+  });
+
+  REPO_CARDS = Array.from(mergedVocabMap.values());
+  REPO_EXERCISES = Array.from(mergedExMap.values());
+
+  await saveRepository();
+
+  try {
+    const savedProgress = localStorage.getItem(STORAGE_PROGRESS_KEY);
+    if (savedProgress) state.progress = JSON.parse(savedProgress);
+  } catch (e) {
+    state.progress = {};
+  }
+
+  loadStreak();
+}
+
+async function saveRepository() {
+  await idbSet(STORAGE_REPO_VOCAB_KEY, REPO_CARDS);
+  await idbSet(STORAGE_REPO_EXERCISE_KEY, REPO_EXERCISES);
+  try {
+    localStorage.setItem(STORAGE_REPO_VOCAB_KEY, JSON.stringify(REPO_CARDS));
+    localStorage.setItem(STORAGE_REPO_EXERCISE_KEY, JSON.stringify(REPO_EXERCISES));
+  } catch (e) {}
+}
+
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_PROGRESS_KEY, JSON.stringify(state.progress));
+  } catch (e) {}
+}
+
+function getTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function loadStreak() {
+  try {
+    const raw = localStorage.getItem(STORAGE_STREAK_KEY);
+    if (raw) state.streak = JSON.parse(raw);
+  } catch (e) {
+    state.streak = { count: 0, lastDate: '' };
+  }
+  renderStreakBadge();
+}
+
+function markStudyActivityToday() {
+  const today = getTodayStr();
+  if (state.streak.lastDate === today) return;
+
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDate.getDate()).padStart(2, '0')}`;
+
+  if (state.streak.lastDate === yesterday) {
+    state.streak.count = (state.streak.count || 0) + 1;
+  } else {
+    state.streak.count = 1;
+  }
+  state.streak.lastDate = today;
+
+  try {
+    localStorage.setItem(STORAGE_STREAK_KEY, JSON.stringify(state.streak));
+  } catch (e) {}
+  renderStreakBadge();
+}
+
+function renderStreakBadge() {
+  const el = document.getElementById('streak-pill');
+  if (el) el.textContent = `🔥 ${state.streak.count || 0}`;
+}
+
+/**
+ * =========================================================================
+ * 6. KIỂM TRA TRÙNG LẶP RIÊNG BIỆT CHO CẢ 2 KHO
  * =========================================================================
  */
 function findRepositoryDuplicates() {
-  const seenMap = new Map();
+  const groups = new Map();
+
+  REPO_CARDS.forEach((card, index) => {
+    const key = `V__${getCardUniqueKey(card)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ kind: 'vocab', item: card, index });
+  });
+
+  REPO_EXERCISES.forEach((ex, index) => {
+    const key = getExerciseUniqueKey(ex);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ kind: 'exercise', item: ex, index });
+  });
+
   const duplicateGroups = [];
-  const allItems = [...REPO_CARDS, ...REPO_EXERCISES];
-
-  allItems.forEach((item, index) => {
-    const sig = getDuplicateSignature(item);
-    if (!seenMap.has(sig)) {
-      seenMap.set(sig, [{ item, index }]);
-    } else {
-      seenMap.get(sig).push({ item, index });
-    }
-  });
-
-  seenMap.forEach((entries, sig) => {
+  groups.forEach((entries, key) => {
     if (entries.length > 1) {
-      duplicateGroups.push({ signature: sig, entries });
+      duplicateGroups.push({ key, entries });
     }
   });
-
   return duplicateGroups;
 }
 
 function updateRepoDuplicateBanner() {
   const lineEl = document.getElementById('repo-dup-line');
   const statusTextEl = document.getElementById('repo-dup-status-text');
-  const groups = findRepositoryDuplicates();
+  const dotEl = document.getElementById('drawer-dup-dot');
+  if (!lineEl || !statusTextEl) return;
 
+  const groups = findRepositoryDuplicates();
   if (groups.length === 0) {
     lineEl.classList.remove('has-dup');
-    statusTextEl.textContent = '✓ Kiểm tra trùng: Cả 2 kho đều sạch, không có mục trùng';
+    statusTextEl.textContent = '✓ Cả 2 kho đều sạch, không trùng';
+    if (dotEl) dotEl.style.display = 'none';
   } else {
     const extraCount = groups.reduce((sum, g) => sum + (g.entries.length - 1), 0);
     lineEl.classList.add('has-dup');
-    statusTextEl.textContent = `⚠️ Phát hiện ${groups.length} mục bị trùng (${extraCount} bản thừa)`;
+    statusTextEl.textContent = `⚠️ ${groups.length} mục trùng (${extraCount} thừa)`;
+    if (dotEl) dotEl.style.display = 'block';
   }
 }
 
 function openDuplicateCheckerModal() {
-  const groups = findRepositoryDuplicates();
-  const bodyEl = document.getElementById('repo-dup-modal-body');
+  const modal = document.getElementById('dup-modal');
+  const body = document.getElementById('repo-dup-modal-body');
   const dedupeBtn = document.getElementById('dedupe-repo-btn');
+  const groups = findRepositoryDuplicates();
 
   if (groups.length === 0) {
-    bodyEl.innerHTML = `
-      <div class="dup-check-box clean">
-        ✓ Toàn bộ ${REPO_CARDS.length} từ vựng và ${REPO_EXERCISES.length} bài tập đều là duy nhất, không có bản trùng lặp.
-      </div>
-    `;
     dedupeBtn.style.display = 'none';
-  } else {
-    const hasFileDuplicates = groups.some(g => g.entries.filter(e => e.item.source !== 'json').length > 1);
-    bodyEl.innerHTML = `
-      <div class="dup-check-box warning">
-        ⚠️ Tìm thấy ${groups.length} mục xuất hiện nhiều hơn 1 lần:
+    body.innerHTML = `
+      <div class="dup-check-box clean">
+        <strong>✓ Cả 2 kho Từ vựng (${REPO_CARDS.length}) & Bài tập (${REPO_EXERCISES.length}) đều sạch!</strong>
+        <span>Không phát hiện mục nào bị trùng lặp.</span>
       </div>
-      ${groups.slice(0, 60).map(g => {
-        const first = g.entries[0].item;
-        const isEx = isExerciseItem(first);
-        const label = isEx
-          ? `[Bài tập ${first.kind}] ${first.prompt_jp || first.jp}`
-          : `[Từ vựng] ${first.kanji ? `${first.kanji} (${first.jp})` : first.jp}`;
-        const locations = g.entries.map(e => `${e.item.level} • ${e.item.topic} [${e.item.source}]`).join(' | ');
-        return `
-          <div class="dup-item-card">
-            <strong>${escapeHtml(label)}</strong><br/>
-            <span class="text-muted">Vị trí: ${escapeHtml(locations)}</span>
-          </div>
-        `;
-      }).join('')}
-      ${hasFileDuplicates ? '<p class="text-muted" style="font-size:11px;">Lưu ý: Các bản trùng nằm cứng trong tệp <strong>vocab_data.js</strong> hoặc <strong>exercise_data.js</strong> cần được xuất lại tệp mới để ghi đè.</p>' : ''}
     `;
+  } else {
+    const extraCount = groups.reduce((sum, g) => sum + (g.entries.length - 1), 0);
     dedupeBtn.style.display = 'block';
+    dedupeBtn.textContent = `Dọn sạch ${extraCount} bản trùng thừa`;
+
+    body.innerHTML = groups.map(g => {
+      const first = g.entries[0].item;
+      const title = first.prompt_jp || (first.kanji ? `${first.kanji} (${first.jp})` : first.jp);
+      return `
+        <div class="dup-item-row">
+          <div>
+            <strong>${escapeHtml(title)}</strong>
+            <div class="text-muted">${escapeHtml(first.vi || first.prompt_vi || '')}</div>
+          </div>
+          <span class="badge review">Lặp ${g.entries.length} lần</span>
+        </div>
+      `;
+    }).join('');
   }
 
-  document.getElementById('dup-modal').style.display = 'flex';
+  modal.style.display = 'flex';
 }
 
 function closeDuplicateCheckerModal() {
@@ -724,543 +911,658 @@ function closeDuplicateCheckerModal() {
 }
 
 async function deduplicateRepository() {
-  const seen = new Set();
-  const uniqueCards = [];
-  const uniqueExercises = [];
-  let removedCount = 0;
+  const seenVocab = new Map();
+  REPO_CARDS.forEach(c => seenVocab.set(getCardUniqueKey(c), c));
+  REPO_CARDS = Array.from(seenVocab.values());
 
-  REPO_CARDS.forEach(card => {
-    const sig = getDuplicateSignature(card);
-    if (!seen.has(sig)) {
-      seen.add(sig);
-      uniqueCards.push(card);
-    } else if (card.source === 'json') {
-      removedCount++;
-    } else {
-      uniqueCards.push(card);
-    }
-  });
+  const seenEx = new Map();
+  REPO_EXERCISES.forEach(ex => seenEx.set(getExerciseUniqueKey(ex), ex));
+  REPO_EXERCISES = Array.from(seenEx.values());
 
-  REPO_EXERCISES.forEach(ex => {
-    const sig = getDuplicateSignature(ex);
-    if (!seen.has(sig)) {
-      seen.add(sig);
-      uniqueExercises.push(ex);
-    } else if (ex.source === 'json') {
-      removedCount++;
-    } else {
-      uniqueExercises.push(ex);
-    }
-  });
-
-  REPO_CARDS = uniqueCards;
-  REPO_EXERCISES = uniqueExercises;
-  await saveExtraReposToStorage();
+  await saveRepository();
   closeDuplicateCheckerModal();
   refreshUI();
-  showToast(removedCount > 0 ? `Đã dọn ${removedCount} bản trùng thừa!` : 'Đã kiểm tra xong');
+  showToast('✓ Đã dọn sạch toàn bộ mục trùng trong 2 kho!');
+}
+
+function runLiveDuplicateCheck(showToastMsg = false) {
+  const rawJson = document.getElementById('import-json-text').value.trim();
+  const defaultLevel = document.getElementById('import-default-level').value;
+  const defaultTopic = document.getElementById('import-default-topic').value.trim() || 'Tổng hợp';
+
+  const boxEl = document.getElementById('import-dup-check-box');
+  const summaryEl = document.getElementById('import-dup-summary');
+  const listEl = document.getElementById('import-dup-list');
+  const policyRow = document.getElementById('import-dup-policy-row');
+  const errorEl = document.getElementById('import-error-msg');
+
+  errorEl.style.display = 'none';
+
+  if (!rawJson) {
+    boxEl.className = 'dup-check-box neutral';
+    summaryEl.textContent = '🔍 Dán JSON hoặc chọn tệp để tự động phân luồng Từ vựng / Bài tập.';
+    listEl.style.display = 'none';
+    policyRow.style.display = 'none';
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = parseMultiJsonBlocks(rawJson);
+  } catch (e) {
+    boxEl.className = 'dup-check-box warn';
+    summaryEl.textContent = '⚠️ JSON chưa hợp lệ — hãy kiểm tra dấu phẩy hoặc dấu ngoặc vuông [...].';
+    listEl.style.display = 'none';
+    policyRow.style.display = 'none';
+    return;
+  }
+
+  const repoVocabMap = new Map();
+  REPO_CARDS.forEach(c => repoVocabMap.set(getCardUniqueKey(c), c));
+  const repoExMap = new Map();
+  REPO_EXERCISES.forEach(s => repoExMap.set(getExerciseUniqueKey(s), s));
+
+  const seenInBatch = new Set();
+  const dupWithRepo = [];
+  const dupInBatch = [];
+  let newVocabCount = 0;
+  let newExCount = 0;
+
+  parsed.forEach(raw => {
+    if (!raw || typeof raw !== 'object') return;
+    if (isExerciseEntry(raw)) {
+      const ex = normalizeExerciseItem(raw, defaultLevel, defaultTopic);
+      if (!ex.jp && !ex.prompt_jp) return;
+      const key = getExerciseUniqueKey(ex);
+      if (seenInBatch.has(key)) {
+        dupInBatch.push({ title: ex.prompt_jp || ex.jp, sub: 'Bài tập trùng trong JSON' });
+      } else {
+        seenInBatch.add(key);
+        if (repoExMap.has(key)) {
+          dupWithRepo.push({ title: ex.prompt_jp || ex.jp, sub: `Đã có (${ex.kind})` });
+        } else {
+          newExCount++;
+        }
+      }
+    } else if (raw.jp && raw.vi) {
+      const card = normalizeCardItem(raw, defaultLevel, defaultTopic);
+      const key = getCardUniqueKey(card);
+      if (seenInBatch.has(key)) {
+        dupInBatch.push({ title: card.kanji ? `${card.kanji} (${card.jp})` : card.jp, sub: 'Từ vựng trùng trong JSON' });
+      } else {
+        seenInBatch.add(key);
+        if (repoVocabMap.has(key)) {
+          dupWithRepo.push({ title: card.kanji ? `${card.kanji} (${card.jp})` : card.jp, sub: 'Đã có trong vocab_data' });
+        } else {
+          newVocabCount++;
+        }
+      }
+    }
+  });
+
+  if (dupWithRepo.length === 0 && dupInBatch.length === 0) {
+    boxEl.className = 'dup-check-box clean';
+    summaryEl.textContent = `✓ Sẵn sàng nạp: +${newVocabCount} từ vựng & +${newExCount} bài tập mới (0 trùng)!`;
+    listEl.style.display = 'none';
+    policyRow.style.display = 'none';
+  } else {
+    boxEl.className = 'dup-check-box warn';
+    summaryEl.textContent = `⚠️ Phát hiện ${dupWithRepo.length} mục đã có & ${dupInBatch.length} mục lặp • Mới: +${newVocabCount} từ, +${newExCount} bài tập.`;
+    const preview = [...dupWithRepo, ...dupInBatch].slice(0, 20);
+    listEl.innerHTML = preview.map(d => `
+      <div class="dup-item-row">
+        <strong>${escapeHtml(d.title)}</strong>
+        <span class="text-muted">${escapeHtml(d.sub)}</span>
+      </div>
+    `).join('');
+    listEl.style.display = 'flex';
+    policyRow.style.display = dupWithRepo.length > 0 ? 'flex' : 'none';
+  }
+
+  if (showToastMsg) {
+    showToast(`Kiểm tra xong: +${newVocabCount} từ, +${newExCount} bài tập`);
+  }
+}
+
+function handleImportFileUpload(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('import-json-text').value = String(e.target.result || '');
+    runLiveDuplicateCheck();
+    showToast(`📂 Đã đọc tệp ${file.name}`);
+  };
+  reader.readAsText(file, 'UTF-8');
 }
 
 /**
  * =========================================================================
- * 7. BỘ PHÁT ÂM TIẾNG NHẬT TỰ NHIÊN 2 TẦNG & ÂM THANH PHẢN HỒI
+ * 7. HỆ THỐNG ÂM THANH TIẾNG NHẬT 2 TẦNG (IPHONE SAFARI & GITHUB PAGES)
  * =========================================================================
  */
-let cachedJaVoice = null;
-let activeUtterance = null;
-let activeAudioElement = null;
-let fallbackTimerId = null;
+let jpVoice = null;
+let currentAudioObj = null;
+let speechRequestId = 0;
 let audioUnlocked = false;
-const neuralAudioCache = new Map();
+const ttsBlobCache = new Map();
 
-function unlockMobileAudio() {
+function unlockiOSAudio() {
   if (audioUnlocked) return;
   audioUnlocked = true;
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (AudioCtx) {
       const ctx = new AudioCtx();
-      const buffer = ctx.createBuffer(1, 1, 22050);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start(0);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(0);
+      osc.stop(0.01);
     }
   } catch (e) {}
 }
 
-function playFeedbackTone(isSuccess) {
+document.addEventListener('touchstart', unlockiOSAudio, { once: true, passive: true });
+document.addEventListener('click', unlockiOSAudio, { once: true, passive: true });
+
+function loadJapaneseVoices() {
+  if (!('speechSynthesis' in window)) return;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) return;
+
+  const jaVoices = voices.filter(v => {
+    const lang = (v.lang || '').toLowerCase();
+    return lang.includes('ja') || lang.includes('jp');
+  });
+
+  if (jaVoices.length > 0) {
+    const priorityNames = ['Siri', 'Kyoko', 'O-Ren', 'Nanami', 'Haruka', 'Google 日本語', 'Enhanced', 'Premium'];
+    let best = null;
+    for (const name of priorityNames) {
+      best = jaVoices.find(v => v.name && v.name.includes(name));
+      if (best) break;
+    }
+    jpVoice = best || jaVoices.find(v => v.localService) || jaVoices[0];
+  }
+}
+
+if ('speechSynthesis' in window) {
+  loadJapaneseVoices();
+  window.speechSynthesis.onvoiceschanged = loadJapaneseVoices;
+}
+
+function setSpeakingIndicator(active) {
+  document.querySelectorAll('.audio-btn, .quiz-audio-mini, .duo-speaker-btn, .dict-play-btn').forEach(btn => {
+    btn.classList.toggle('speaking', active);
+  });
+}
+
+function stopSpeech() {
+  speechRequestId += 1;
+  if (currentAudioObj) {
+    try {
+      currentAudioObj.pause();
+      currentAudioObj.src = '';
+    } catch (e) {}
+    currentAudioObj = null;
+  }
+  if ('speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
+  }
+  setSpeakingIndicator(false);
+}
+
+function normalizeTextForSpeech(rawText) {
+  let clean = String(rawText || '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/（[^）]*）/g, '')
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/[〜～~]/g, '')
+    .trim();
+  if (!clean) return '';
+  if (!/[。！？.!?,、]$/.test(clean)) {
+    clean += '。';
+  }
+  return clean;
+}
+
+function speakViaNativeWebSpeech(cleanText, isSlow, reqId) {
+  if (!('speechSynthesis' in window)) {
+    setSpeakingIndicator(false);
+    return;
+  }
+  try {
+    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+
+    if (!jpVoice) loadJapaneseVoices();
+
+    const utter = new SpeechSynthesisUtterance(cleanText);
+    utter.lang = 'ja-JP';
+    if (jpVoice) utter.voice = jpVoice;
+    utter.rate = isSlow ? 0.68 : 0.92;
+    utter.pitch = 1.0;
+
+    utter.onstart = () => {
+      if (reqId === speechRequestId) setSpeakingIndicator(true);
+    };
+    utter.onend = () => {
+      if (reqId === speechRequestId) setSpeakingIndicator(false);
+    };
+    utter.onerror = () => {
+      if (reqId === speechRequestId) setSpeakingIndicator(false);
+    };
+
+    window.speechSynthesis.speak(utter);
+  } catch (e) {
+    setSpeakingIndicator(false);
+  }
+}
+
+function playCachedOrRemoteStream(url, cacheKey, isSlow, reqId, fallbackFn) {
+  const audio = new Audio();
+  audio.preload = 'auto';
+  audio.playsInline = true;
+  audio.playbackRate = isSlow ? 0.76 : 1.0;
+
+  if ('preservesPitch' in audio) audio.preservesPitch = true;
+  else if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
+
+  currentAudioObj = audio;
+
+  let settled = false;
+  const fallbackTimer = setTimeout(() => {
+    if (!settled && reqId === speechRequestId) {
+      settled = true;
+      fallbackFn();
+    }
+  }, 1600);
+
+  audio.onplaying = () => {
+    settled = true;
+    clearTimeout(fallbackTimer);
+    if (reqId === speechRequestId) setSpeakingIndicator(true);
+  };
+
+  audio.onended = () => {
+    clearTimeout(fallbackTimer);
+    if (reqId === speechRequestId) setSpeakingIndicator(false);
+  };
+
+  audio.onerror = () => {
+    clearTimeout(fallbackTimer);
+    if (!settled && reqId === speechRequestId) {
+      settled = true;
+      fallbackFn();
+    }
+  };
+
+  audio.src = url;
+  const playPromise = audio.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(() => {
+      clearTimeout(fallbackTimer);
+      if (!settled && reqId === speechRequestId) {
+        settled = true;
+        fallbackFn();
+      }
+    });
+  }
+}
+
+function speakJapanese(rawText, forceSlow = null) {
+  const cleanText = normalizeTextForSpeech(rawText);
+  if (!cleanText) return;
+
+  stopSpeech();
+  const reqId = speechRequestId;
+  const isSlow = forceSlow !== null ? forceSlow : (state.voiceMode === 'slow');
+  setSpeakingIndicator(true);
+
+  const cacheKey = `${cleanText}_${isSlow ? 'slow' : 'norm'}`;
+  if (ttsBlobCache.has(cacheKey)) {
+    playCachedOrRemoteStream(
+      ttsBlobCache.get(cacheKey),
+      cacheKey,
+      isSlow,
+      reqId,
+      () => speakViaNativeWebSpeech(cleanText, isSlow, reqId)
+    );
+    return;
+  }
+
+  const speedParam = isSlow ? '0.35' : '0.9';
+  const streamUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&ttsspeed=${speedParam}&q=${encodeURIComponent(cleanText)}`;
+
+  fetch(streamUrl, { referrerPolicy: 'no-referrer' })
+    .then(res => {
+      if (!res.ok) throw new Error('TTS stream blocked');
+      return res.blob();
+    })
+    .then(blob => {
+      const blobUrl = URL.createObjectURL(blob);
+      ttsBlobCache.set(cacheKey, blobUrl);
+      if (reqId === speechRequestId) {
+        playCachedOrRemoteStream(
+          blobUrl,
+          cacheKey,
+          isSlow,
+          reqId,
+          () => speakViaNativeWebSpeech(cleanText, isSlow, reqId)
+        );
+      }
+    })
+    .catch(() => {
+      if (reqId === speechRequestId) {
+        playCachedOrRemoteStream(
+          streamUrl,
+          cacheKey,
+          isSlow,
+          reqId,
+          () => speakViaNativeWebSpeech(cleanText, isSlow, reqId)
+        );
+      }
+    });
+}
+
+function playFeedbackTone(isCorrect) {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
-    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
 
-    if (isSuccess) {
-      [523.25, 659.25].forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.11);
-        gain.gain.setValueAtTime(0.12, now + idx * 0.11);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.11 + 0.25);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + idx * 0.11);
-        osc.stop(now + idx * 0.11 + 0.26);
-      });
+    const now = ctx.currentTime;
+    if (isCorrect) {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.09);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+      osc.start(now);
+      osc.stop(now + 0.26);
     } else {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(220, now);
-      osc.frequency.linearRampToValueAtTime(175, now + 0.25);
+      osc.frequency.setValueAtTime(175, now + 0.12);
       gain.gain.setValueAtTime(0.12, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
       osc.start(now);
-      osc.stop(now + 0.29);
+      osc.stop(now + 0.28);
     }
   } catch (e) {}
-}
-
-function resolveBestJapaneseVoice() {
-  if (!('speechSynthesis' in window)) return null;
-  const voices = window.speechSynthesis.getVoices() || [];
-  if (!voices.length) return null;
-
-  const jaVoices = voices.filter(v =>
-    v.lang && (v.lang.toLowerCase().startsWith('ja') || v.lang.toLowerCase().includes('jp'))
-  );
-  if (!jaVoices.length) return null;
-
-  const preferredKeywords = [
-    'siri', 'kyoko', 'o-ren', 'nanami', 'haruka',
-    'ayumi', 'google 日本語', 'sayaka', 'ichika'
-  ];
-
-  for (const kw of preferredKeywords) {
-    const match = jaVoices.find(v => v.name.toLowerCase().includes(kw));
-    if (match) {
-      cachedJaVoice = match;
-      return match;
-    }
-  }
-
-  cachedJaVoice = jaVoices[0];
-  return cachedJaVoice;
-}
-
-if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-  resolveBestJapaneseVoice();
-  if (typeof window.speechSynthesis.onvoiceschanged !== 'undefined') {
-    window.speechSynthesis.onvoiceschanged = () => resolveBestJapaneseVoice();
-  }
-}
-
-function setAudioButtonsPlaying(isPlaying) {
-  document.querySelectorAll('.audio-btn').forEach(btn => {
-    if (btn.classList.contains('solid')) {
-      btn.textContent = isPlaying ? '🔊 Đang đọc...' : '🔊 Đọc lại';
-    } else {
-      btn.textContent = isPlaying ? '🔊 Đang đọc...' : '🔊 Nghe';
-    }
-  });
-}
-
-function sanitizeJapaneseForSpeech(rawText) {
-  return String(rawText || '')
-    .replace(/\([^)]*\)/g, '')
-    .replace(/（[^）]*）/g, '')
-    .replace(/\[[^\]]*\]/g, '')
-    .replace(/[〜～]/g, '')
-    .replace(/\s*[\/・]\s*/g, '、')
-    .trim();
-}
-
-function stopSpeech() {
-  if (fallbackTimerId) {
-    clearTimeout(fallbackTimerId);
-    fallbackTimerId = null;
-  }
-
-  if (activeAudioElement) {
-    try {
-      activeAudioElement.oncanplaythrough = null;
-      activeAudioElement.onplay = null;
-      activeAudioElement.onended = null;
-      activeAudioElement.onerror = null;
-      activeAudioElement.pause();
-      activeAudioElement.currentTime = 0;
-    } catch (e) {}
-    activeAudioElement = null;
-  }
-
-  if ('speechSynthesis' in window) {
-    try {
-      if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-        window.speechSynthesis.cancel();
-      }
-    } catch (e) {}
-  }
-  activeUtterance = null;
-  setAudioButtonsPlaying(false);
-}
-
-function buildNeuralTtsUrls(cleanText) {
-  const encoded = encodeURIComponent(cleanText);
-  return [
-    `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&q=${encoded}`,
-    `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=ja&q=${encoded}`
-  ];
-}
-
-function configurePitchPreservingAudio(audioEl, rate) {
-  audioEl.playbackRate = rate;
-  audioEl.defaultPlaybackRate = rate;
-  if ('preservesPitch' in audioEl) audioEl.preservesPitch = true;
-  if ('mozPreservesPitch' in audioEl) audioEl.mozPreservesPitch = true;
-  if ('webkitPreservesPitch' in audioEl) audioEl.webkitPreservesPitch = true;
-}
-
-function speakJapanese(text, forceSlow = null) {
-  const cleanText = sanitizeJapaneseForSpeech(text);
-  if (!cleanText) return;
-
-  stopSpeech();
-  setAudioButtonsPlaying(true);
-
-  const isSlow = forceSlow !== null ? forceSlow : (state.voiceMode === 'slow');
-  const targetRate = isSlow ? 0.72 : 0.96;
-
-  if (neuralAudioCache.has(cleanText)) {
-    const cachedSrc = neuralAudioCache.get(cleanText);
-    playHtml5AudioSrc(cachedSrc, targetRate, () => {
-      neuralAudioCache.delete(cleanText);
-      speakWithDeviceVoice(cleanText, isSlow);
-    });
-    return;
-  }
-
-  const urls = buildNeuralTtsUrls(cleanText);
-  let settled = false;
-
-  fallbackTimerId = setTimeout(() => {
-    if (!settled) {
-      settled = true;
-      if (activeAudioElement) {
-        try { activeAudioElement.pause(); } catch (e) {}
-        activeAudioElement = null;
-      }
-      speakWithDeviceVoice(cleanText, isSlow);
-    }
-  }, 1800);
-
-  const tryUrl = (idx) => {
-    if (settled) return;
-    if (idx >= urls.length) {
-      settled = true;
-      clearTimeout(fallbackTimerId);
-      speakWithDeviceVoice(cleanText, isSlow);
-      return;
-    }
-
-    const url = urls[idx];
-    const audio = new Audio();
-    audio.preload = 'auto';
-    audio.referrerPolicy = 'no-referrer';
-    configurePitchPreservingAudio(audio, targetRate);
-    activeAudioElement = audio;
-
-    audio.onplay = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(fallbackTimerId);
-      if (neuralAudioCache.size > 200) {
-        const firstKey = neuralAudioCache.keys().next().value;
-        neuralAudioCache.delete(firstKey);
-      }
-      neuralAudioCache.set(cleanText, url);
-      setAudioButtonsPlaying(true);
-    };
-
-    audio.onended = () => {
-      activeAudioElement = null;
-      setAudioButtonsPlaying(false);
-    };
-
-    audio.onerror = () => {
-      if (!settled) tryUrl(idx + 1);
-    };
-
-    audio.src = url;
-    const playPromise = audio.play();
-    if (playPromise && typeof playPromise.catch === 'function') {
-      playPromise.catch(() => {
-        if (!settled) {
-          settled = true;
-          clearTimeout(fallbackTimerId);
-          speakWithDeviceVoice(cleanText, isSlow);
-        }
-      });
-    }
-  };
-
-  tryUrl(0);
-}
-
-function playHtml5AudioSrc(src, rate, onFail) {
-  const audio = new Audio(src);
-  audio.referrerPolicy = 'no-referrer';
-  configurePitchPreservingAudio(audio, rate);
-  activeAudioElement = audio;
-
-  audio.onplay = () => setAudioButtonsPlaying(true);
-  audio.onended = () => {
-    activeAudioElement = null;
-    setAudioButtonsPlaying(false);
-  };
-  audio.onerror = () => {
-    activeAudioElement = null;
-    if (typeof onFail === 'function') onFail();
-  };
-
-  audio.play().catch(() => {
-    activeAudioElement = null;
-    if (typeof onFail === 'function') onFail();
-  });
-}
-
-function speakWithDeviceVoice(cleanText, isSlow = false) {
-  if (!('speechSynthesis' in window)) {
-    setAudioButtonsPlaying(false);
-    return;
-  }
-
-  try {
-    const paddedText = cleanText.length <= 2 ? `${cleanText}、` : cleanText;
-    const utterance = new SpeechSynthesisUtterance(paddedText);
-    const voice = cachedJaVoice || resolveBestJapaneseVoice();
-
-    if (voice) {
-      utterance.voice = voice;
-      utterance.lang = voice.lang || 'ja-JP';
-    } else {
-      utterance.lang = 'ja-JP';
-    }
-
-    utterance.rate = isSlow ? 0.68 : 0.92;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-
-    utterance.onstart = () => setAudioButtonsPlaying(true);
-    utterance.onend = () => {
-      activeUtterance = null;
-      setAudioButtonsPlaying(false);
-    };
-    utterance.onerror = () => {
-      activeUtterance = null;
-      setAudioButtonsPlaying(false);
-    };
-
-    activeUtterance = utterance;
-    window.speechSynthesis.speak(utterance);
-  } catch (e) {
-    setAudioButtonsPlaying(false);
-  }
 }
 
 function toggleSpeechRate() {
   state.voiceMode = state.voiceMode === 'normal' ? 'slow' : 'normal';
   const btn = document.getElementById('speech-rate-btn');
-  btn.textContent = state.voiceMode === 'normal' ? 'Chuẩn' : 'Chậm';
+  if (btn) btn.textContent = state.voiceMode === 'normal' ? '🔊 Đọc: Chuẩn' : '🐢 Đọc: Chậm';
   showToast(state.voiceMode === 'normal' ? 'Tốc độ đọc chuẩn' : 'Tốc độ đọc chậm rõ âm');
 
   if (state.mode === 'exercise') speakCurrentExercise();
   else if (state.mode === 'dictation') speakDictationCard(false);
+  else if (state.mode === 'kana') speakSelectedKana();
   else speakCurrentCard();
+}
+
+function speakCurrentCard() {
+  const cards = getActiveSessionCards();
+  const card = cards[state.currentIndex];
+  if (!card) return;
+  speakJapanese(card.jp);
 }
 
 /**
  * =========================================================================
- * 8. BỘ LỌC PHÂN CẤP (N5 -> N3), ẨN FURIGANA & CHIA PHIÊN 12 THẺ
+ * 8. ĐIỀU KHIỂN MENU 3 GẠCH (DRAWER), LỘ TRÌNH & BỘ LỌC
  * =========================================================================
  */
+function openDrawerMenu() {
+  const drawer = document.getElementById('nav-drawer-backdrop');
+  if (drawer) drawer.style.display = 'flex';
+}
+
+function closeDrawerMenu() {
+  const drawer = document.getElementById('nav-drawer-backdrop');
+  if (drawer) drawer.style.display = 'none';
+}
+
+function setStudyFocus(focus) {
+  state.studyFocus = focus === 'vocab_only' ? 'vocab_only' : 'guided';
+
+  document.getElementById('focus-guided-btn').classList.toggle('active', state.studyFocus === 'guided');
+  document.getElementById('focus-vocab-btn').classList.toggle('active', state.studyFocus === 'vocab_only');
+
+  const stripFocusBtn = document.getElementById('strip-focus-btn');
+  if (stripFocusBtn) {
+    stripFocusBtn.textContent = state.studyFocus === 'guided' ? '🛤️ Lộ trình' : '📚 Chỉ Từ Vựng';
+    stripFocusBtn.classList.toggle('active-chip', state.studyFocus === 'guided');
+  }
+
+  if (state.studyFocus === 'vocab_only' && state.mode === 'exercise') {
+    setMode('flashcard');
+    return;
+  }
+
+  if (state.studyFocus === 'guided' && state.mode === 'kana') {
+    state.guidedStepIndex = 0;
+    setMode('flashcard');
+    return;
+  }
+
+  updateGuidedPathUI();
+  showToast(state.studyFocus === 'guided' ? 'Chế độ: Học theo lộ trình 4 chặng' : 'Chế độ: Chỉ tập trung học Từ vựng');
+}
+
+function toggleStudyFocusQuick() {
+  setStudyFocus(state.studyFocus === 'guided' ? 'vocab_only' : 'guided');
+}
+
+function updateGuidedPathUI() {
+  const bar = document.getElementById('guided-path-bar');
+  if (!bar) return;
+
+  const hasData = (REPO_CARDS.length + REPO_EXERCISES.length) > 0;
+  const shouldShow = hasData && state.studyFocus === 'guided' && state.mode !== 'kana';
+  bar.style.display = shouldShow ? 'flex' : 'none';
+
+  if (!shouldShow) return;
+
+  const stepIdx = GUIDED_STEP_MODES.indexOf(state.mode);
+  if (stepIdx !== -1) state.guidedStepIndex = stepIdx;
+
+  document.querySelectorAll('.guided-step-pill').forEach(pill => {
+    const s = Number(pill.getAttribute('data-step'));
+    pill.classList.toggle('active', s === state.guidedStepIndex);
+  });
+}
+
+function jumpGuidedStep(stepIdx) {
+  state.guidedStepIndex = stepIdx;
+  const targetMode = GUIDED_STEP_MODES[stepIdx] || 'flashcard';
+  setMode(targetMode);
+}
+
+function advanceGuidedStep() {
+  const nextStep = (state.guidedStepIndex + 1) % GUIDED_STEP_MODES.length;
+  jumpGuidedStep(nextStep);
+}
+
 function getCardsByLevel(level) {
-  if (level === 'ALL') return REPO_CARDS;
+  if (level === 'ALL') return [...REPO_CARDS];
   return REPO_CARDS.filter(c => c.level === level);
 }
 
 function getExercisesByLevel(level) {
-  if (level === 'ALL') return REPO_EXERCISES;
-  return REPO_EXERCISES.filter(ex => ex.level === level);
+  if (level === 'ALL') return [...REPO_EXERCISES];
+  return REPO_EXERCISES.filter(s => s.level === level);
 }
 
-function getBaseFilteredCards() {
+function getFilteredPoolCards() {
   let list = getCardsByLevel(state.selectedLevel);
-
   if (state.selectedTopic !== 'ALL') {
     list = list.filter(c => c.topic === state.selectedTopic);
   }
-
   if (state.filterUnmastered) {
     list = list.filter(c => state.progress[c.id] !== 'known');
   }
-
-  if (Array.isArray(state.customOrderIds) && state.customOrderIds.length > 0) {
-    const orderIndex = new Map(state.customOrderIds.map((id, i) => [id, i]));
-    list = [...list].sort((a, b) => {
-      const ia = orderIndex.has(a.id) ? orderIndex.get(a.id) : 999999;
-      const ib = orderIndex.has(b.id) ? orderIndex.get(b.id) : 999999;
-      return ia - ib;
-    });
-  }
-
   return list;
 }
 
 function buildSmartFlashcardBatch() {
-  const base = getBaseFilteredCards();
-  if (base.length === 0) {
+  const pool = getFilteredPoolCards();
+  if (pool.length === 0) {
     state.sessionBatchIds = [];
     return;
   }
 
-  const reviewCards = base.filter(c => state.progress[c.id] === 'review');
-  const newCards = base.filter(c => !state.progress[c.id]);
-  const knownCards = base.filter(c => state.progress[c.id] === 'known');
+  const reviewList = pool.filter(c => state.progress[c.id] === 'review');
+  const newList = pool.filter(c => !state.progress[c.id]);
+  const knownList = pool.filter(c => state.progress[c.id] === 'known');
 
-  const prioritized = [...reviewCards, ...newCards, ...knownCards];
+  const prioritized = [...reviewList, ...newList, ...knownList];
   state.sessionBatchIds = prioritized.slice(0, SESSION_BATCH_SIZE).map(c => c.id);
-  state.sessionComplete = false;
-  state.currentCardIndex = 0;
+  state.currentIndex = 0;
   state.isFlipped = false;
 }
 
-function getVisibleFlashcards() {
-  const base = getBaseFilteredCards();
-  if (!state.sessionMode || base.length <= SESSION_BATCH_SIZE) {
-    return base;
-  }
+function getActiveSessionCards() {
+  const pool = getFilteredPoolCards();
+  if (!state.sessionMode) return pool;
 
-  const baseMap = new Map(base.map(c => [c.id, c]));
-  const batchCards = state.sessionBatchIds
-    .map(id => baseMap.get(id))
+  const validBatch = state.sessionBatchIds
+    .map(id => pool.find(c => c.id === id))
     .filter(Boolean);
 
-  if (batchCards.length === 0) {
+  if (validBatch.length === 0 && pool.length > 0) {
     buildSmartFlashcardBatch();
-    return state.sessionBatchIds.map(id => baseMap.get(id)).filter(Boolean);
+    return state.sessionBatchIds.map(id => pool.find(c => c.id === id)).filter(Boolean);
   }
-
-  return batchCards;
+  return validBatch;
 }
 
 function toggleSessionScope() {
   state.sessionMode = !state.sessionMode;
-  state.sessionComplete = false;
-  state.currentCardIndex = 0;
+  state.currentIndex = 0;
   state.isFlipped = false;
-  if (state.sessionMode) {
-    buildSmartFlashcardBatch();
-  }
+  if (state.sessionMode) buildSmartFlashcardBatch();
   renderFlashcard();
+  showToast(state.sessionMode ? 'Chế độ Phiên ngắn 12 thẻ' : 'Chế độ Xem toàn bộ danh sách');
 }
 
 function startNextFlashcardBatch() {
-  const seenSet = new Set(state.sessionBatchIds);
-  const currentIds = REPO_CARDS.map(c => c.id);
-  const remaining = currentIds.filter(id => !seenSet.has(id));
-  const rotated = currentIds.filter(id => seenSet.has(id));
-  state.customOrderIds = [...remaining, ...rotated];
+  const pool = getFilteredPoolCards();
+  if (pool.length === 0) return;
 
-  buildSmartFlashcardBatch();
+  const currentSet = new Set(state.sessionBatchIds);
+  const remaining = pool.filter(c => !currentSet.has(c.id));
+  const nextSource = remaining.length > 0 ? remaining : pool;
+
+  state.sessionBatchIds = nextSource.slice(0, SESSION_BATCH_SIZE).map(c => c.id);
+  state.currentIndex = 0;
+  state.isFlipped = false;
+  document.getElementById('session-complete-box').style.display = 'none';
   renderFlashcard();
 }
 
 function toggleFuriganaVisibility() {
   state.hideFurigana = !state.hideFurigana;
   const btn = document.getElementById('toggle-furigana-btn');
-  btn.classList.toggle('furi-hidden', state.hideFurigana);
-  btn.textContent = state.hideFurigana ? '🙈 Ẩn Furi' : '👁️ Furigana';
+  const quickBtn = document.getElementById('quick-furi-btn');
+  if (btn) {
+    btn.classList.toggle('furi-hidden', state.hideFurigana);
+    btn.textContent = state.hideFurigana ? '🙈 Đang ẩn Furi' : '👁️ Furigana';
+  }
+  if (quickBtn) {
+    quickBtn.classList.toggle('active-chip', state.hideFurigana);
+    quickBtn.textContent = state.hideFurigana ? '🙈 Ẩn Furi' : '👁️ Furi';
+  }
   showToast(state.hideFurigana ? 'Đã ẩn Furigana: Luyện nhìn mặt chữ Kanji!' : 'Đã hiện Furigana trên Kanji');
   if (state.mode === 'flashcard') renderFlashcard();
   else if (state.mode === 'match') renderMatchBoard();
 }
 
 function selectLevel(level) {
+  stopSpeech();
   state.selectedLevel = level;
   state.selectedTopic = 'ALL';
-  state.currentCardIndex = 0;
+  state.currentIndex = 0;
   state.isFlipped = false;
-  state.sessionComplete = false;
 
   document.querySelectorAll('.level-pill').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-level') === level);
   });
 
-  if (state.sessionMode) buildSmartFlashcardBatch();
+  buildSmartFlashcardBatch();
   refreshUI();
 }
 
 function selectTopic(topic) {
+  stopSpeech();
   state.selectedTopic = topic;
-  state.currentCardIndex = 0;
+  state.currentIndex = 0;
   state.isFlipped = false;
-  state.sessionComplete = false;
-
-  if (state.sessionMode) buildSmartFlashcardBatch();
+  buildSmartFlashcardBatch();
+  updateStatsHeader();
+  populateTopicDropdown();
   launchActiveMode();
 }
 
 function toggleUnmasteredFilter() {
+  stopSpeech();
   state.filterUnmastered = !state.filterUnmastered;
-  state.currentCardIndex = 0;
+  state.currentIndex = 0;
   state.isFlipped = false;
-  state.sessionComplete = false;
 
   const btn = document.getElementById('filter-unmastered-btn');
-  btn.classList.toggle('filter-active', state.filterUnmastered);
+  const dot = document.getElementById('filter-dot');
+  if (btn) btn.classList.toggle('filter-active', state.filterUnmastered);
+  if (dot) dot.classList.toggle('active', state.filterUnmastered);
 
-  if (state.sessionMode) buildSmartFlashcardBatch();
+  buildSmartFlashcardBatch();
   launchActiveMode();
 }
 
 function resetFilters() {
-  state.selectedLevel = 'ALL';
-  state.selectedTopic = 'ALL';
   state.filterUnmastered = false;
-  state.currentCardIndex = 0;
+  state.selectedTopic = 'ALL';
+  state.currentIndex = 0;
   state.isFlipped = false;
-  state.sessionComplete = false;
 
-  document.querySelectorAll('.level-pill').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-level') === 'ALL');
-  });
-  document.getElementById('filter-unmastered-btn').classList.remove('filter-active');
-  if (state.sessionMode) buildSmartFlashcardBatch();
+  const btn = document.getElementById('filter-unmastered-btn');
+  const dot = document.getElementById('filter-dot');
+  if (btn) btn.classList.remove('filter-active');
+  if (dot) dot.classList.remove('active');
+  document.getElementById('topic-select').value = 'ALL';
+
+  buildSmartFlashcardBatch();
   refreshUI();
 }
 
 function shuffleCurrentCards() {
-  const ids = REPO_CARDS.map(c => c.id);
-  for (let i = ids.length - 1; i > 0; i--) {
+  stopSpeech();
+  for (let i = REPO_CARDS.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [ids[i], ids[j]] = [ids[j], ids[i]];
+    [REPO_CARDS[i], REPO_CARDS[j]] = [REPO_CARDS[j], REPO_CARDS[i]];
   }
-  state.customOrderIds = ids;
-  state.currentCardIndex = 0;
+  state.currentIndex = 0;
   state.isFlipped = false;
-  state.sessionComplete = false;
-
-  if (state.sessionMode) buildSmartFlashcardBatch();
-  showToast('Đã xáo trộn thứ tự bài học');
+  buildSmartFlashcardBatch();
   launchActiveMode();
+  showToast('↻ Đã xáo trộn thứ tự thẻ');
 }
 
 function launchActiveMode() {
-  if (state.mode === 'flashcard') renderFlashcard();
+  if (state.mode === 'kana') renderKanaModule();
+  else if (state.mode === 'flashcard') renderFlashcard();
   else if (state.mode === 'quiz') startQuiz(false);
   else if (state.mode === 'dictation') startDictationLesson();
   else if (state.mode === 'exercise') startExerciseLesson();
@@ -1273,9 +1575,30 @@ function launchActiveMode() {
  * 9. CẬP NHẬT GIAO DIỆN CHÍNH & CHẾ ĐỘ 1: LẬT THẺ 3D
  * =========================================================================
  */
+function updateHeaderContextBadge() {
+  const modeNames = {
+    flashcard: 'Lật Thẻ 3D',
+    quiz: 'Trắc Nghiệm',
+    dictation: 'Nghe & Gõ',
+    exercise: 'Bài Tập Ngữ Cảnh',
+    match: 'Ghép Đôi',
+    drill: 'Kanji & Chia Thể',
+    kana: 'Bảng Chữ Cái'
+  };
+  const lvlText = state.mode === 'kana'
+    ? (state.kana.script === 'hiragana' ? 'Hiragana' : 'Katakana')
+    : (state.selectedLevel === 'ALL' ? 'N5–N3' : state.selectedLevel);
+
+  const badgeEl = document.getElementById('active-context-badge');
+  if (badgeEl) {
+    badgeEl.textContent = `${lvlText} • ${modeNames[state.mode] || 'Lật Thẻ 3D'}`;
+  }
+}
+
 function refreshUI() {
   const totalCount = REPO_CARDS.length + REPO_EXERCISES.length;
   const hasData = totalCount > 0;
+  const isKanaMode = state.mode === 'kana';
 
   const countAll = totalCount;
   const countN5 = REPO_CARDS.filter(c => c.level === 'N5').length + REPO_EXERCISES.filter(s => s.level === 'N5').length;
@@ -1287,14 +1610,17 @@ function refreshUI() {
   document.getElementById('count-N4').textContent = countN4;
   document.getElementById('count-N3').textContent = countN3;
 
-  document.getElementById('empty-app-state').style.display = hasData ? 'none' : 'flex';
-  document.getElementById('deck-stats-card').style.display = hasData ? 'flex' : 'none';
-  document.getElementById('toolbar-section').style.display = hasData ? 'block' : 'none';
-  document.getElementById('export-menu-btn').style.display = hasData ? 'inline-block' : 'none';
-  document.getElementById('search-repo-btn').style.display = hasData ? 'inline-block' : 'none';
+  document.getElementById('empty-app-state').style.display = (!hasData && !isKanaMode) ? 'flex' : 'none';
+  document.getElementById('deck-stats-card').style.display = (hasData && !isKanaMode) ? 'flex' : 'none';
+  document.getElementById('toolbar-section').style.display = (hasData && !isKanaMode) ? 'flex' : 'none';
+  document.getElementById('export-menu-btn').style.display = hasData ? 'block' : 'none';
+  document.getElementById('search-repo-btn').style.display = hasData ? 'inline-flex' : 'none';
 
-  const views = ['flashcard-view', 'quiz-view', 'dictation-view', 'exercise-view', 'match-view', 'drill-view'];
-  if (!hasData) {
+  updateHeaderContextBadge();
+  updateGuidedPathUI();
+
+  const views = ['flashcard-view', 'quiz-view', 'dictation-view', 'exercise-view', 'match-view', 'drill-view', 'kana-view'];
+  if (!hasData && !isKanaMode) {
     views.forEach(v => { document.getElementById(v).style.display = 'none'; });
     return;
   }
@@ -1331,6 +1657,13 @@ function populateTopicDropdown() {
     state.selectedTopic = 'ALL';
     selectEl.value = 'ALL';
   }
+
+  const stripTopicLabel = document.getElementById('strip-topic-label');
+  if (stripTopicLabel) {
+    stripTopicLabel.textContent = state.selectedTopic === 'ALL'
+      ? `Tất cả chủ đề (${topics.length})`
+      : state.selectedTopic;
+  }
 }
 
 function updateStatsHeader() {
@@ -1341,202 +1674,20 @@ function updateStatsHeader() {
   const pct = totalVocab > 0 ? Math.round((known / totalVocab) * 100) : 0;
 
   const titleLabel = state.selectedLevel === 'ALL'
-    ? 'Kho tổng hợp (N5 → N3)'
-    : `Cấp độ JLPT ${state.selectedLevel}`;
+    ? 'Kho N5–N3'
+    : `JLPT ${state.selectedLevel}`;
 
   document.getElementById('deck-title-display').textContent = titleLabel;
-  document.getElementById('deck-known-count').textContent = `${known} đã thuộc`;
-  document.getElementById('deck-total-count').textContent = `${totalVocab} từ • ${scopeEx.length} bài`;
+  document.getElementById('deck-known-count').textContent = `${known}/${totalVocab} thuộc`;
+  document.getElementById('deck-total-count').textContent = `${totalVocab} từ vựng • ${scopeEx.length} bài tập`;
   document.getElementById('deck-progress-bar').style.width = `${pct}%`;
-}
-
-function renderFlashcard() {
-  const baseCards = getBaseFilteredCards();
-  const visibleCards = getVisibleFlashcards();
-  const emptyFilter = document.getElementById('empty-filter-state');
-  const sessionDoneBox = document.getElementById('session-complete-box');
-  const stage = document.getElementById('card-stage-wrapper');
-  const controls = document.getElementById('flashcard-controls');
-  const posText = document.getElementById('card-position-text');
-  const scopeBtn = document.getElementById('session-scope-btn');
-
-  updateStatsHeader();
-
-  if (baseCards.length <= SESSION_BATCH_SIZE) {
-    scopeBtn.textContent = `Tổng ${baseCards.length} thẻ`;
-  } else {
-    scopeBtn.textContent = state.sessionMode
-      ? `Phiên ${SESSION_BATCH_SIZE}/${baseCards.length} thẻ ▾`
-      : `Tất cả ${baseCards.length} thẻ ▾`;
-  }
-
-  if (visibleCards.length === 0) {
-    emptyFilter.style.display = 'flex';
-    sessionDoneBox.style.display = 'none';
-    stage.style.display = 'none';
-    controls.style.display = 'none';
-    posText.textContent = '0 thẻ hiển thị';
-    return;
-  }
-
-  emptyFilter.style.display = 'none';
-
-  if (state.sessionComplete && state.sessionMode && baseCards.length > SESSION_BATCH_SIZE) {
-    sessionDoneBox.style.display = 'flex';
-    stage.style.display = 'none';
-    controls.style.display = 'none';
-    posText.textContent = `Hoàn thành ${visibleCards.length}/${visibleCards.length} thẻ`;
-    return;
-  }
-
-  sessionDoneBox.style.display = 'none';
-  stage.style.display = 'block';
-  controls.style.display = 'flex';
-
-  if (state.currentCardIndex >= visibleCards.length) state.currentCardIndex = 0;
-  if (state.currentCardIndex < 0) state.currentCardIndex = visibleCards.length - 1;
-
-  const card = visibleCards[state.currentCardIndex];
-  const status = state.progress[card.id];
-  const lvlClass = card.level.toLowerCase();
-
-  document.getElementById('flashcard-inner').classList.toggle('is-flipped', state.isFlipped);
-  posText.textContent = `Thẻ ${state.currentCardIndex + 1} / ${visibleCards.length}`;
-
-  const frontLvl = document.getElementById('front-level-badge');
-  frontLvl.textContent = card.level;
-  frontLvl.className = `level-tag ${lvlClass}`;
-
-  document.getElementById('front-pos-badge').textContent = card.posLabel || 'Từ vựng';
-
-  const furiganaEl = document.getElementById('front-kanji-furigana');
-  const mainJpEl = document.getElementById('front-jp-text');
-  const hasSeparateKanji = Boolean(card.kanji && card.jp && card.kanji !== card.jp);
-  const displayMain = card.kanji ? card.kanji : card.jp;
-
-  if (hasSeparateKanji && !state.hideFurigana) {
-    furiganaEl.textContent = card.jp;
-    furiganaEl.style.display = 'block';
-  } else {
-    furiganaEl.style.display = 'none';
-  }
-
-  mainJpEl.textContent = displayMain;
-  document.getElementById('front-sub-tag').textContent = card.topic;
-
-  document.getElementById('front-bottom-hint').textContent = (hasSeparateKanji && state.hideFurigana)
-    ? '🙈 Đang ẩn Furigana • Chạm để kiểm tra cách đọc'
-    : '↻ Chạm để xem Romaji, Nghĩa & Chiết tự Kanji';
-
-  const badge = document.getElementById('front-status-badge');
-  if (status === 'known') {
-    badge.textContent = '✓ Đã thuộc';
-    badge.className = 'badge known';
-  } else if (status === 'review') {
-    badge.textContent = '↻ Cần ôn';
-    badge.className = 'badge review';
-  } else {
-    badge.textContent = 'Mới';
-    badge.className = 'badge';
-  }
-
-  const backLvl = document.getElementById('back-level-tag');
-  backLvl.textContent = card.level;
-  backLvl.className = `level-tag ${lvlClass}`;
-
-  document.getElementById('back-jp-mini').textContent =
-    hasSeparateKanji ? `${card.kanji} (${card.jp})` : card.jp;
-  document.getElementById('back-romaji-pill').textContent = card.romaji || '---';
-  document.getElementById('back-romaji-main').textContent = card.romaji ? `/${card.romaji}/` : '';
-  document.getElementById('back-meaning-vi').textContent = card.vi;
-
-  const { coreMnemonic, bridgeNote } = splitMnemonicAndBridge(card.mnemonic);
-  document.getElementById('back-mnemonic-text').textContent = coreMnemonic;
-
-  const bridgeBox = document.getElementById('back-bridge-box');
-  if (bridgeNote) {
-    document.getElementById('back-bridge-text').textContent = bridgeNote;
-    bridgeBox.style.display = 'block';
-  } else {
-    bridgeBox.style.display = 'none';
-  }
-}
-
-function flipCard() {
-  state.isFlipped = !state.isFlipped;
-  document.getElementById('flashcard-inner').classList.toggle('is-flipped', state.isFlipped);
-}
-
-function speakCurrentCard() {
-  const visible = getVisibleFlashcards();
-  if (!visible.length) return;
-  const card = visible[state.currentCardIndex];
-  speakJapanese(card.jp || card.kanji);
-}
-
-function nextCard() {
-  const visible = getVisibleFlashcards();
-  if (!visible.length) return;
-  stopSpeech();
-  state.isFlipped = false;
-
-  const baseCards = getBaseFilteredCards();
-  if (state.sessionMode && baseCards.length > SESSION_BATCH_SIZE && state.currentCardIndex === visible.length - 1) {
-    state.sessionComplete = true;
-    playFeedbackTone(true);
-    recordStudyActivity();
-    renderFlashcard();
-    return;
-  }
-
-  state.currentCardIndex = (state.currentCardIndex + 1) % visible.length;
-  renderFlashcard();
-}
-
-function prevCard() {
-  const visible = getVisibleFlashcards();
-  if (!visible.length) return;
-  stopSpeech();
-  state.isFlipped = false;
-  state.currentCardIndex = (state.currentCardIndex - 1 + visible.length) % visible.length;
-  renderFlashcard();
-}
-
-async function rateCurrentCard(rating) {
-  const visible = getVisibleFlashcards();
-  if (!visible.length) return;
-
-  stopSpeech();
-  recordStudyActivity();
-  const card = visible[state.currentCardIndex];
-  state.progress[card.id] = rating;
-  await saveProgressStorage();
-
-  showToast(rating === 'known' ? `Đã thuộc: ${card.kanji || card.jp}` : `Cần ôn lại: ${card.kanji || card.jp}`);
-  state.isFlipped = false;
-
-  const baseCards = getBaseFilteredCards();
-  if (state.sessionMode && baseCards.length > SESSION_BATCH_SIZE && state.currentCardIndex === visible.length - 1) {
-    state.sessionComplete = true;
-    playFeedbackTone(true);
-    renderFlashcard();
-    return;
-  }
-
-  if (state.filterUnmastered && rating === 'known') {
-    const updated = getVisibleFlashcards();
-    if (state.currentCardIndex >= updated.length) state.currentCardIndex = 0;
-  } else {
-    state.currentCardIndex = (state.currentCardIndex + 1) % visible.length;
-  }
-
-  renderFlashcard();
 }
 
 function setMode(newMode) {
   stopSpeech();
+  closeDrawerMenu();
   state.mode = newMode;
-  const modes = ['flashcard', 'quiz', 'dictation', 'exercise', 'match', 'drill'];
+  const modes = ['flashcard', 'quiz', 'dictation', 'exercise', 'match', 'drill', 'kana'];
   modes.forEach(m => {
     const btn = document.getElementById(`mode-${m}-btn`);
     if (btn) btn.classList.toggle('active', m === newMode);
@@ -1544,214 +1695,327 @@ function setMode(newMode) {
   refreshUI();
 }
 
-/**
- * =========================================================================
- * 10. CHẾ ĐỘ 2: TRẮC NGHIỆM TỪ VỰNG ĐA CHIỀU
- * =========================================================================
- */
-function pickQuizFormatForCard(card) {
-  const hasKanji = Boolean(card.kanji && card.kanji !== card.jp);
-  const roll = Math.random();
+function renderFlashcard() {
+  const pool = getFilteredPoolCards();
+  const cards = getActiveSessionCards();
+  const emptyFilterEl = document.getElementById('empty-filter-state');
+  const sessionCompleteEl = document.getElementById('session-complete-box');
+  const stageEl = document.getElementById('card-stage-wrapper');
+  const controlsEl = document.getElementById('flashcard-controls');
+  const posText = document.getElementById('card-position-text');
+  const scopeBtn = document.getElementById('session-scope-btn');
 
-  if (roll < 0.22) return 'AUDIO_TO_VI';
-  if (!hasKanji) return 'JP_TO_VI';
-  if (card.level === 'N5') return roll < 0.72 ? 'JP_TO_VI' : 'KANJI_TO_READING';
-  if (card.level === 'N4') return roll < 0.55 ? 'JP_TO_VI' : 'KANJI_TO_READING';
-  const modes = ['KANJI_TO_READING', 'VI_TO_KANJI', 'JP_TO_VI'];
-  return modes[Math.floor(Math.random() * modes.length)];
+  sessionCompleteEl.style.display = 'none';
+  scopeBtn.textContent = state.sessionMode
+    ? `Phiên ${cards.length}/${pool.length} thẻ ▾`
+    : `Toàn bộ ${pool.length} thẻ ▾`;
+
+  if (cards.length === 0) {
+    emptyFilterEl.style.display = 'flex';
+    stageEl.style.display = 'none';
+    controlsEl.style.display = 'none';
+    posText.textContent = '0 / 0';
+    return;
+  }
+
+  emptyFilterEl.style.display = 'none';
+  stageEl.style.display = 'flex';
+  controlsEl.style.display = 'grid';
+
+  if (state.currentIndex >= cards.length) state.currentIndex = 0;
+  if (state.currentIndex < 0) state.currentIndex = cards.length - 1;
+
+  const card = cards[state.currentIndex];
+  const innerEl = document.getElementById('flashcard-inner');
+  innerEl.classList.toggle('is-flipped', state.isFlipped);
+
+  posText.textContent = `Thẻ ${state.currentIndex + 1} / ${cards.length}`;
+
+  const lvlClass = `level-tag ${card.level.toLowerCase()}`;
+  const frontLvl = document.getElementById('front-level-badge');
+  const backLvl = document.getElementById('back-level-tag');
+  frontLvl.className = lvlClass;
+  frontLvl.textContent = card.level;
+  backLvl.className = lvlClass;
+  backLvl.textContent = card.level;
+
+  const cat = detectWordCategory(card);
+  document.getElementById('front-pos-badge').textContent = cat.label;
+
+  const statusBadge = document.getElementById('front-status-badge');
+  const st = state.progress[card.id];
+  if (st === 'known') {
+    statusBadge.textContent = '✓ Đã thuộc';
+    statusBadge.className = 'badge known';
+  } else if (st === 'review') {
+    statusBadge.textContent = '↻ Cần ôn';
+    statusBadge.className = 'badge review';
+  } else {
+    statusBadge.textContent = 'Mới';
+    statusBadge.className = 'badge';
+  }
+
+  const furiEl = document.getElementById('front-kanji-furigana');
+  const mainJpEl = document.getElementById('front-jp-text');
+  const hintEl = document.getElementById('front-bottom-hint');
+
+  if (card.kanji) {
+    mainJpEl.textContent = card.kanji;
+    if (state.hideFurigana) {
+      furiEl.style.display = 'none';
+      hintEl.textContent = '🙈 Đang ẩn Furigana • Chạm lật thẻ để kiểm tra cách đọc';
+    } else {
+      furiEl.textContent = card.jp;
+      furiEl.style.display = 'block';
+      hintEl.textContent = '↻ Chạm để xem Romaji, Nghĩa & Chiết tự Kanji';
+    }
+  } else {
+    furiEl.style.display = 'none';
+    mainJpEl.textContent = card.jp;
+    hintEl.textContent = '↻ Chạm để xem Romaji, Nghĩa & Chiết tự Kanji';
+  }
+
+  document.getElementById('front-sub-tag').textContent = card.topic;
+  document.getElementById('back-jp-mini').textContent = card.kanji
+    ? `${card.kanji} (${card.jp})`
+    : card.jp;
+  document.getElementById('back-romaji-pill').textContent = card.romaji;
+  document.getElementById('back-romaji-main').textContent = `/${card.romaji}/`;
+  document.getElementById('back-meaning-vi').textContent = card.vi;
+
+  const { mainTip, bridgeTip } = parseMnemonicAndBridge(card.mnemonic);
+  document.getElementById('back-mnemonic-text').textContent = mainTip;
+
+  const bridgeBox = document.getElementById('back-bridge-box');
+  const bridgeText = document.getElementById('back-bridge-text');
+  if (bridgeTip) {
+    bridgeBox.style.display = 'block';
+    bridgeText.textContent = bridgeTip;
+  } else {
+    bridgeBox.style.display = 'none';
+  }
 }
 
+function flipCard() {
+  const cards = getActiveSessionCards();
+  if (cards.length === 0) return;
+  state.isFlipped = !state.isFlipped;
+  document.getElementById('flashcard-inner').classList.toggle('is-flipped', state.isFlipped);
+  if (state.isFlipped) speakCurrentCard();
+}
+
+function nextCard() {
+  stopSpeech();
+  const cards = getActiveSessionCards();
+  if (cards.length === 0) return;
+
+  if (state.sessionMode && state.currentIndex === cards.length - 1) {
+    document.getElementById('card-stage-wrapper').style.display = 'none';
+    document.getElementById('flashcard-controls').style.display = 'none';
+    document.getElementById('session-complete-box').style.display = 'flex';
+    markStudyActivityToday();
+    return;
+  }
+
+  state.isFlipped = false;
+  state.currentIndex = (state.currentIndex + 1) % cards.length;
+  renderFlashcard();
+}
+
+function prevCard() {
+  stopSpeech();
+  const cards = getActiveSessionCards();
+  if (cards.length === 0) return;
+  state.isFlipped = false;
+  state.currentIndex = (state.currentIndex - 1 + cards.length) % cards.length;
+  renderFlashcard();
+}
+
+function rateCurrentCard(rating) {
+  const cards = getActiveSessionCards();
+  if (cards.length === 0) return;
+  const card = cards[state.currentIndex];
+  state.progress[card.id] = rating;
+  saveProgress();
+  markStudyActivityToday();
+  updateStatsHeader();
+  nextCard();
+}
+
+/**
+ * =========================================================================
+ * 10. CHẾ ĐỘ 2: TRẮC NGHIỆM ĐA CHIỀU
+ * =========================================================================
+ */
 function startQuiz(onlyWrong = false) {
-  let pool = [];
-  if (onlyWrong && state.quiz.wrongCards.length > 0) {
-    pool = [...state.quiz.wrongCards];
-  } else {
-    const filtered = getBaseFilteredCards();
-    pool = filtered.length > 0 ? [...filtered] : [...REPO_CARDS];
-  }
+  stopSpeech();
+  let source = onlyWrong && state.quiz.wrongCards.length > 0
+    ? [...state.quiz.wrongCards]
+    : getFilteredPoolCards();
 
-  if (pool.length === 0) return;
+  if (source.length === 0) source = [...REPO_CARDS];
+  if (source.length === 0) return;
 
-  for (let i = pool.length - 1; i > 0; i--) {
+  const reviewOnes = source.filter(c => state.progress[c.id] === 'review');
+  const others = source.filter(c => state.progress[c.id] !== 'review');
+  for (let i = others.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+    [others[i], others[j]] = [others[j], others[i]];
   }
 
-  const limitedPool = pool.slice(0, 10);
+  const combined = [...reviewOnes, ...others].slice(0, 10);
+  const questionModes = ['JP_TO_VI', 'KANJI_TO_HIRA', 'VI_TO_JP', 'AUDIO_TO_VI'];
 
-  state.quiz = {
-    questions: limitedPool.map(card => ({
-      card,
-      qType: pickQuizFormatForCard(card)
-    })),
-    currentIndex: 0,
-    score: 0,
-    answered: false,
-    wrongCards: []
-  };
+  state.quiz.questions = combined.map((card, idx) => {
+    let qMode = questionModes[idx % questionModes.length];
+    if (qMode === 'KANJI_TO_HIRA' && !card.kanji) qMode = 'JP_TO_VI';
+    return { card, qMode };
+  });
 
-  document.getElementById('quiz-summary-box').style.display = 'none';
+  state.quiz.currentIndex = 0;
+  state.quiz.score = 0;
+  state.quiz.wrongCards = [];
+  state.quiz.answered = false;
+
   document.getElementById('quiz-active-box').style.display = 'flex';
+  document.getElementById('quiz-summary-box').style.display = 'none';
   renderQuizQuestion();
 }
 
 function speakQuizCard() {
-  const current = state.quiz.questions[state.quiz.currentIndex];
-  if (current && current.card) {
-    speakJapanese(current.card.jp || current.card.kanji);
-  }
+  const item = state.quiz.questions[state.quiz.currentIndex];
+  if (!item) return;
+  speakJapanese(item.card.jp);
 }
 
 function renderQuizQuestion() {
-  const { questions, currentIndex, score } = state.quiz;
-  if (currentIndex >= questions.length) {
+  const q = state.quiz;
+  if (q.currentIndex >= q.questions.length) {
     showQuizSummary();
     return;
   }
 
-  state.quiz.answered = false;
-  const { card: currentCard, qType } = questions[currentIndex];
+  q.answered = false;
+  const { card: current, qMode } = q.questions[q.currentIndex];
 
-  document.getElementById('quiz-question-num').textContent = `Câu ${currentIndex + 1}/${questions.length}`;
-  document.getElementById('quiz-score-badge').textContent = `Điểm: ${score}`;
+  document.getElementById('quiz-question-num').textContent = `Câu ${q.currentIndex + 1} / ${q.questions.length}`;
+  document.getElementById('quiz-score-badge').textContent = `Điểm: ${q.score}`;
 
-  const lvlTag = document.getElementById('quiz-card-level');
-  lvlTag.textContent = currentCard.level;
-  lvlTag.className = `level-tag ${currentCard.level.toLowerCase()} quiz-lvl`;
+  const qLvl = document.getElementById('quiz-card-level');
+  qLvl.className = `level-tag ${current.level.toLowerCase()} quiz-lvl`;
+  qLvl.textContent = current.level;
 
-  const promptEl = document.getElementById('quiz-jp-prompt');
-  const listenBtnEl = document.getElementById('quiz-big-listen-btn');
+  const typeBadge = document.getElementById('quiz-type-badge');
   const instructionEl = document.getElementById('quiz-instruction-text');
-  const typeBadgeEl = document.getElementById('quiz-type-badge');
-  promptEl.classList.remove('vi-prompt');
-  promptEl.style.display = 'block';
-  listenBtnEl.style.display = 'none';
+  const promptEl = document.getElementById('quiz-jp-prompt');
+  const bigListenBtn = document.getElementById('quiz-big-listen-btn');
+  const hintEl = document.getElementById('quiz-romaji-hint');
 
-  if (qType === 'AUDIO_TO_VI') {
-    typeBadgeEl.textContent = '🎧 Nghe hiểu';
-    instructionEl.textContent = 'Nghe âm thanh và chọn nghĩa tiếng Việt đúng:';
-    promptEl.style.display = 'none';
-    listenBtnEl.style.display = 'inline-block';
-    speakJapanese(currentCard.jp || currentCard.kanji);
-  } else if (qType === 'KANJI_TO_READING') {
-    typeBadgeEl.textContent = 'Đọc Kanji';
-    instructionEl.textContent = 'Chọn cách đọc Hiragana đúng của chữ Kanji:';
-    promptEl.textContent = currentCard.kanji;
-  } else if (qType === 'VI_TO_KANJI') {
-    typeBadgeEl.textContent = 'Chọn Kanji';
-    instructionEl.textContent = 'Chọn chữ Kanji tương ứng với nghĩa:';
-    promptEl.textContent = currentCard.vi;
-    promptEl.classList.add('vi-prompt');
-  } else {
-    typeBadgeEl.textContent = 'Nghĩa Việt';
-    instructionEl.textContent = 'Chọn nghĩa tiếng Việt đúng:';
-    promptEl.textContent = currentCard.kanji || currentCard.jp;
-  }
-
-  const romajiHint = document.getElementById('quiz-romaji-hint');
-  romajiHint.textContent = `${currentCard.kanji ? currentCard.kanji + ' • ' : ''}${currentCard.jp} /${currentCard.romaji || '---'}/`;
-  romajiHint.style.display = 'none';
+  hintEl.style.display = 'none';
   document.getElementById('quiz-feedback-box').style.display = 'none';
 
-  let sameGroupPool = REPO_CARDS.filter(c =>
-    c.id !== currentCard.id &&
-    c.level === currentCard.level &&
-    (currentCard.tag ? c.tag === currentCard.tag : c.posCode === currentCard.posCode)
-  );
-  let sameLevelPool = REPO_CARDS.filter(c => c.id !== currentCard.id && c.level === currentCard.level);
-  let fallbackPool = REPO_CARDS.filter(c => c.id !== currentCard.id && c.level !== currentCard.level);
+  const sameTagPool = REPO_CARDS.filter(c => c.id !== current.id && c.tag && c.tag === current.tag);
+  const fallbackPool = REPO_CARDS.filter(c => c.id !== current.id);
+  const distractorSource = sameTagPool.length >= 3 ? sameTagPool : fallbackPool;
 
-  if (qType === 'VI_TO_KANJI') {
-    sameGroupPool = sameGroupPool.filter(c => Boolean(c.kanji));
-    sameLevelPool = sameLevelPool.filter(c => Boolean(c.kanji));
-    fallbackPool = fallbackPool.filter(c => Boolean(c.kanji));
+  for (let i = distractorSource.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [distractorSource[i], distractorSource[j]] = [distractorSource[j], distractorSource[i]];
   }
 
-  const shuffleArr = arr => {
-    const copy = [...arr];
-    for (let i = copy.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-  };
-
-  const candidates = [
-    ...shuffleArr(sameGroupPool),
-    ...shuffleArr(sameLevelPool),
-    ...shuffleArr(fallbackPool)
-  ];
-  const distractors = [];
-  const usedLabels = new Set([getOptionText(currentCard, qType)]);
-
-  for (const cand of candidates) {
-    const label = getOptionText(cand, qType);
-    if (label && !usedLabels.has(label)) {
-      usedLabels.add(label);
-      distractors.push(cand);
-    }
-    if (distractors.length === 3) break;
+  const distractors = distractorSource.slice(0, 3);
+  const options = [current, ...distractors];
+  for (let i = options.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [options[i], options[j]] = [options[j], options[i]];
   }
 
-  const options = shuffleArr([currentCard, ...distractors]);
+  if (qMode === 'KANJI_TO_HIRA') {
+    typeBadge.textContent = 'Đọc Kanji';
+    instructionEl.textContent = 'Chọn cách đọc Hiragana đúng cho chữ Kanji:';
+    promptEl.style.display = 'block';
+    bigListenBtn.style.display = 'none';
+    promptEl.textContent = current.kanji;
+    hintEl.textContent = `/${current.romaji}/ — ${current.vi}`;
+  } else if (qMode === 'VI_TO_JP') {
+    typeBadge.textContent = 'Việt → Nhật';
+    instructionEl.textContent = 'Chọn từ tiếng Nhật tương ứng với nghĩa:';
+    promptEl.style.display = 'block';
+    bigListenBtn.style.display = 'none';
+    promptEl.textContent = current.vi;
+    hintEl.textContent = `${current.kanji || current.jp} (/${current.romaji}/)`;
+  } else if (qMode === 'AUDIO_TO_VI') {
+    typeBadge.textContent = '🎧 Nghe hiểu';
+    instructionEl.textContent = 'Nghe âm thanh và chọn nghĩa tiếng Việt đúng:';
+    promptEl.style.display = 'none';
+    bigListenBtn.style.display = 'inline-flex';
+    hintEl.textContent = `${current.kanji ? `${current.kanji} (${current.jp})` : current.jp} — /${current.romaji}/`;
+    setTimeout(() => speakJapanese(current.jp), 120);
+  } else {
+    typeBadge.textContent = 'Nhật → Việt';
+    instructionEl.textContent = 'Chọn nghĩa tiếng Việt đúng:';
+    promptEl.style.display = 'block';
+    bigListenBtn.style.display = 'none';
+    promptEl.textContent = state.hideFurigana && current.kanji
+      ? current.kanji
+      : (current.kanji ? `${current.kanji} (${current.jp})` : current.jp);
+    hintEl.textContent = `${current.jp} • /${current.romaji}/`;
+  }
+
   const letters = ['A', 'B', 'C', 'D'];
-  const isJpOption = qType === 'KANJI_TO_READING' || qType === 'VI_TO_KANJI';
+  const listEl = document.getElementById('quiz-options-list');
+  listEl.innerHTML = options.map((opt, idx) => {
+    let label = opt.vi;
+    if (qMode === 'KANJI_TO_HIRA') label = `${opt.jp} (/${opt.romaji}/)`;
+    else if (qMode === 'VI_TO_JP') label = opt.kanji ? `${opt.kanji} (${opt.jp})` : opt.jp;
 
-  document.getElementById('quiz-options-list').innerHTML = options.map((opt, idx) => `
-    <button
-      type="button"
-      class="quiz-opt-btn ${isJpOption ? 'jp-opt' : ''}"
-      data-card-id="${opt.id}"
-      onclick="handleQuizAnswer(this, '${opt.id}')"
-    >
-      <span class="opt-letter">${letters[idx]}</span>
-      <span>${escapeHtml(getOptionText(opt, qType))}</span>
-    </button>
-  `).join('');
+    return `
+      <button
+        type="button"
+        class="quiz-opt-btn"
+        data-id="${opt.id}"
+        onclick="handleQuizAnswer(this, '${opt.id}', '${current.id}')"
+      >
+        <span class="opt-letter">${letters[idx]}</span>
+        <span>${escapeHtml(label)}</span>
+      </button>
+    `;
+  }).join('');
 }
 
-function getOptionText(card, qType) {
-  if (qType === 'KANJI_TO_READING') return card.jp;
-  if (qType === 'VI_TO_KANJI') return card.kanji || card.jp;
-  return card.vi;
-}
+function handleQuizAnswer(btnEl, selectedId, correctId) {
+  const q = state.quiz;
+  if (q.answered) return;
+  q.answered = true;
 
-async function handleQuizAnswer(btnEl, selectedId) {
-  if (state.quiz.answered) return;
-  state.quiz.answered = true;
-  recordStudyActivity();
-
-  const currentCard = state.quiz.questions[state.quiz.currentIndex].card;
-  const isCorrect = selectedId === currentCard.id;
-
-  speakJapanese(currentCard.jp || currentCard.kanji);
-  document.getElementById('quiz-romaji-hint').style.display = 'block';
+  const { card: current } = q.questions[q.currentIndex];
+  const isCorrect = selectedId === correctId;
+  speakJapanese(current.jp);
 
   document.querySelectorAll('#quiz-options-list .quiz-opt-btn').forEach(btn => {
     btn.disabled = true;
-    const id = btn.getAttribute('data-card-id');
-    if (id === currentCard.id) {
-      btn.classList.add('correct');
-    } else if (id === selectedId && !isCorrect) {
-      btn.classList.add('wrong');
-    }
+    const id = btn.getAttribute('data-id');
+    if (id === correctId) btn.classList.add('correct');
+    else if (btn === btnEl && !isCorrect) btn.classList.add('wrong');
   });
 
   if (isCorrect) {
-    state.quiz.score += 1;
-    if (!state.progress[currentCard.id]) state.progress[currentCard.id] = 'known';
+    q.score += 1;
+    state.progress[current.id] = 'known';
+    playFeedbackTone(true);
   } else {
-    state.quiz.wrongCards.push(currentCard);
-    state.progress[currentCard.id] = 'review';
+    q.wrongCards.push(current);
+    state.progress[current.id] = 'review';
+    playFeedbackTone(false);
   }
 
-  await saveProgressStorage();
+  saveProgress();
+  markStudyActivityToday();
   updateStatsHeader();
 
-  document.getElementById('quiz-score-badge').textContent = `Điểm: ${state.quiz.score}`;
-  const { coreMnemonic } = splitMnemonicAndBridge(currentCard.mnemonic);
-  const mnemonicEl = document.getElementById('quiz-feedback-mnemonic');
-  mnemonicEl.innerHTML = `<strong>${isCorrect ? '✓ Chính xác!' : '✕ Chưa đúng!'}</strong> (${escapeHtml(currentCard.vi)}) — ${escapeHtml(coreMnemonic)}`;
+  document.getElementById('quiz-score-badge').textContent = `Điểm: ${q.score}`;
+  document.getElementById('quiz-romaji-hint').style.display = 'block';
+  document.getElementById('quiz-feedback-mnemonic').textContent = `💡 ${current.mnemonic}`;
   document.getElementById('quiz-feedback-box').style.display = 'flex';
 }
 
@@ -1762,20 +2026,15 @@ function nextQuizQuestion() {
 }
 
 function showQuizSummary() {
+  const q = state.quiz;
   document.getElementById('quiz-active-box').style.display = 'none';
   document.getElementById('quiz-summary-box').style.display = 'flex';
-
-  const total = state.quiz.questions.length;
-  const score = state.quiz.score;
-  const pct = total > 0 ? Math.round((score / total) * 100) : 0;
-
-  document.getElementById('quiz-final-score-text').textContent =
-    `Bạn trả lời đúng ${score} / ${total} câu (${pct}%)`;
+  document.getElementById('quiz-final-score-text').textContent = `Đúng ${q.score} / ${q.questions.length} câu`;
 
   const retryBtn = document.getElementById('retry-wrong-btn');
-  if (state.quiz.wrongCards.length > 0) {
+  if (q.wrongCards.length > 0) {
     retryBtn.style.display = 'block';
-    retryBtn.textContent = `Ôn lại ${state.quiz.wrongCards.length} câu làm sai`;
+    retryBtn.textContent = `Ôn lại ${q.wrongCards.length} từ làm sai`;
   } else {
     retryBtn.style.display = 'none';
   }
@@ -1787,7 +2046,8 @@ function showQuizSummary() {
  * =========================================================================
  */
 function startDictationLesson() {
-  let pool = getBaseFilteredCards();
+  stopSpeech();
+  let pool = getFilteredPoolCards();
   if (pool.length === 0) pool = [...REPO_CARDS];
   if (pool.length === 0) return;
 
@@ -1797,17 +2057,20 @@ function startDictationLesson() {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
 
-  state.dictation = {
-    questions: shuffled.slice(0, 10),
-    currentIndex: 0,
-    score: 0,
-    answered: false,
-    hintUsed: false
-  };
+  state.dictation.questions = shuffled.slice(0, 10);
+  state.dictation.currentIndex = 0;
+  state.dictation.score = 0;
+  state.dictation.answered = false;
 
-  document.getElementById('dict-summary-box').style.display = 'none';
   document.getElementById('dict-active-box').style.display = 'flex';
+  document.getElementById('dict-summary-box').style.display = 'none';
   renderDictationQuestion();
+}
+
+function speakDictationCard(slow = false) {
+  const card = state.dictation.questions[state.dictation.currentIndex];
+  if (!card) return;
+  speakJapanese(card.jp, slow);
 }
 
 function renderDictationQuestion() {
@@ -1815,21 +2078,20 @@ function renderDictationQuestion() {
   if (d.currentIndex >= d.questions.length) {
     document.getElementById('dict-active-box').style.display = 'none';
     document.getElementById('dict-summary-box').style.display = 'flex';
-    document.getElementById('dict-final-score-text').textContent =
-      `Bạn nghe & gõ đúng ${d.score} / ${d.questions.length} từ!`;
+    document.getElementById('dict-final-score-text').textContent = `Đúng ${d.score} / ${d.questions.length} từ`;
     return;
   }
 
-  const card = d.questions[d.currentIndex];
   d.answered = false;
   d.hintUsed = false;
+  const card = d.questions[d.currentIndex];
 
   document.getElementById('dict-step-text').textContent = `Câu ${d.currentIndex + 1}/${d.questions.length}`;
   document.getElementById('dict-score-badge').textContent = `Điểm: ${d.score}`;
 
-  const lvlTag = document.getElementById('dict-level-tag');
-  lvlTag.textContent = card.level;
-  lvlTag.className = `level-tag ${card.level.toLowerCase()} quiz-lvl`;
+  const lvlEl = document.getElementById('dict-level-tag');
+  lvlEl.className = `level-tag ${card.level.toLowerCase()} quiz-lvl`;
+  lvlEl.textContent = card.level;
 
   const hintEl = document.getElementById('dict-hint-line');
   hintEl.style.display = 'none';
@@ -1838,99 +2100,91 @@ function renderDictationQuestion() {
   const inputEl = document.getElementById('dict-answer-input');
   inputEl.value = '';
   inputEl.disabled = false;
-
   document.getElementById('dict-submit-btn').disabled = false;
   document.getElementById('dict-feedback-card').style.display = 'none';
 
-  speakJapanese(card.jp || card.kanji);
-  setTimeout(() => inputEl.focus(), 120);
-}
-
-function speakDictationCard(forceSlow) {
-  const card = state.dictation.questions[state.dictation.currentIndex];
-  if (card) speakJapanese(card.jp || card.kanji, forceSlow);
+  setTimeout(() => speakDictationCard(false), 120);
 }
 
 function revealDictationHint() {
   const d = state.dictation;
   const card = d.questions[d.currentIndex];
-  if (!card || d.answered) return;
-
-  d.hintUsed = true;
-  const cleanRomaji = String(card.romaji || '').replace(/\([^)]*\)/g, '').trim();
-  const firstChars = cleanRomaji.slice(0, Math.min(2, cleanRomaji.length));
+  if (!card) return;
   const hintEl = document.getElementById('dict-hint-line');
-  hintEl.textContent = `💡 Gợi ý: Bắt đầu bằng "${firstChars}..." • Nghĩa: ${extractPrimaryMeaning(card.vi)}`;
   hintEl.style.display = 'block';
+  hintEl.textContent = `💡 Gợi ý: Nghĩa là "${card.vi}" • Bắt đầu bằng "${card.romaji.slice(0, 2)}..." (${card.jp.slice(0, 1)}...)`;
 }
 
-function normalizeDictationAnswer(str) {
+function normalizeRomajiCompare(str) {
   return String(str || '')
     .toLowerCase()
-    .replace(/\([^)]*\)/g, '')
-    .replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9faf]/g, '')
-    .trim();
+    .replace(/[\s\-'.~〜。、]/g, '')
+    .replace(/ou/g, 'o')
+    .replace(/uu/g, 'u')
+    .replace(/oo/g, 'o')
+    .replace(/sy/g, 'sh')
+    .replace(/ty/g, 'ch')
+    .replace(/tu/g, 'tsu')
+    .replace(/ti/g, 'chi')
+    .replace(/si/g, 'shi')
+    .replace(/hu/g, 'fu');
 }
 
 function handleDictationEnter() {
-  if (!state.dictation.answered) checkDictationAnswer();
-  else nextDictationQuestion();
+  if (state.dictation.answered) nextDictationQuestion();
+  else checkDictationAnswer();
 }
 
-async function checkDictationAnswer() {
+function checkDictationAnswer() {
   const d = state.dictation;
   if (d.answered) return;
 
   const inputEl = document.getElementById('dict-answer-input');
-  const rawInput = inputEl.value.trim();
-  if (!rawInput) {
-    showToast('Hãy gõ cách đọc bạn nghe được nhé!');
+  const userRaw = inputEl.value.trim();
+  if (!userRaw) {
+    showToast('Hãy gõ câu trả lời trước khi kiểm tra!');
     return;
   }
 
   d.answered = true;
   inputEl.disabled = true;
   document.getElementById('dict-submit-btn').disabled = true;
-  recordStudyActivity();
 
   const card = d.questions[d.currentIndex];
-  const userNorm = normalizeDictationAnswer(rawInput);
+  const userNorm = normalizeRomajiCompare(userRaw);
+  const romajiNorm = normalizeRomajiCompare(card.romaji);
+  const jpNorm = normalizeKeyText(card.jp);
+  const kjNorm = normalizeKeyText(card.kanji);
 
-  const validRomajiVariants = String(card.romaji || '')
-    .split(/[/,]|hoặc/i)
-    .map(v => normalizeDictationAnswer(v))
-    .filter(Boolean);
+  const isCorrect =
+    userNorm === romajiNorm ||
+    normalizeKeyText(userRaw) === jpNorm ||
+    (kjNorm && normalizeKeyText(userRaw) === kjNorm);
 
-  const validTargets = new Set([
-    ...validRomajiVariants,
-    normalizeDictationAnswer(card.jp),
-    normalizeDictationAnswer(card.kanji)
-  ]);
-
-  const isCorrect = validTargets.has(userNorm);
+  const statusEl = document.getElementById('dict-fb-status');
   if (isCorrect) {
     d.score += 1;
+    state.progress[card.id] = 'known';
+    statusEl.textContent = '✓ Chính xác tuyệt đối!';
+    statusEl.style.color = '#15803D';
     playFeedbackTone(true);
-    if (!state.progress[card.id]) state.progress[card.id] = 'known';
   } else {
-    playFeedbackTone(false);
     state.progress[card.id] = 'review';
+    statusEl.textContent = `✕ Chưa khớp (Bạn gõ: "${userRaw}")`;
+    statusEl.style.color = '#B91C1C';
+    playFeedbackTone(false);
   }
 
-  await saveProgressStorage();
+  saveProgress();
+  markStudyActivityToday();
   updateStatsHeader();
 
   document.getElementById('dict-score-badge').textContent = `Điểm: ${d.score}`;
-  const statusEl = document.getElementById('dict-fb-status');
-  statusEl.textContent = isCorrect ? '✓ Nghe chuẩn xác!' : `✕ Bạn gõ "${rawInput}" — Chưa khớp`;
-  statusEl.className = `dict-fb-status ${isCorrect ? 'ok' : 'bad'}`;
-
-  document.getElementById('dict-fb-word').textContent =
-    card.kanji ? `${card.kanji} (${card.jp})` : card.jp;
+  document.getElementById('dict-fb-word').textContent = card.kanji ? `${card.kanji} (${card.jp})` : card.jp;
   document.getElementById('dict-fb-meaning').textContent = `/${card.romaji}/ — ${card.vi}`;
-  const { coreMnemonic } = splitMnemonicAndBridge(card.mnemonic);
-  document.getElementById('dict-fb-mnemonic').textContent = coreMnemonic;
+  document.getElementById('dict-fb-mnemonic').textContent = `💡 ${card.mnemonic}`;
   document.getElementById('dict-feedback-card').style.display = 'flex';
+  speakJapanese(card.jp);
 }
 
 function nextDictationQuestion() {
@@ -1941,39 +2195,54 @@ function nextDictationQuestion() {
 
 /**
  * =========================================================================
- * 12. CHẾ ĐỘ 4: BÀI TẬP NGỮ CẢNH CHUẨN 100% (CLOZE • SENTENCE • TRAP)
- *     KHÔNG BAO GIỜ TỰ BỊA CÂU GIẢ • LIÊN KẾT CHÉO 2 CHIỀU VỚI VOCAB_DATA
+ * 12. CHẾ ĐỘ 4: BÀI TẬP NGỮ CẢNH CHUẨN XÁC (TỪ EXERCISE_DATA.JS)
  * =========================================================================
  */
-const DEFAULT_VI_DISTRACTORS = [
-  'người Nhật', 'người Canada', 'không phải', 'rất', 'hôm qua',
-  'trường học', 'của tôi', 'bạn bè', 'mỗi ngày', 'ở đâu', 'cái này'
-];
+function getPrioritizedExercises() {
+  let pool = getExercisesByLevel(state.selectedLevel);
+  if (state.selectedTopic !== 'ALL') {
+    pool = pool.filter(ex => ex.topic === state.selectedTopic);
+  }
+  if (state.exercise.kindFilter !== 'ALL') {
+    pool = pool.filter(ex => ex.kind === state.exercise.kindFilter);
+  }
 
-function extractPrimaryMeaning(viRaw) {
-  const cleaned = String(viRaw || '')
-    .replace(/\([^)]*\)/g, '')
-    .split(/[,;/]/)[0]
-    .trim();
-  return cleaned || String(viRaw || '').trim();
-}
+  const activeSessionVocab = getActiveSessionCards();
+  const focusKeys = new Set();
+  REPO_CARDS.forEach(c => {
+    if (state.progress[c.id] === 'review') {
+      focusKeys.add(normalizeKeyText(c.jp));
+      if (c.kanji) focusKeys.add(normalizeKeyText(c.kanji));
+    }
+  });
+  activeSessionVocab.forEach(c => {
+    focusKeys.add(normalizeKeyText(c.jp));
+    if (c.kanji) focusKeys.add(normalizeKeyText(c.kanji));
+  });
 
-function lowerFirstChar(str) {
-  if (!str) return '';
-  return str.charAt(0).toLowerCase() + str.slice(1);
+  const priorityList = [];
+  const normalList = [];
+
+  pool.forEach(ex => {
+    const exRefs = (ex.refs || []).map(r => normalizeKeyText(r));
+    const isPriority = exRefs.some(r => focusKeys.has(r));
+    if (isPriority) priorityList.push({ ...ex, _isPriority: true });
+    else normalList.push({ ...ex, _isPriority: false });
+  });
+
+  return [...priorityList, ...normalList];
 }
 
 function cycleExerciseKindFilter() {
   const order = ['ALL', 'cloze', 'sentence', 'trap'];
-  const nextIdx = (order.indexOf(state.exercise.kindFilter) + 1) % order.length;
-  state.exercise.kindFilter = order[nextIdx];
-
   const labels = {
     ALL: 'Tất cả dạng ⇄',
-    cloze: 'Chỉ Điền khuyết ⇄',
-    sentence: 'Chỉ Dịch câu ⇄',
-    trap: 'Chỉ Bẫy dễ nhầm ⇄'
+    cloze: 'Điền khuyết ⇄',
+    sentence: 'Dịch câu ⇄',
+    trap: 'Bẫy từ dễ nhầm ⇄'
   };
+  const nextIdx = (order.indexOf(state.exercise.kindFilter) + 1) % order.length;
+  state.exercise.kindFilter = order[nextIdx];
   document.getElementById('ex-kind-filter-btn').textContent = labels[state.exercise.kindFilter];
   startExerciseLesson();
 }
@@ -1983,183 +2252,78 @@ function resetExerciseScope() {
   state.selectedTopic = 'ALL';
   state.exercise.kindFilter = 'ALL';
   document.getElementById('ex-kind-filter-btn').textContent = 'Tất cả dạng ⇄';
-  document.querySelectorAll('.level-pill').forEach(btn => {
-    btn.classList.toggle('active', btn.getAttribute('data-level') === 'ALL');
-  });
   refreshUI();
 }
 
-function buildSmartExerciseQueue() {
-  let pool = getExercisesByLevel(state.selectedLevel);
-
-  if (state.selectedTopic !== 'ALL') {
-    const topicMatched = pool.filter(ex => ex.topic === state.selectedTopic);
-    // Nếu chủ đề từ vựng trùng khớp tên chủ đề bài tập thì lọc theo chủ đề; nếu không, tìm bài tập liên kết qua refs của từ vựng trong chủ đề đó!
-    if (topicMatched.length > 0) {
-      pool = topicMatched;
-    } else {
-      const vocabInTopic = getBaseFilteredCards();
-      const topicWords = new Set();
-      vocabInTopic.forEach(c => {
-        if (c.jp) topicWords.add(c.jp);
-        if (c.kanji) topicWords.add(c.kanji);
-      });
-      const refMatched = pool.filter(ex => {
-        const linked = resolveLinkedVocabForExercise(ex);
-        return linked.some(c => topicWords.has(c.jp) || (c.kanji && topicWords.has(c.kanji)));
-      });
-      pool = refMatched;
-    }
-  }
-
-  if (state.exercise.kindFilter !== 'ALL') {
-    pool = pool.filter(ex => ex.kind === state.exercise.kindFilter);
-  }
-
-  if (pool.length === 0) return [];
-
-  // Ưu tiên 2 chiều: Bài tập chứa từ đang 'review' hoặc nằm trong phiên học 12 thẻ hiện tại sẽ được đưa lên đầu!
-  const reviewIds = new Set(
-    REPO_CARDS.filter(c => state.progress[c.id] === 'review').map(c => c.id)
-  );
-  const batchIds = new Set(state.sessionBatchIds || []);
-
-  const scored = pool.map(ex => {
-    const linked = resolveLinkedVocabForExercise(ex);
-    let priorityScore = 0;
-    linked.forEach(card => {
-      if (reviewIds.has(card.id)) priorityScore += 10;
-      else if (batchIds.has(card.id)) priorityScore += 5;
-    });
-    return {
-      ex,
-      priorityScore,
-      isPriority: priorityScore >= 5,
-      rand: Math.random()
-    };
-  });
-
-  scored.sort((a, b) => {
-    if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
-    return a.rand - b.rand;
-  });
-
-  return scored.slice(0, 10).map(s => ({ ...s.ex, _isPriority: s.isPriority }));
-}
-
 function startExerciseLesson() {
-  const queue = buildSmartExerciseQueue();
+  stopSpeech();
+  const pool = getPrioritizedExercises();
 
-  state.exercise = {
-    queue,
-    currentIndex: 0,
-    completedCount: 0,
-    energy: state.exercise.energy || 0,
-    kindFilter: state.exercise.kindFilter,
-    answered: false,
-    isCorrect: false,
-    bankChips: [],
-    selectedBankIds: [],
-    activeTokenIdx: -1
-  };
+  const emptyBox = document.getElementById('ex-empty-box');
+  const activeBox = document.getElementById('ex-active-box');
+  const summaryBox = document.getElementById('ex-summary-box');
 
-  if (queue.length === 0) {
-    document.getElementById('ex-empty-box').style.display = 'flex';
-    document.getElementById('ex-active-box').style.display = 'none';
-    document.getElementById('ex-summary-box').style.display = 'none';
+  if (pool.length === 0) {
+    emptyBox.style.display = 'flex';
+    activeBox.style.display = 'none';
+    summaryBox.style.display = 'none';
     return;
   }
 
-  document.getElementById('ex-empty-box').style.display = 'none';
-  document.getElementById('ex-summary-box').style.display = 'none';
-  document.getElementById('ex-active-box').style.display = 'flex';
-  loadExerciseQuestion();
+  emptyBox.style.display = 'none';
+  activeBox.style.display = 'flex';
+  summaryBox.style.display = 'none';
+
+  state.exercise.items = pool.slice(0, 10);
+  state.exercise.currentIndex = 0;
+  renderExerciseQuestion();
 }
 
-function loadExerciseQuestion() {
+function speakCurrentExercise() {
+  const ex = state.exercise.items[state.exercise.currentIndex];
+  if (!ex) return;
+  if (ex.kind === 'sentence') {
+    speakJapanese(ex.jp);
+  } else {
+    const cleanPrompt = String(ex.prompt_jp || '').replace(/（[\s　]*）|\([\s　]*\)/g, '、');
+    speakJapanese(cleanPrompt);
+  }
+}
+
+function renderExerciseQuestion() {
   const exState = state.exercise;
-  if (exState.currentIndex >= exState.queue.length) {
+  if (exState.currentIndex >= exState.items.length) {
     document.getElementById('ex-active-box').style.display = 'none';
     document.getElementById('ex-summary-box').style.display = 'flex';
-    document.getElementById('ex-final-score-text').textContent =
-      `Bạn đạt tổng cộng ⚡ ${exState.energy} điểm luyện tập!`;
+    document.getElementById('ex-final-score-text').textContent = `Tổng điểm năng lượng: ⚡ ${exState.energy}`;
     return;
   }
 
-  const currentEx = exState.queue[exState.currentIndex];
-  exState.answered = false;
-  exState.isCorrect = false;
-  exState.activeTokenIdx = -1;
+  const current = exState.items[exState.currentIndex];
+  exState.checked = false;
+  exState.activeTokenIdx = null;
 
-  if (currentEx.kind === 'sentence') {
-    const correctBlocks = [...currentEx.vi_blocks];
-    const usedLower = new Set(correctBlocks.map(w => w.toLowerCase()));
-    const distractorPool = [
-      ...(currentEx.distractors || []),
-      ...REPO_CARDS.slice(0, 40).map(c => lowerFirstChar(extractPrimaryMeaning(c.vi))),
-      ...DEFAULT_VI_DISTRACTORS
-    ];
-
-    const chosenDistractors = [];
-    for (const d of distractorPool) {
-      const clean = String(d || '').trim();
-      if (clean && !usedLower.has(clean.toLowerCase())) {
-        usedLower.add(clean.toLowerCase());
-        chosenDistractors.push(clean);
-      }
-      if (chosenDistractors.length >= 3) break;
-    }
-
-    const allChips = [...correctBlocks, ...chosenDistractors];
-    for (let i = allChips.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allChips[i], allChips[j]] = [allChips[j], allChips[i]];
-    }
-
-    exState.bankChips = allChips.map((text, idx) => ({
-      bankIdx: idx,
-      text,
-      used: false
-    }));
-    exState.selectedBankIds = [];
-  }
-
-  renderExerciseView();
-  if (currentEx.kind === 'sentence') {
-    speakJapanese(currentEx.jp);
-  }
-}
-
-function renderExerciseView() {
-  const exState = state.exercise;
-  const total = exState.queue.length;
-  const currentEx = exState.queue[exState.currentIndex];
-  if (!currentEx) return;
-
-  const pct = total > 0 ? Math.round((exState.completedCount / total) * 100) : 0;
-  document.getElementById('ex-step-label').textContent = `${exState.currentIndex + 1}/${total}`;
+  const pct = Math.round((exState.currentIndex / exState.items.length) * 100);
+  document.getElementById('ex-step-label').textContent = `${exState.currentIndex + 1}/${exState.items.length}`;
   document.getElementById('ex-progress-fill').style.width = `${pct}%`;
   document.getElementById('ex-energy-count').textContent = exState.energy;
 
-  const kindNames = {
+  const kindMap = {
     cloze: '📝 Điền khuyết ngữ cảnh',
     sentence: '🧩 Dịch câu ghép từ',
     trap: '⚠️ Bẫy từ dễ nhầm'
   };
-  document.getElementById('ex-kind-pill').textContent = kindNames[currentEx.kind] || 'Bài tập';
+  document.getElementById('ex-kind-pill').textContent = kindMap[current.kind] || 'Bài tập';
+  document.getElementById('ex-priority-badge').style.display = current._isPriority ? 'inline-block' : 'none';
 
-  const prioEl = document.getElementById('ex-priority-badge');
-  prioEl.style.display = currentEx._isPriority ? 'inline-block' : 'none';
-
-  // Hiển thị thanh từ vựng liên kết (chạm để mở thẻ Kanji trong vocab_data.js)
-  const linkedVocab = resolveLinkedVocabForExercise(currentEx);
+  const linkedVocab = resolveLinkedVocabForExercise(current);
   const refsRow = document.getElementById('ex-refs-row');
   if (linkedVocab.length > 0) {
     refsRow.style.display = 'flex';
-    refsRow.innerHTML = `<span class="ex-ref-label">📖 Tra Kanji:</span>` +
-      linkedVocab.map(card => `
-        <button type="button" class="ex-ref-chip" onclick="openVocabPeekModal('${card.id}')">
-          ${escapeHtml(card.kanji || card.jp)}
+    refsRow.innerHTML = `<span class="ex-refs-label">📖 Tra Kanji:</span>` +
+      linkedVocab.map(v => `
+        <button type="button" class="ref-vocab-chip" onclick="openVocabPeekModal('${v.id}')">
+          ${escapeHtml(v.kanji || v.jp)}
         </button>
       `).join('');
   } else {
@@ -2169,89 +2333,113 @@ function renderExerciseView() {
   const choicePanel = document.getElementById('ex-choice-panel');
   const sentencePanel = document.getElementById('ex-sentence-panel');
 
-  if (currentEx.kind === 'sentence') {
+  if (current.kind === 'sentence') {
     choicePanel.style.display = 'none';
     sentencePanel.style.display = 'flex';
-    renderSentenceExercisePanel(currentEx);
+    setupSentenceExercisePanel(current);
   } else {
     sentencePanel.style.display = 'none';
     choicePanel.style.display = 'flex';
-    renderChoiceExercisePanel(currentEx);
+    renderChoiceExercisePanel(current);
   }
 }
 
 function renderChoiceExercisePanel(ex) {
   document.getElementById('ex-source-badge').textContent = `${ex.level} • ${ex.topic}`;
-  document.getElementById('ex-choice-prompt-jp').textContent = ex.prompt_jp;
+  document.getElementById('ex-choice-prompt-jp').innerHTML = renderInteractiveJapanesePrompt(ex.prompt_jp);
   document.getElementById('ex-choice-prompt-vi').textContent = ex.prompt_vi ? `Nghĩa: ${ex.prompt_vi}` : '';
   document.getElementById('ex-choice-feedback').style.display = 'none';
 
-  const opts = [...ex.options];
+  const opts = [...(ex.options || [])];
   for (let i = opts.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [opts[i], opts[j]] = [opts[j], opts[i]];
   }
 
   const letters = ['A', 'B', 'C', 'D'];
-  document.getElementById('ex-choice-options').innerHTML = opts.map((optText, idx) => `
+  document.getElementById('ex-choice-options').innerHTML = opts.map((opt, idx) => `
     <button
       type="button"
-      class="quiz-opt-btn jp-opt"
-      data-opt-val="${escapeHtml(optText)}"
-      onclick="handleChoiceExerciseAnswer(this)"
+      class="quiz-opt-btn"
+      data-opt="${escapeHtml(opt)}"
+      onclick="handleChoiceExerciseAnswer(this, '${escapeHtml(opt)}')"
     >
       <span class="opt-letter">${letters[idx]}</span>
-      <span>${escapeHtml(optText)}</span>
+      <span>${escapeHtml(opt)}</span>
     </button>
   `).join('');
 }
 
-async function handleChoiceExerciseAnswer(btnEl) {
+function handleChoiceExerciseAnswer(btnEl, selectedOpt) {
   const exState = state.exercise;
-  if (exState.answered) return;
-  exState.answered = true;
-  recordStudyActivity();
+  if (exState.checked) return;
+  exState.checked = true;
 
-  const currentEx = exState.queue[exState.currentIndex];
-  const selectedVal = btnEl.getAttribute('data-opt-val');
-  const isCorrect = selectedVal === currentEx.answer;
-
-  if (currentEx.full_jp) speakJapanese(currentEx.full_jp);
+  const current = exState.items[exState.currentIndex];
+  const isCorrect = normalizeKeyText(selectedOpt) === normalizeKeyText(current.answer);
 
   document.querySelectorAll('#ex-choice-options .quiz-opt-btn').forEach(btn => {
     btn.disabled = true;
-    const val = btn.getAttribute('data-opt-val');
-    if (val === currentEx.answer) {
+    const val = btn.getAttribute('data-opt');
+    if (normalizeKeyText(val) === normalizeKeyText(current.answer)) {
       btn.classList.add('correct');
     } else if (btn === btnEl && !isCorrect) {
       btn.classList.add('wrong');
     }
   });
 
-  const syncNoteEl = document.getElementById('ex-choice-sync-note');
-  syncNoteEl.style.display = 'none';
+  const fbBox = document.getElementById('ex-choice-feedback');
+  const fbIcon = document.getElementById('ex-choice-fb-icon');
+  const fbTitle = document.getElementById('ex-choice-fb-title');
+  const fbExp = document.getElementById('ex-choice-fb-exp');
+  const syncNote = document.getElementById('ex-choice-sync-note');
 
   if (isCorrect) {
-    exState.completedCount += 1;
     exState.energy += 5;
+    document.getElementById('ex-energy-count').textContent = exState.energy;
+    fbBox.className = 'duo-feedback-sheet is-correct';
+    fbIcon.textContent = '✓';
+    fbTitle.textContent = 'Chính xác!';
+    fbExp.textContent = current.explanation;
+    syncNote.style.display = 'none';
     playFeedbackTone(true);
   } else {
-    playFeedbackTone(false);
-    exState.queue.push(currentEx);
-    const marked = await syncWrongExerciseToVocabReview(currentEx);
-    if (marked.length > 0) {
-      syncNoteEl.textContent = `📌 Đã tự đánh dấu "Cần ôn" cho từ: ${marked.join(', ')}`;
-      syncNoteEl.style.display = 'block';
+    fbBox.className = 'duo-feedback-sheet is-wrong';
+    fbIcon.textContent = '✕';
+    fbTitle.textContent = `Đáp án đúng: ${current.answer}`;
+    fbExp.textContent = current.explanation;
+    const syncMsg = flagLinkedVocabForReview(current);
+    if (syncMsg) {
+      syncNote.style.display = 'block';
+      syncNote.textContent = syncMsg;
+    } else {
+      syncNote.style.display = 'none';
     }
+    playFeedbackTone(false);
   }
 
-  document.getElementById('ex-energy-count').textContent = exState.energy;
-  const fbBox = document.getElementById('ex-choice-feedback');
-  fbBox.className = `duo-feedback-sheet ${isCorrect ? 'correct' : 'wrong'}`;
+  markStudyActivityToday();
   fbBox.style.display = 'flex';
-  document.getElementById('ex-choice-fb-icon').textContent = isCorrect ? '✓' : '✕';
-  document.getElementById('ex-choice-fb-title').textContent = isCorrect ? 'Chính xác!' : `Đáp án đúng: ${currentEx.answer}`;
-  document.getElementById('ex-choice-fb-exp').textContent = currentEx.explanation;
+}
+
+function setupSentenceExercisePanel(sentence) {
+  const exState = state.exercise;
+  exState.selectedIndices = [];
+
+  const allChips = [...sentence.vi_blocks, ...(sentence.distractors || []).slice(0, 3)];
+  for (let i = allChips.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allChips[i], allChips[j]] = [allChips[j], allChips[i]];
+  }
+  exState.bankTokens = allChips;
+
+  document.getElementById('duo-token-tooltip').style.display = 'none';
+  document.getElementById('duo-feedback-sheet').style.display = 'none';
+  document.getElementById('duo-action-row').style.display = 'flex';
+  document.getElementById('duo-check-btn').disabled = true;
+
+  renderSentenceExercisePanel(sentence);
+  setTimeout(() => speakJapanese(sentence.jp), 120);
 }
 
 function renderSentenceExercisePanel(sentence) {
@@ -2261,73 +2449,56 @@ function renderSentenceExercisePanel(sentence) {
   tokensWrap.innerHTML = sentence.tokens.map((tok, idx) => `
     <button
       type="button"
-      class="duo-token-btn ${exState.activeTokenIdx === idx ? 'active-token' : ''}"
-      onclick="handleTokenTap(event, ${idx})"
+      class="duo-jp-token ${exState.activeTokenIdx === idx ? 'active-token' : ''}"
+      onclick="onTapJapaneseToken(${idx})"
     >${escapeHtml(tok.jp)}</button>
-  `).join('') + `<span class="duo-punct">。</span>`;
+  `).join('');
 
   const answerSlots = document.getElementById('duo-answer-slots');
-  answerSlots.innerHTML = exState.selectedBankIds.map((bankIdx, slotPos) => {
-    const chip = exState.bankChips[bankIdx];
+  answerSlots.innerHTML = exState.selectedIndices.map((bankIdx, posIdx) => {
+    const word = exState.bankTokens[bankIdx];
     return `
       <button
         type="button"
-        class="duo-chip placed"
-        ${exState.answered ? 'disabled' : ''}
-        onclick="event.stopPropagation(); removeAnswerChip(${slotPos})"
-      >${escapeHtml(chip.text)}</button>
+        class="duo-chip in-answer"
+        onclick="removeWordFromAnswer(${posIdx})"
+      >${escapeHtml(word)}</button>
     `;
   }).join('');
 
-  const bankWrap = document.getElementById('duo-word-bank');
-  bankWrap.innerHTML = exState.bankChips.map(chip => `
-    <button
-      type="button"
-      class="duo-chip ${chip.used ? 'used-placeholder' : ''}"
-      ${chip.used || exState.answered ? 'disabled' : ''}
-      onclick="selectBankChip(${chip.bankIdx})"
-    >${escapeHtml(chip.text)}</button>
-  `).join('');
+  const bankEl = document.getElementById('duo-word-bank');
+  bankEl.innerHTML = exState.bankTokens.map((word, bankIdx) => {
+    const isUsed = exState.selectedIndices.includes(bankIdx);
+    return `
+      <button
+        type="button"
+        class="duo-chip ${isUsed ? 'ghost-slot' : ''}"
+        onclick="selectWordFromBank(${bankIdx})"
+      >${escapeHtml(word)}</button>
+    `;
+  }).join('');
 
-  const actionRow = document.getElementById('duo-action-row');
-  const checkBtn = document.getElementById('duo-check-btn');
-  const fbSheet = document.getElementById('duo-feedback-sheet');
-
-  if (!exState.answered) {
-    actionRow.style.display = 'flex';
-    checkBtn.disabled = exState.selectedBankIds.length === 0;
-    fbSheet.style.display = 'none';
-  } else {
-    actionRow.style.display = 'none';
-    fbSheet.style.display = 'flex';
-    fbSheet.className = `duo-feedback-sheet ${exState.isCorrect ? 'correct' : 'wrong'}`;
-    document.getElementById('duo-fb-icon').textContent = exState.isCorrect ? '✓' : '✕';
-    document.getElementById('duo-fb-title').textContent = exState.isCorrect ? 'Tuyệt vời! Chính xác!' : 'Chưa chính xác';
-    document.getElementById('duo-fb-subtitle').innerHTML = exState.isCorrect
-      ? `<strong>${escapeHtml(sentence.vi)}</strong> (${escapeHtml(sentence.romaji)})`
-      : `Đáp án đúng: <strong>${escapeHtml(sentence.vi)}</strong>`;
-  }
+  document.getElementById('duo-check-btn').disabled = exState.selectedIndices.length === 0;
 }
 
-let activePeekCardId = '';
-
-function handleTokenTap(event, tokenIdx) {
-  event.stopPropagation();
-  const sentence = state.exercise.queue[state.exercise.currentIndex];
+function onTapJapaneseToken(tokenIdx) {
+  const exState = state.exercise;
+  const sentence = exState.items[exState.currentIndex];
   if (!sentence || !sentence.tokens[tokenIdx]) return;
 
+  exState.activeTokenIdx = tokenIdx;
   const tok = sentence.tokens[tokenIdx];
-  state.exercise.activeTokenIdx = tokenIdx;
 
   const tipBox = document.getElementById('duo-token-tooltip');
   document.getElementById('duo-tip-jp').textContent = tok.jp;
-  document.getElementById('duo-tip-romaji').textContent = tok.romaji ? `/${tok.romaji}/` : '';
-  document.getElementById('duo-tip-vi').textContent = tok.vi || '---';
+  document.getElementById('duo-tip-romaji').textContent = `/${tok.romaji}/`;
+  document.getElementById('duo-tip-vi').textContent = tok.vi;
 
   const matchedCards = findVocabCardsByKeys([tok.ref, tok.jp]);
+  const singleMatch = matchedCards.length > 0 ? matchedCards[0] : findVocabCardForTap(tok.jp);
   const vocabBtn = document.getElementById('duo-tip-vocab-btn');
-  if (matchedCards.length > 0) {
-    activePeekCardId = matchedCards[0].id;
+  if (singleMatch) {
+    activePeekCardId = singleMatch.id;
     vocabBtn.style.display = 'inline-block';
   } else {
     activePeekCardId = '';
@@ -2339,164 +2510,144 @@ function handleTokenTap(event, tokenIdx) {
   renderSentenceExercisePanel(sentence);
 }
 
-function openPeekFromActiveToken() {
-  if (activePeekCardId) openVocabPeekModal(activePeekCardId);
-}
-
 function hideTokenTooltip() {
-  state.exercise.activeTokenIdx = -1;
-  const tipBox = document.getElementById('duo-token-tooltip');
-  if (tipBox) tipBox.style.display = 'none';
-  document.querySelectorAll('.duo-token-btn').forEach(btn => btn.classList.remove('active-token'));
+  state.exercise.activeTokenIdx = null;
+  const tip = document.getElementById('duo-token-tooltip');
+  if (tip) tip.style.display = 'none';
 }
 
-function speakCurrentExercise() {
-  const currentEx = state.exercise.queue[state.exercise.currentIndex];
-  if (!currentEx) return;
-  if (currentEx.kind === 'sentence') speakJapanese(currentEx.jp);
-  else speakJapanese(currentEx.full_jp || currentEx.prompt_jp);
+function selectWordFromBank(bankIdx) {
+  const exState = state.exercise;
+  if (exState.checked) return;
+  if (exState.selectedIndices.includes(bankIdx)) return;
+
+  exState.selectedIndices.push(bankIdx);
+  renderSentenceExercisePanel(exState.items[exState.currentIndex]);
 }
 
-function selectBankChip(bankIdx) {
-  if (state.exercise.answered) return;
-  const chip = state.exercise.bankChips[bankIdx];
-  if (!chip || chip.used) return;
+function removeWordFromAnswer(posIdx) {
+  const exState = state.exercise;
+  if (exState.checked) return;
 
-  hideTokenTooltip();
-  chip.used = true;
-  state.exercise.selectedBankIds.push(bankIdx);
-  renderSentenceExercisePanel(state.exercise.queue[state.exercise.currentIndex]);
-}
-
-function removeAnswerChip(slotPos) {
-  if (state.exercise.answered) return;
-  const bankIdx = state.exercise.selectedBankIds[slotPos];
-  if (bankIdx === undefined) return;
-
-  hideTokenTooltip();
-  state.exercise.selectedBankIds.splice(slotPos, 1);
-  if (state.exercise.bankChips[bankIdx]) {
-    state.exercise.bankChips[bankIdx].used = false;
-  }
-  renderSentenceExercisePanel(state.exercise.queue[state.exercise.currentIndex]);
+  exState.selectedIndices.splice(posIdx, 1);
+  renderSentenceExercisePanel(exState.items[exState.currentIndex]);
 }
 
 function useTranslateHint() {
   const exState = state.exercise;
-  if (exState.answered) return;
-  const sentence = exState.queue[exState.currentIndex];
-  if (!sentence || sentence.kind !== 'sentence') return;
+  if (exState.checked) return;
+  const current = exState.items[exState.currentIndex];
+  if (!current) return;
 
-  const expected = sentence.vi_blocks;
-  let matchPrefixLen = 0;
-  while (
-    matchPrefixLen < exState.selectedBankIds.length &&
-    matchPrefixLen < expected.length &&
-    exState.bankChips[exState.selectedBankIds[matchPrefixLen]].text.toLowerCase() === expected[matchPrefixLen].toLowerCase()
-  ) {
-    matchPrefixLen++;
-  }
-
-  while (exState.selectedBankIds.length > matchPrefixLen) {
-    const removedIdx = exState.selectedBankIds.pop();
-    if (exState.bankChips[removedIdx]) exState.bankChips[removedIdx].used = false;
-  }
-
-  if (matchPrefixLen < expected.length) {
-    const nextWord = expected[matchPrefixLen].toLowerCase();
-    const candidate = exState.bankChips.find(c => !c.used && c.text.toLowerCase() === nextWord);
-    if (candidate) {
-      candidate.used = true;
-      exState.selectedBankIds.push(candidate.bankIdx);
-      showToast(`Gợi ý từ tiếp theo: "${candidate.text}"`);
-      renderSentenceExercisePanel(sentence);
+  const targetBlocks = current.vi_blocks;
+  let matchLen = 0;
+  while (matchLen < exState.selectedIndices.length && matchLen < targetBlocks.length) {
+    const chosenWord = exState.bankTokens[exState.selectedIndices[matchLen]];
+    if (normalizeVietnameseCompare(chosenWord) === normalizeVietnameseCompare(targetBlocks[matchLen])) {
+      matchLen++;
+    } else {
+      break;
     }
+  }
+
+  exState.selectedIndices = exState.selectedIndices.slice(0, matchLen);
+  if (matchLen >= targetBlocks.length) return;
+
+  const nextNeededWord = targetBlocks[matchLen];
+  const targetBankIdx = exState.bankTokens.findIndex((w, idx) =>
+    !exState.selectedIndices.includes(idx) &&
+    normalizeVietnameseCompare(w) === normalizeVietnameseCompare(nextNeededWord)
+  );
+
+  if (targetBankIdx !== -1) {
+    exState.selectedIndices.push(targetBankIdx);
+    renderSentenceExercisePanel(current);
+    showToast(`💡 Đã gợi ý từ "${nextNeededWord}"`);
   }
 }
 
-function normalizeVietnameseSentence(str) {
+function normalizeVietnameseCompare(str) {
   return String(str || '')
     .toLowerCase()
-    .replace(/[.,!?？。]/g, '')
+    .replace(/[.?!,。？！]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-async function checkTranslateAnswer() {
+function checkTranslateAnswer() {
   const exState = state.exercise;
-  if (exState.answered || exState.selectedBankIds.length === 0) return;
+  if (exState.checked || exState.selectedIndices.length === 0) return;
 
-  hideTokenTooltip();
-  recordStudyActivity();
-  const sentence = exState.queue[exState.currentIndex];
-  const userSentence = exState.selectedBankIds
-    .map(id => exState.bankChips[id].text)
-    .join(' ');
+  exState.checked = true;
+  const current = exState.items[exState.currentIndex];
 
-  const normUser = normalizeVietnameseSentence(userSentence);
-  const normExpectedBlocks = normalizeVietnameseSentence(sentence.vi_blocks.join(' '));
-  const normExpectedVi = normalizeVietnameseSentence(sentence.vi);
+  const userSentence = exState.selectedIndices.map(i => exState.bankTokens[i]).join(' ');
+  const targetSentence = current.vi_blocks.join(' ');
+  const isCorrect =
+    normalizeVietnameseCompare(userSentence) === normalizeVietnameseCompare(targetSentence) ||
+    normalizeVietnameseCompare(userSentence) === normalizeVietnameseCompare(current.vi);
 
-  const isCorrect = normUser === normExpectedBlocks || normUser === normExpectedVi;
+  const sheet = document.getElementById('duo-feedback-sheet');
+  const iconEl = document.getElementById('duo-fb-icon');
+  const titleEl = document.getElementById('duo-fb-title');
+  const subEl = document.getElementById('duo-fb-subtitle');
+  const syncNote = document.getElementById('duo-fb-sync-note');
 
-  exState.answered = true;
-  exState.isCorrect = isCorrect;
-
-  const syncNoteEl = document.getElementById('duo-fb-sync-note');
-  syncNoteEl.style.display = 'none';
+  document.getElementById('duo-action-row').style.display = 'none';
+  sheet.style.display = 'flex';
 
   if (isCorrect) {
-    exState.completedCount += 1;
     exState.energy += 5;
+    document.getElementById('ex-energy-count').textContent = exState.energy;
+    sheet.className = 'duo-feedback-sheet is-correct';
+    iconEl.textContent = '✓';
+    titleEl.textContent = 'Tuyệt vời! Chính xác!';
+    subEl.textContent = `${current.jp} (${current.romaji})`;
+    syncNote.style.display = 'none';
     playFeedbackTone(true);
-    speakJapanese(sentence.jp);
   } else {
-    playFeedbackTone(false);
-    exState.queue.push(sentence);
-    const marked = await syncWrongExerciseToVocabReview(sentence);
-    if (marked.length > 0) {
-      syncNoteEl.textContent = `📌 Đã tự đánh dấu "Cần ôn" cho từ: ${marked.join(', ')}`;
-      syncNoteEl.style.display = 'block';
+    sheet.className = 'duo-feedback-sheet is-wrong';
+    iconEl.textContent = '✕';
+    titleEl.textContent = 'Đáp án chuẩn là:';
+    subEl.textContent = current.vi;
+    const syncMsg = flagLinkedVocabForReview(current);
+    if (syncMsg) {
+      syncNote.style.display = 'block';
+      syncNote.textContent = syncMsg;
+    } else {
+      syncNote.style.display = 'none';
     }
+    playFeedbackTone(false);
   }
 
-  document.getElementById('ex-energy-count').textContent = exState.energy;
-  renderSentenceExercisePanel(sentence);
+  markStudyActivityToday();
 }
 
 function nextExerciseQuestion() {
   stopSpeech();
   state.exercise.currentIndex += 1;
-  loadExerciseQuestion();
+  renderExerciseQuestion();
 }
 
 /**
  * =========================================================================
- * 13. CHẾ ĐỘ 5: GHÉP ĐÔI (NHẬT-VIỆT HOẶC KANJI-CÁCH ĐỌC)
+ * 13. CHẾ ĐỘ 5: GHÉP ĐÔI TỪ VỰNG
  * =========================================================================
  */
 function toggleMatchVariant() {
-  state.match.variant = state.match.variant === 'JP_VI' ? 'KANJI_READING' : 'JP_VI';
-  document.getElementById('match-variant-btn').textContent =
-    state.match.variant === 'JP_VI' ? 'Nhật ↔ Việt ⇄' : 'Kanji ↔ Đọc ⇄';
+  state.match.variant = state.match.variant === 'JP_VI' ? 'KANJI_HIRA' : 'JP_VI';
+  const btn = document.getElementById('match-variant-btn');
+  btn.textContent = state.match.variant === 'JP_VI' ? 'Nhật ↔ Việt ⇄' : 'Kanji ↔ Cách đọc ⇄';
   startMatchRound();
 }
 
 function startMatchRound() {
-  let pool = getBaseFilteredCards();
-  if (pool.length < 2) pool = [...REPO_CARDS];
-
-  if (state.match.variant === 'KANJI_READING') {
-    const kanjiOnly = pool.filter(c => Boolean(c.kanji && c.jp && c.kanji !== c.jp));
-    if (kanjiOnly.length >= 2) {
-      pool = kanjiOnly;
-    } else {
-      state.match.variant = 'JP_VI';
-      document.getElementById('match-variant-btn').textContent = 'Nhật ↔ Việt ⇄';
-      showToast('Chưa đủ từ có Kanji trong bộ lọc này, chuyển về Nhật ↔ Việt');
-    }
+  stopSpeech();
+  let pool = getFilteredPoolCards();
+  if (state.match.variant === 'KANJI_HIRA') {
+    pool = pool.filter(c => Boolean(c.kanji));
   }
-
+  if (pool.length < 3) pool = [...REPO_CARDS];
   if (pool.length === 0) return;
 
   const shuffled = [...pool];
@@ -2505,457 +2656,292 @@ function startMatchRound() {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
 
-  const pairs = shuffled.slice(0, Math.min(5, shuffled.length));
-  const isKanjiReading = state.match.variant === 'KANJI_READING';
+  const picked = shuffled.slice(0, Math.min(5, shuffled.length));
+  const left = [...picked];
+  const right = [...picked];
 
-  const leftTiles = pairs.map(card => ({
-    id: card.id,
-    main: isKanjiReading ? card.kanji : (card.kanji || card.jp),
-    sub: (!isKanjiReading && card.kanji && card.jp && card.kanji !== card.jp && !state.hideFurigana) ? card.jp : '',
-    speakText: card.jp || card.kanji,
-    matched: false,
-    wrong: false
-  }));
-
-  const rightTiles = pairs.map(card => ({
-    id: card.id,
-    text: isKanjiReading ? card.jp : extractPrimaryMeaning(card.vi),
-    isJp: isKanjiReading,
-    matched: false,
-    wrong: false
-  }));
-
-  for (let i = rightTiles.length - 1; i > 0; i--) {
+  for (let i = left.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [rightTiles[i], rightTiles[j]] = [rightTiles[j], rightTiles[i]];
+    [left[i], left[j]] = [left[j], left[i]];
+  }
+  for (let i = right.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [right[i], right[j]] = [right[j], right[i]];
   }
 
-  state.match = {
-    round: state.match.round || 1,
-    score: state.match.score || 0,
-    variant: state.match.variant,
-    leftTiles,
-    rightTiles,
-    selectedLeftIdx: -1,
-    selectedRightIdx: -1,
-    matchedCount: 0
-  };
+  state.match.pairs = picked;
+  state.match.leftItems = left;
+  state.match.rightItems = right;
+  state.match.selectedLeftId = null;
+  state.match.selectedRightId = null;
+  state.match.matchedIds = [];
 
-  document.getElementById('match-summary-box').style.display = 'none';
   document.getElementById('match-active-box').style.display = 'flex';
+  document.getElementById('match-summary-box').style.display = 'none';
   renderMatchBoard();
 }
 
 function renderMatchBoard() {
   const m = state.match;
-  const totalPairs = m.leftTiles.length;
-  const pct = totalPairs > 0 ? Math.round((m.matchedCount / totalPairs) * 100) : 0;
+  const pct = m.pairs.length > 0 ? Math.round((m.matchedIds.length / m.pairs.length) * 100) : 0;
 
-  document.getElementById('match-round-label').textContent = `Lượt ${m.round}`;
+  document.getElementById('match-round-label').textContent = `${m.matchedIds.length}/${m.pairs.length} cặp`;
   document.getElementById('match-progress-fill').style.width = `${pct}%`;
   document.getElementById('match-score-count').textContent = m.score;
 
-  document.getElementById('match-left-col').innerHTML = m.leftTiles.map((tile, idx) => `
-    <button
-      type="button"
-      class="match-tile jp-tile ${m.selectedLeftIdx === idx ? 'selected' : ''} ${tile.matched ? 'matched' : ''} ${tile.wrong ? 'wrong-flash' : ''}"
-      ${tile.matched ? 'disabled' : ''}
-      onclick="handleMatchSelect('left', ${idx})"
-    >
-      <span>${escapeHtml(tile.main)}</span>
-      ${tile.sub ? `<span class="tile-sub">${escapeHtml(tile.sub)}</span>` : ''}
-    </button>
-  `).join('');
+  const leftCol = document.getElementById('match-left-col');
+  const rightCol = document.getElementById('match-right-col');
 
-  document.getElementById('match-right-col').innerHTML = m.rightTiles.map((tile, idx) => `
-    <button
-      type="button"
-      class="match-tile ${tile.isJp ? 'jp-tile' : ''} ${m.selectedRightIdx === idx ? 'selected' : ''} ${tile.matched ? 'matched' : ''} ${tile.wrong ? 'wrong-flash' : ''}"
-      ${tile.matched ? 'disabled' : ''}
-      onclick="handleMatchSelect('right', ${idx})"
-    >
-      <span>${escapeHtml(tile.text)}</span>
-    </button>
-  `).join('');
+  leftCol.innerHTML = m.leftItems.map(item => {
+    const isMatched = m.matchedIds.includes(item.id);
+    const isSelected = m.selectedLeftId === item.id;
+    const mainText = item.kanji || item.jp;
+    const subText = m.variant === 'KANJI_HIRA'
+      ? item.vi
+      : (!state.hideFurigana && item.kanji ? item.jp : '');
+    return `
+      <button
+        type="button"
+        class="match-tile jp-tile ${isMatched ? 'matched' : ''} ${isSelected ? 'selected' : ''}"
+        onclick="selectMatchLeft('${item.id}')"
+      >
+        <span>${escapeHtml(mainText)}</span>
+        ${subText ? `<span class="match-tile-sub">${escapeHtml(subText)}</span>` : ''}
+      </button>
+    `;
+  }).join('');
+
+  rightCol.innerHTML = m.rightItems.map(item => {
+    const isMatched = m.matchedIds.includes(item.id);
+    const isSelected = m.selectedRightId === item.id;
+    const rightText = m.variant === 'KANJI_HIRA' ? `${item.jp} (${item.romaji})` : item.vi;
+    return `
+      <button
+        type="button"
+        class="match-tile ${isMatched ? 'matched' : ''} ${isSelected ? 'selected' : ''}"
+        onclick="selectMatchRight('${item.id}')"
+      >
+        <span>${escapeHtml(rightText)}</span>
+      </button>
+    `;
+  }).join('');
 }
 
-function handleMatchSelect(side, idx) {
+function selectMatchLeft(cardId) {
   const m = state.match;
-  if (side === 'left') {
-    const tile = m.leftTiles[idx];
-    if (!tile || tile.matched) return;
-    m.selectedLeftIdx = idx;
-    speakJapanese(tile.speakText);
-  } else {
-    const tile = m.rightTiles[idx];
-    if (!tile || tile.matched) return;
-    m.selectedRightIdx = idx;
-  }
+  if (m.matchedIds.includes(cardId)) return;
 
-  if (m.selectedLeftIdx !== -1 && m.selectedRightIdx !== -1) {
-    const lTile = m.leftTiles[m.selectedLeftIdx];
-    const rTile = m.rightTiles[m.selectedRightIdx];
+  const card = m.pairs.find(c => c.id === cardId);
+  if (card) speakJapanese(card.jp);
 
-    if (lTile.id === rTile.id) {
-      lTile.matched = true;
-      rTile.matched = true;
-      m.matchedCount += 1;
-      m.score += 2;
-      m.selectedLeftIdx = -1;
-      m.selectedRightIdx = -1;
-      playFeedbackTone(true);
-      recordStudyActivity();
+  m.selectedLeftId = m.selectedLeftId === cardId ? null : cardId;
+  checkMatchAttempt();
+}
 
-      if (m.matchedCount >= m.leftTiles.length) {
-        m.round += 1;
-        renderMatchBoard();
-        setTimeout(() => {
-          document.getElementById('match-active-box').style.display = 'none';
-          document.getElementById('match-summary-box').style.display = 'flex';
-          document.getElementById('match-final-text').textContent = `Tổng điểm phản xạ: ⚡ ${m.score} điểm`;
-        }, 400);
-        return;
-      }
-    } else {
-      const wrongL = m.selectedLeftIdx;
-      const wrongR = m.selectedRightIdx;
-      lTile.wrong = true;
-      rTile.wrong = true;
-      m.selectedLeftIdx = -1;
-      m.selectedRightIdx = -1;
-      playFeedbackTone(false);
-      renderMatchBoard();
+function selectMatchRight(cardId) {
+  const m = state.match;
+  if (m.matchedIds.includes(cardId)) return;
 
-      setTimeout(() => {
-        if (m.leftTiles[wrongL]) m.leftTiles[wrongL].wrong = false;
-        if (m.rightTiles[wrongR]) m.rightTiles[wrongR].wrong = false;
-        renderMatchBoard();
-      }, 380);
-      return;
-    }
-  }
+  m.selectedRightId = m.selectedRightId === cardId ? null : cardId;
+  checkMatchAttempt();
+}
 
+function checkMatchAttempt() {
+  const m = state.match;
   renderMatchBoard();
+
+  if (!m.selectedLeftId || !m.selectedRightId) return;
+
+  if (m.selectedLeftId === m.selectedRightId) {
+    const matchedId = m.selectedLeftId;
+    m.matchedIds.push(matchedId);
+    m.score += 2;
+    state.progress[matchedId] = 'known';
+    saveProgress();
+    markStudyActivityToday();
+    updateStatsHeader();
+
+    m.selectedLeftId = null;
+    m.selectedRightId = null;
+    playFeedbackTone(true);
+    renderMatchBoard();
+
+    if (m.matchedIds.length >= m.pairs.length) {
+      setTimeout(() => {
+        document.getElementById('match-active-box').style.display = 'none';
+        document.getElementById('match-summary-box').style.display = 'flex';
+        document.getElementById('match-final-text').textContent = `Tổng điểm: ⚡ ${m.score}`;
+      }, 320);
+    }
+  } else {
+    playFeedbackTone(false);
+    setTimeout(() => {
+      m.selectedLeftId = null;
+      m.selectedRightId = null;
+      renderMatchBoard();
+    }, 360);
+  }
 }
 
 /**
  * =========================================================================
- * 14. CHẾ ĐỘ 6: LUYỆN KANJI CHIẾT TỰ & CHIA THỂ (HỖ TRỢ NHÃN TAG V1/V2/V3)
+ * 14. CHẾ ĐỘ 6: LUYỆN KANJI CHIẾT TỰ & CHIA THỂ ĐỘNG TỪ / TÍNH TỪ
  * =========================================================================
  */
-const ICHIDAN_MASU_STEMS = new Set([
-  'たべ', 'み', 'おき', 'ね', 'おしえ', 'かり', 'でき', 'おぼえ', 'わすれ',
-  'つとめ', 'あけ', 'しめ', 'つけ', 'かけ', 'あげ', 'くれ', 'おり', 'あび', 'い'
-]);
-
-function conjugateJapaneseItem(card) {
-  const jp = card.jp;
-  const kanji = card.kanji || jp;
-
-  if (card.posCode === 'VERB' && jp.endsWith('ます')) {
-    const stemJp = jp.slice(0, -2);
-    const stemKanji = kanji.endsWith('ます') ? kanji.slice(0, -2) : stemJp;
-
-    const negJp = `${stemJp}ません`;
-    const negKanji = `${stemKanji}ません`;
-    const pastJp = `${stemJp}ました`;
-    const pastKanji = `${stemKanji}ました`;
-
-    let teJp = '';
-    if (card.vGroup === 3 || jp === 'いきます' || jp.endsWith('します') || (jp === 'きます' && kanji === '来ます')) {
-      if (jp === 'いきます') teJp = 'いって';
-      else if (jp === 'きます' && kanji === '来ます') teJp = 'きて';
-      else if (jp.endsWith('します')) teJp = `${jp.slice(0, -3)}して`;
-      else teJp = `${stemJp}て`;
-    } else if (card.vGroup === 2 || (card.vGroup === 0 && ICHIDAN_MASU_STEMS.has(stemJp))) {
-      teJp = `${stemJp}て`;
-    } else {
-      const lastChar = stemJp.slice(-1);
-      const base = stemJp.slice(0, -1);
-      if (['い', 'ち', 'り'].includes(lastChar)) teJp = `${base}って`;
-      else if (['み', 'び', 'に'].includes(lastChar)) teJp = `${base}んで`;
-      else if (lastChar === 'き') teJp = `${base}いて`;
-      else if (lastChar === 'ぎ') teJp = `${base}いで`;
-      else if (lastChar === 'し') teJp = `${base}して`;
-      else teJp = `${stemJp}て`;
-    }
-
-    const targets = [
-      {
-        formName: 'Thể Phủ Định (Không ~)',
-        answerJp: negJp,
-        answerDisplay: negKanji !== negJp ? `${negKanji} (${negJp})` : negJp,
-        distractors: [`${stemJp}ました`, `${stemJp}ませんでした`, teJp]
-      },
-      {
-        formName: 'Thể Quá Khứ (Đã ~)',
-        answerJp: pastJp,
-        answerDisplay: pastKanji !== pastJp ? `${pastKanji} (${pastJp})` : pastJp,
-        distractors: [`${stemJp}ません`, `${stemJp}ませんでした`, teJp]
-      },
-      {
-        formName: 'Thể 〜て (Nối câu / Xin hãy ~)',
-        answerJp: teJp,
-        answerDisplay: teJp,
-        distractors: [`${stemJp}ません`, `${stemJp}ました`, `${stemJp}ない`]
-      }
-    ];
-
-    return targets[Math.floor(Math.random() * targets.length)];
-  }
-
-  if (card.posCode === 'ADJ_I' && jp.endsWith('い')) {
-    const isIi = jp === 'いい';
-    const stemJp = isIi ? 'よ' : jp.slice(0, -1);
-    const stemKanji = isIi ? '良' : (kanji.endsWith('い') ? kanji.slice(0, -1) : stemJp);
-
-    const negJp = `${stemJp}くないです`;
-    const pastJp = `${stemJp}かったです`;
-
-    const targets = [
-      {
-        formName: 'Phủ định Tính từ -i (Không ~)',
-        answerJp: negJp,
-        answerDisplay: stemKanji !== stemJp ? `${stemKanji}くないです (${negJp})` : negJp,
-        distractors: [`${jp}じゃありません`, `${stemJp}かったです`, `${stemJp}くなかったです`]
-      },
-      {
-        formName: 'Quá khứ Tính từ -i (Đã từng ~)',
-        answerJp: pastJp,
-        answerDisplay: stemKanji !== stemJp ? `${stemKanji}かったです (${pastJp})` : pastJp,
-        distractors: [`${jp}でした`, `${stemJp}くないです`, `${stemJp}くなかったです`]
-      }
-    ];
-    return targets[Math.floor(Math.random() * targets.length)];
-  }
-
-  if (card.posCode === 'ADJ_NA') {
-    const negJp = `${jp}じゃありません`;
-    const pastJp = `${jp}でした`;
-    const targets = [
-      {
-        formName: 'Phủ định Tính từ -na (Không ~)',
-        answerJp: negJp,
-        answerDisplay: kanji !== jp ? `${kanji}じゃありません (${negJp})` : negJp,
-        distractors: [`${jp}くないです`, `${jp}でした`, `${jp}かったです`]
-      },
-      {
-        formName: 'Quá khứ Tính từ -na (Đã từng ~)',
-        answerJp: pastJp,
-        answerDisplay: kanji !== jp ? `${kanji}でした (${pastJp})` : pastJp,
-        distractors: [`${jp}かったです`, `${jp}じゃありません`, `${jp}くないです`]
-      }
-    ];
-    return targets[Math.floor(Math.random() * targets.length)];
-  }
-
-  return null;
-}
-
-function buildKanjiClozePrompt(card) {
-  const { coreMnemonic } = splitMnemonicAndBridge(card.mnemonic);
-  if (!card.kanji) return null;
-
-  let masked = coreMnemonic;
-  for (const ch of card.kanji) {
-    if (/[\u4e00-\u9faf]/.test(ch)) {
-      masked = masked.split(ch).join('【？】');
-    }
-  }
-  return masked;
-}
-
 function cycleDrillSubmode() {
-  const order = ['MIXED', 'KANJI_CLOZE', 'CONJUGATION'];
-  const nextIdx = (order.indexOf(state.drill.submode) + 1) % order.length;
-  state.drill.submode = order[nextIdx];
-
+  const modes = ['MIXED', 'KANJI_CLOZE', 'CONJUGATION'];
   const labels = {
     MIXED: 'Hỗn hợp (Kanji + Chia thể) ⇄',
-    KANJI_CLOZE: 'Chỉ Chiết tự Kanji ⇄',
-    CONJUGATION: 'Chỉ Chia thể Ngữ pháp ⇄'
+    KANJI_CLOZE: 'Chỉ luyện Chiết tự Kanji ⇄',
+    CONJUGATION: 'Chỉ luyện Chia thể Động/Tính từ ⇄'
   };
+  const nextIdx = (modes.indexOf(state.drill.submode) + 1) % modes.length;
+  state.drill.submode = modes[nextIdx];
   document.getElementById('drill-submode-btn').textContent = labels[state.drill.submode];
   startDrillLesson();
 }
 
 function startDrillLesson() {
-  let pool = getBaseFilteredCards();
+  stopSpeech();
+  let pool = getFilteredPoolCards();
   if (pool.length === 0) pool = [...REPO_CARDS];
   if (pool.length === 0) return;
 
-  const shuffled = [...pool];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
+  const generated = [];
 
-  const questions = [];
-  for (const card of shuffled) {
-    const conj = conjugateJapaneseItem(card);
-    const hasKanji = Boolean(card.kanji && card.kanji !== card.jp);
-
-    if (state.drill.submode === 'CONJUGATION' && conj) {
-      questions.push({ kind: 'CONJUGATION', card, conj });
-    } else if (state.drill.submode === 'KANJI_CLOZE' && hasKanji) {
-      questions.push({ kind: 'KANJI_CLOZE', card });
-    } else if (state.drill.submode === 'MIXED') {
-      if (conj && Math.random() < 0.5) {
-        questions.push({ kind: 'CONJUGATION', card, conj });
-      } else if (hasKanji) {
-        questions.push({ kind: 'KANJI_CLOZE', card });
-      } else if (conj) {
-        questions.push({ kind: 'CONJUGATION', card, conj });
+  pool.forEach(card => {
+    const { mainTip } = parseMnemonicAndBridge(card.mnemonic);
+    if (card.kanji && state.drill.submode !== 'CONJUGATION') {
+      const otherKanjiCards = REPO_CARDS.filter(c => c.id !== card.id && c.kanji);
+      const wrongs = otherKanjiCards
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3)
+        .map(c => `${c.kanji} (${c.jp})`);
+      if (wrongs.length >= 2) {
+        generated.push({
+          kind: 'KANJI_CLOZE',
+          card,
+          instruction: 'Dựa vào chiết tự & nghĩa, chọn đúng chữ Kanji:',
+          mainPrompt: `「${card.vi}」`,
+          subHint: `💡 ${mainTip}`,
+          correctAnswer: `${card.kanji} (${card.jp})`,
+          options: [ `${card.kanji} (${card.jp})`, ...wrongs ].sort(() => Math.random() - 0.5)
+        });
       }
     }
 
-    if (questions.length >= 10) break;
+    if (state.drill.submode !== 'KANJI_CLOZE') {
+      const conjugations = generateWordConjugations(card);
+      conjugations.forEach(conj => {
+        generated.push({
+          kind: 'CONJUGATION',
+          card,
+          instruction: `Chia từ sau sang ${conj.formName}:`,
+          mainPrompt: card.kanji ? `${card.kanji} (${card.jp})` : card.jp,
+          subHint: `Nghĩa gốc: ${card.vi} (/${card.romaji}/)`,
+          correctAnswer: conj.answer,
+          options: [conj.answer, ...conj.wrongs.slice(0, 3)].sort(() => Math.random() - 0.5)
+        });
+      });
+    }
+  });
+
+  for (let i = generated.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [generated[i], generated[j]] = [generated[j], generated[i]];
   }
 
-  if (questions.length === 0) {
-    shuffled.slice(0, 10).forEach(card => {
-      questions.push({ kind: 'KANJI_CLOZE', card });
-    });
-  }
+  state.drill.questions = generated.slice(0, 10);
+  state.drill.currentIndex = 0;
+  state.drill.score = 0;
+  state.drill.answered = false;
 
-  state.drill = {
-    questions,
-    currentIndex: 0,
-    score: 0,
-    answered: false,
-    submode: state.drill.submode
-  };
-
-  document.getElementById('drill-summary-box').style.display = 'none';
   document.getElementById('drill-active-box').style.display = 'flex';
+  document.getElementById('drill-summary-box').style.display = 'none';
   renderDrillQuestion();
 }
 
 function speakDrillCard() {
   const q = state.drill.questions[state.drill.currentIndex];
   if (!q) return;
-  if (q.kind === 'CONJUGATION' && state.drill.answered && q.conj) {
-    speakJapanese(q.conj.answerJp);
-  } else {
-    speakJapanese(q.card.jp || q.card.kanji);
-  }
+  speakJapanese(q.card.jp);
 }
 
 function renderDrillQuestion() {
-  const d = state.drill;
-  if (d.currentIndex >= d.questions.length) {
-    document.getElementById('drill-active-box').style.display = 'none';
-    document.getElementById('drill-summary-box').style.display = 'flex';
-    document.getElementById('drill-final-score-text').textContent =
-      `Bạn trả lời đúng ${d.score} / ${d.questions.length} câu!`;
+  const dr = state.drill;
+  if (dr.questions.length === 0) {
+    document.getElementById('drill-main-prompt').textContent = 'Chưa đủ từ có Kanji hoặc Động/Tính từ trong phạm vi này.';
+    document.getElementById('drill-options-list').innerHTML = '';
     return;
   }
 
-  d.answered = false;
-  const q = d.questions[d.currentIndex];
-  const card = q.card;
+  if (dr.currentIndex >= dr.questions.length) {
+    document.getElementById('drill-active-box').style.display = 'none';
+    document.getElementById('drill-summary-box').style.display = 'flex';
+    document.getElementById('drill-final-score-text').textContent = `Đúng ${dr.score} / ${dr.questions.length} câu`;
+    return;
+  }
 
-  document.getElementById('drill-step-num').textContent = `Câu ${d.currentIndex + 1}/${d.questions.length}`;
-  document.getElementById('drill-score-badge').textContent = `Điểm: ${d.score}`;
+  dr.answered = false;
+  const item = dr.questions[dr.currentIndex];
 
-  const lvlTag = document.getElementById('drill-level-tag');
-  lvlTag.textContent = card.level;
-  lvlTag.className = `level-tag ${card.level.toLowerCase()}`;
+  document.getElementById('drill-step-num').textContent = `Câu ${dr.currentIndex + 1}/${dr.questions.length}`;
+  document.getElementById('drill-score-badge').textContent = `Điểm: ${dr.score}`;
 
-  const kindPill = document.getElementById('drill-kind-pill');
-  const instEl = document.getElementById('drill-instruction');
-  const mainEl = document.getElementById('drill-main-prompt');
-  const subHintEl = document.getElementById('drill-sub-hint');
+  const lvlEl = document.getElementById('drill-level-tag');
+  lvlEl.className = `level-tag ${item.card.level.toLowerCase()}`;
+  lvlEl.textContent = item.card.level;
+
+  document.getElementById('drill-kind-pill').textContent =
+    item.kind === 'KANJI_CLOZE' ? 'Chiết tự Kanji' : 'Chia thể Ngữ pháp';
+
+  document.getElementById('drill-instruction').textContent = item.instruction;
+  document.getElementById('drill-main-prompt').textContent = item.mainPrompt;
+  document.getElementById('drill-sub-hint').textContent = item.subHint;
   document.getElementById('drill-feedback-box').style.display = 'none';
 
-  let options = [];
-
-  if (q.kind === 'CONJUGATION' && q.conj) {
-    kindPill.textContent = `Chia thể • ${card.posLabel}`;
-    instEl.textContent = `Chuyển từ gốc sang: ${q.conj.formName}`;
-    mainEl.className = 'drill-main-text jp-target';
-    mainEl.textContent = card.kanji ? `${card.kanji} (${card.jp})` : card.jp;
-    subHintEl.textContent = `Nghĩa gốc: ${card.vi}`;
-
-    const correctOpt = { text: q.conj.answerDisplay, isCorrect: true, speak: q.conj.answerJp };
-    const wrongOpts = q.conj.distractors.slice(0, 3).map(txt => ({
-      text: txt,
-      isCorrect: false,
-      speak: txt
-    }));
-    options = [correctOpt, ...wrongOpts];
-  } else {
-    kindPill.textContent = 'Chiết tự Kanji';
-    instEl.textContent = 'Dựa vào gợi ý chiết tự bên dưới, chọn từ đúng:';
-    mainEl.className = 'drill-main-text';
-    mainEl.textContent = buildKanjiClozePrompt(card) || `Nghĩa tiếng Việt: "${card.vi}"`;
-    subHintEl.textContent = `Nghĩa: ${card.vi}`;
-
-    const correctLabel = card.kanji ? `${card.kanji} (${card.jp})` : `${card.jp} /${card.romaji}/`;
-    const correctOpt = { text: correctLabel, isCorrect: true, speak: card.jp };
-
-    const others = REPO_CARDS.filter(c => c.id !== card.id && (card.kanji ? Boolean(c.kanji) : true));
-    for (let i = others.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [others[i], others[j]] = [others[j], others[i]];
-    }
-
-    const wrongOpts = others.slice(0, 3).map(c => ({
-      text: c.kanji ? `${c.kanji} (${c.jp})` : `${c.jp} /${c.romaji}/`,
-      isCorrect: false,
-      speak: c.jp
-    }));
-    options = [correctOpt, ...wrongOpts];
-  }
-
-  for (let i = options.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [options[i], options[j]] = [options[j], options[i]];
-  }
-
   const letters = ['A', 'B', 'C', 'D'];
-  document.getElementById('drill-options-list').innerHTML = options.map((opt, idx) => `
+  document.getElementById('drill-options-list').innerHTML = item.options.map((opt, idx) => `
     <button
       type="button"
-      class="quiz-opt-btn jp-opt"
-      data-correct="${opt.isCorrect ? '1' : '0'}"
-      onclick="handleDrillAnswer(this, ${opt.isCorrect ? 'true' : 'false'}, '${escapeHtml(opt.speak)}')"
+      class="quiz-opt-btn"
+      data-opt="${escapeHtml(opt)}"
+      onclick="handleDrillAnswer(this, '${escapeHtml(opt)}')"
     >
       <span class="opt-letter">${letters[idx]}</span>
-      <span>${escapeHtml(opt.text)}</span>
+      <span>${escapeHtml(opt)}</span>
     </button>
   `).join('');
 }
 
-function handleDrillAnswer(btnEl, isCorrect, speakStr) {
-  if (state.drill.answered) return;
-  state.drill.answered = true;
-  recordStudyActivity();
+function handleDrillAnswer(btnEl, selectedOpt) {
+  const dr = state.drill;
+  if (dr.answered) return;
+  dr.answered = true;
 
-  const q = state.drill.questions[state.drill.currentIndex];
-  speakJapanese(speakStr || q.card.jp);
+  const item = dr.questions[dr.currentIndex];
+  const isCorrect = selectedOpt === item.correctAnswer;
 
   document.querySelectorAll('#drill-options-list .quiz-opt-btn').forEach(btn => {
     btn.disabled = true;
-    if (btn.getAttribute('data-correct') === '1') {
-      btn.classList.add('correct');
-    } else if (btn === btnEl && !isCorrect) {
-      btn.classList.add('wrong');
-    }
+    const val = btn.getAttribute('data-opt');
+    if (val === item.correctAnswer) btn.classList.add('correct');
+    else if (btn === btnEl && !isCorrect) btn.classList.add('wrong');
   });
 
   if (isCorrect) {
-    state.drill.score += 1;
+    dr.score += 1;
     playFeedbackTone(true);
   } else {
     playFeedbackTone(false);
   }
 
-  document.getElementById('drill-score-badge').textContent = `Điểm: ${state.drill.score}`;
-  const { coreMnemonic } = splitMnemonicAndBridge(q.card.mnemonic);
-  document.getElementById('drill-feedback-note').innerHTML =
-    `<strong>${isCorrect ? '✓ Chính xác!' : '✕ Chưa đúng!'}</strong> ${escapeHtml(coreMnemonic)}`;
+  markStudyActivityToday();
+  document.getElementById('drill-score-badge').textContent = `Điểm: ${dr.score}`;
+  document.getElementById('drill-feedback-note').textContent =
+    `✓ Đáp án: ${item.correctAnswer} • Từ gốc: ${item.card.kanji || item.card.jp} (${item.card.vi})`;
   document.getElementById('drill-feedback-box').style.display = 'flex';
+  speakJapanese(item.card.jp);
 }
 
 function nextDrillQuestion() {
@@ -2966,15 +2952,302 @@ function nextDrillQuestion() {
 
 /**
  * =========================================================================
- * 15. TRA CỨU TỪ VỰNG NHANH TRONG KHO
+ * 15. CHẾ ĐỘ 7: BẢNG CHỮ CÁI HIRAGANA & KATAKANA TƯƠNG TÁC
+ * =========================================================================
+ */
+const KANA_DATA = {
+  BASIC: [
+    { h: 'あ', k: 'ア', r: 'a', tip: 'Hiragana あ giống chữ A có nét vòng bụng; Katakana ア giống cái rìu.' },
+    { h: 'い', k: 'イ', r: 'i', tip: 'Hai nét thẳng đứng song song như hai người đang đứng (i).' },
+    { h: 'う', k: 'ウ', r: 'u', tip: 'Nét trên chấm xuống lưng cong như người đang cúi (u).' },
+    { h: 'え', k: 'エ', r: 'e', tip: 'Katakana エ giống chữ Công (工) hoặc thanh dầm sắt chữ I/E.' },
+    { h: 'お', k: 'オ', r: 'o', tip: 'Nét tròn bụng có dấu chấm bên phải như quả bóng golf (o).' },
+    { h: 'か', k: 'カ', r: 'ka', tip: 'Giống chữ Lực (力) thêm dấu phẩy (cắt ка).' },
+    { h: 'き', k: 'キ', r: 'ki', tip: 'Hình chiếc chìa khóa cổ (Key = ki).' },
+    { h: 'く', k: 'ク', r: 'ku', tip: 'Giống mỏ chim cúc cu đang há ra (ku).' },
+    { h: 'け', k: 'ケ', r: 'ke', tip: 'Hai nét đối nhau như cánh cửa tre (ke).' },
+    { h: 'こ', k: 'コ', r: 'ko', tip: 'Hai nét ngang trên dưới như hai con cá nhỏ (ko).' },
+    { h: 'さ', k: 'サ', r: 'sa', tip: 'Giống chữ き nhưng chỉ có 1 nét gạch ngang.' },
+    { h: 'し', k: 'シ', r: 'shi', tip: 'Hình cái móc câu hoặc ống hút cong lên (shi).' },
+    { h: 'す', k: 'ス', r: 'su', tip: 'Nét xoắn tròn ở giữa như sợi mì đang treo (su).' },
+    { h: 'せ', k: 'セ', r: 'se', tip: 'Bắt nguồn từ chữ Thế (世) trong thế giới (sekai).' },
+    { h: 'そ', k: 'ソ', r: 'so', tip: 'Đường khâu zíc-zắc (sew = so).' },
+    { h: 'た', k: 'タ', r: 'ta', tip: 'Nét đầu giống chữ t, nét sau giống chữ a -> ta.' },
+    { h: 'ち', k: 'チ', r: 'chi', tip: 'Hình giống số 5 (chi).' },
+    { h: 'つ', k: 'ツ', r: 'tsu', tip: 'Hình ngọn sóng thần cuộn tròn (tsunami).' },
+    { h: 'て', k: 'テ', r: 'te', tip: 'Lòng bàn tay cong (手 = te).' },
+    { h: 'と', k: 'ト', r: 'to', tip: 'Cái gai đâm vào ngón chân cái (toe = to).' },
+    { h: 'な', k: 'ナ', r: 'na', tip: 'Chữ thập (+) kèm nút thắt bên dưới (na).' },
+    { h: 'に', k: 'ニ', r: 'ni', tip: 'Katakana ニ chính là số 2 (ni) trong tiếng Nhật.' },
+    { h: 'ぬ', k: 'ヌ', r: 'nu', tip: 'Hai chiếc đũa gắp sợi mì xoắn (noodle = nu).' },
+    { h: 'ね', k: 'ネ', r: 'ne', tip: 'Đuôi xoắn tròn như con mèo đang cuộn (neko).' },
+    { h: 'の', k: 'ノ', r: 'no', tip: 'Biển báo cấm tròn gạch chéo (NO = no).' },
+    { h: 'は', k: 'ハ', r: 'ha', tip: 'Katakana ハ giống mái nhà hoặc ria mép cười ha ha.' },
+    { h: 'ひ', k: 'ヒ', r: 'hi', tip: 'Khuôn miệng đang cười hì hì (hi).' },
+    { h: 'ふ', k: 'フ', r: 'fu', tip: 'Sườn núi Phú Sĩ (Fuji = fu).' },
+    { h: 'へ', k: 'ヘ', r: 'he', tip: 'Đỉnh đồi nhọn chỉ hướng lên trời (heaven = he).' },
+    { h: 'ほ', k: 'ホ', r: 'ho', tip: 'Giống chữ は nhưng có 2 gạch ngang như ống khói (ho).' },
+    { h: 'ま', k: 'マ', r: 'ma', tip: 'Hai gạch ngang có vòng thắt ở đáy (mama = ma).' },
+    { h: 'み', k: 'ミ', r: 'mi', tip: 'Katakana ミ là 3 vạch như bộ râu mèo (mi).' },
+    { h: 'む', k: 'ム', r: 'mu', tip: 'Hình con bò có sừng kêu muu (mu).' },
+    { h: 'め', k: 'メ', r: 'me', tip: 'Con mắt (目 = me) có nét gạch chéo.' },
+    { h: 'も', k: 'モ', r: 'mo', tip: 'Lưỡi câu móc thêm 2 con mồi (more = mo).' },
+    { h: 'や', k: 'ヤ', r: 'ya', tip: 'Hình đầu con bò rừng Tây Tạng (yak = ya).' },
+    { h: '', k: '', r: '', empty: true },
+    { h: 'ゆ', k: 'ユ', r: 'yu', tip: 'Hình con cá bơi dưới suối nước nóng (湯 = yu).' },
+    { h: '', k: '', r: '', empty: true },
+    { h: 'よ', k: 'ヨ', r: 'yo', tip: 'Hình chiếc yo-yo treo trên dây (yo).' },
+    { h: 'ら', k: 'ラ', r: 'ra', tip: 'Giống số 5 có nắp ở trên (ra).' },
+    { h: 'り', k: 'リ', r: 'ri', tip: 'Hai nhánh lau sậy bên bờ sông (river = ri).' },
+    { h: 'る', k: 'ル', r: 'ru', tip: 'Giống số 3 nhưng có vòng lặp tròn ở đuôi (ru).' },
+    { h: 'れ', k: 'レ', r: 're', tip: 'Cột thẳng có nét hất ra ngoài (re).' },
+    { h: 'ろ', k: 'ロ', r: 'ro', tip: 'Giống số 3 không có vòng lặp; Katakana ロ là cái miệng vuông.' },
+    { h: 'わ', k: 'ワ', r: 'wa', tip: 'Giống chữ れ nhưng nét phải uốn tròn vào trong (wa).' },
+    { h: '', k: '', r: '', empty: true },
+    { h: 'を', k: 'ヲ', r: 'wo', tip: 'Trợ từ tân ngữ đọc là "o" (chỉ dùng làm trợ từ).' },
+    { h: '', k: '', r: '', empty: true },
+    { h: 'ん', k: 'ン', r: 'n', tip: 'Trông giống chữ n viết thường trong tiếng Anh.' }
+  ],
+  DAKUTEN: [
+    { h: 'が', k: 'ガ', r: 'ga', tip: 'Hàng か thêm dấu 텐텐 (゛) -> ga' },
+    { h: 'ぎ', k: 'ギ', r: 'gi', tip: 'き + ゛ -> gi' },
+    { h: 'ぐ', k: 'グ', r: 'gu', tip: 'く + ゛ -> gu' },
+    { h: 'げ', k: 'ゲ', r: 'ge', tip: 'け + ゛ -> ge' },
+    { h: 'ご', k: 'ゴ', r: 'go', tip: 'こ + ゛ -> go' },
+    { h: 'ざ', k: 'ザ', r: 'za', tip: 'さ + ゛ -> za' },
+    { h: 'じ', k: 'ジ', r: 'ji', tip: 'し + ゛ -> ji' },
+    { h: 'ず', k: 'ズ', r: 'zu', tip: 'す + ゛ -> zu' },
+    { h: 'ぜ', k: 'ゼ', r: 'ze', tip: 'せ + ゛ -> ze' },
+    { h: 'ぞ', k: 'ゾ', r: 'zo', tip: 'そ + ゛ -> zo' },
+    { h: 'だ', k: 'ダ', r: 'da', tip: 'た + ゛ -> da' },
+    { h: 'ぢ', k: 'ヂ', r: 'ji (di)', tip: 'ち + ゛ -> đọc giống じ (ji)' },
+    { h: 'づ', k: 'ヅ', r: 'zu (du)', tip: 'つ + ゛ -> đọc giống ず (zu)' },
+    { h: 'で', k: 'デ', r: 'de', tip: 'て + ゛ -> de' },
+    { h: 'ど', k: 'ド', r: 'do', tip: 'と + ゛ -> do' },
+    { h: 'ば', k: 'バ', r: 'ba', tip: 'は + ゛ -> ba' },
+    { h: 'び', k: 'ビ', r: 'bi', tip: 'ひ + ゛ -> bi' },
+    { h: 'ぶ', k: 'ブ', r: 'bu', tip: 'ふ + ゛ -> bu' },
+    { h: 'べ', k: 'ベ', r: 'be', tip: 'へ + ゛ -> be' },
+    { h: 'ぼ', k: 'ボ', r: 'bo', tip: 'ほ + ゛ -> bo' },
+    { h: 'ぱ', k: 'パ', r: 'pa', tip: 'は + dấu tròn (゜) -> pa' },
+    { h: 'ぴ', k: 'ピ', r: 'pi', tip: 'ひ + ゜ -> pi' },
+    { h: 'ぷ', k: 'プ', r: 'pu', tip: 'ふ + ゜ -> pu' },
+    { h: 'ぺ', k: 'ペ', r: 'pe', tip: 'へ + ゜ -> pe' },
+    { h: 'ぽ', k: 'ポ', r: 'po', tip: 'ほ + ゜ -> po' }
+  ],
+  YOON: [
+    { h: 'きゃ', k: 'キャ', r: 'kya', tip: 'き + ゃ nhỏ -> kya' },
+    { h: 'きゅ', k: 'キュ', r: 'kyu', tip: 'き + ゅ nhỏ -> kyu' },
+    { h: 'きょ', k: 'キョ', r: 'kyo', tip: 'き + ょ nhỏ -> kyo' },
+    { h: 'しゃ', k: 'シャ', r: 'sha', tip: 'し + ゃ nhỏ -> sha (như trong しゃしん - bức ảnh)' },
+    { h: 'しゅ', k: 'シュ', r: 'shu', tip: 'し + ゅ nhỏ -> shu' },
+    { h: 'しょ', k: 'ショ', r: 'sho', tip: 'し + ょ nhỏ -> sho (như trong としょかん - thư viện)' },
+    { h: 'ちゃ', k: 'チャ', r: 'cha', tip: 'ち + ゃ nhỏ -> cha (おちゃ - trà)' },
+    { h: 'ちゅ', k: 'チュ', r: 'chu', tip: 'ち + ゅ nhỏ -> chu' },
+    { h: 'ちょ', k: 'チョ', r: 'cho', tip: 'ち + ょ nhỏ -> cho' },
+    { h: 'にゃ', k: 'ニャ', r: 'nya', tip: 'に + ゃ nhỏ -> nya' },
+    { h: 'にゅ', k: 'ニュ', r: 'nyu', tip: 'に + ゅ nhỏ -> nyu' },
+    { h: 'にょ', k: 'ニョ', r: 'nyo', tip: 'に + ょ nhỏ -> nyo' },
+    { h: 'ひゃ', k: 'ヒャ', r: 'hya', tip: 'ひ + ゃ nhỏ -> hya (ひゃく - 100)' },
+    { h: 'ひゅ', k: 'ヒュ', r: 'hyu', tip: 'ひ + ゅ nhỏ -> hyu' },
+    { h: 'ひょ', k: 'ヒョ', r: 'hyo', tip: 'ひ + ょ nhỏ -> hyo' },
+    { h: 'みゃ', k: 'ミャ', r: 'mya', tip: 'み + ゃ nhỏ -> mya' },
+    { h: 'みゅ', k: 'ミュ', r: 'myu', tip: 'み + ゅ nhỏ -> myu' },
+    { h: 'みょ', k: 'ミョ', r: 'myo', tip: 'み + ょ nhỏ -> myo' },
+    { h: 'りゃ', k: 'リャ', r: 'rya', tip: 'り + ゃ nhỏ -> rya' },
+    { h: 'りゅ', k: 'リュ', r: 'ryu', tip: 'り + ゅ nhỏ -> ryu' },
+    { h: 'りょ', k: 'リョ', r: 'ryo', tip: 'り + ょ nhỏ -> ryo (りょこう - du lịch)' }
+  ]
+};
+
+function setKanaScript(script) {
+  state.kana.script = script === 'katakana' ? 'katakana' : 'hiragana';
+  document.getElementById('kana-script-hira').classList.toggle('active', state.kana.script === 'hiragana');
+  document.getElementById('kana-script-kata').classList.toggle('active', state.kana.script === 'katakana');
+  updateHeaderContextBadge();
+  renderKanaModule();
+}
+
+function setKanaSubtab(subtab) {
+  state.kana.subtab = subtab === 'quiz' ? 'quiz' : 'chart';
+  document.getElementById('kana-tab-chart').classList.toggle('active', state.kana.subtab === 'chart');
+  document.getElementById('kana-tab-quiz').classList.toggle('active', state.kana.subtab === 'quiz');
+  renderKanaModule();
+}
+
+function setKanaGroup(group) {
+  state.kana.group = ['BASIC', 'DAKUTEN', 'YOON'].includes(group) ? group : 'BASIC';
+  state.kana.selectedIdx = 0;
+  document.querySelectorAll('#kana-group-pills .pill-btn').forEach(btn => {
+    btn.classList.toggle('filter-active', btn.getAttribute('data-kgroup') === state.kana.group);
+  });
+  renderKanaModule();
+}
+
+function renderKanaModule() {
+  const chartPanel = document.getElementById('kana-chart-panel');
+  const quizPanel = document.getElementById('kana-quiz-panel');
+
+  if (state.kana.subtab === 'quiz') {
+    chartPanel.style.display = 'none';
+    quizPanel.style.display = 'flex';
+    startKanaQuiz();
+    return;
+  }
+
+  quizPanel.style.display = 'none';
+  chartPanel.style.display = 'flex';
+
+  const list = KANA_DATA[state.kana.group] || KANA_DATA.BASIC;
+  const gridEl = document.getElementById('kana-grid');
+  gridEl.classList.toggle('yoon-grid', state.kana.group === 'YOON');
+
+  gridEl.innerHTML = list.map((item, idx) => {
+    if (item.empty) {
+      return `<div class="kana-cell empty-slot"></div>`;
+    }
+    const ch = state.kana.script === 'katakana' ? item.k : item.h;
+    const isSel = idx === state.kana.selectedIdx;
+    return `
+      <button
+        type="button"
+        class="kana-cell ${isSel ? 'selected' : ''}"
+        onclick="selectKanaCell(${idx})"
+      >
+        <span class="kana-char-main">${escapeHtml(ch)}</span>
+        <span class="kana-char-sub">${escapeHtml(item.r)}</span>
+      </button>
+    `;
+  }).join('');
+
+  updateKanaDetailBanner();
+}
+
+function selectKanaCell(idx) {
+  const list = KANA_DATA[state.kana.group] || KANA_DATA.BASIC;
+  const item = list[idx];
+  if (!item || item.empty) return;
+  state.kana.selectedIdx = idx;
+  renderKanaModule();
+  speakSelectedKana();
+}
+
+function updateKanaDetailBanner() {
+  const list = KANA_DATA[state.kana.group] || KANA_DATA.BASIC;
+  const item = list[state.kana.selectedIdx] || list[0];
+  if (!item || item.empty) return;
+
+  const ch = state.kana.script === 'katakana' ? item.k : item.h;
+  const pairChar = state.kana.script === 'katakana' ? item.h : item.k;
+
+  document.getElementById('kana-detail-char').textContent = ch;
+  document.getElementById('kana-detail-romaji').textContent = `/${item.r}/ • Chữ tương ứng: ${pairChar}`;
+  document.getElementById('kana-detail-tip').textContent = item.tip;
+}
+
+function speakSelectedKana() {
+  const list = KANA_DATA[state.kana.group] || KANA_DATA.BASIC;
+  const item = list[state.kana.selectedIdx] || list[0];
+  if (!item || item.empty) return;
+  speakJapanese(item.h);
+}
+
+function startKanaQuiz() {
+  const list = (KANA_DATA[state.kana.group] || KANA_DATA.BASIC).filter(x => !x.empty);
+  const shuffled = [...list].sort(() => Math.random() - 0.5);
+  state.kana.quizQuestions = shuffled.slice(0, 10);
+  state.kana.quizIndex = 0;
+  state.kana.quizScore = 0;
+  state.kana.quizAnswered = false;
+  renderKanaQuizQuestion();
+}
+
+function speakKanaQuizChar() {
+  const q = state.kana.quizQuestions[state.kana.quizIndex];
+  if (!q) return;
+  speakJapanese(q.h);
+}
+
+function renderKanaQuizQuestion() {
+  const k = state.kana;
+  if (k.quizIndex >= k.quizQuestions.length) {
+    showToast(`🎉 Hoàn thành! Đúng ${k.quizScore}/${k.quizQuestions.length} chữ cái!`);
+    startKanaQuiz();
+    return;
+  }
+
+  k.quizAnswered = false;
+  const current = k.quizQuestions[k.quizIndex];
+  const displayChar = k.script === 'katakana' ? current.k : current.h;
+
+  document.getElementById('kana-quiz-progress').textContent = `Câu ${k.quizIndex + 1}/${k.quizQuestions.length}`;
+  document.getElementById('kana-quiz-score').textContent = `Điểm: ${k.quizScore}`;
+  document.getElementById('kana-quiz-char').textContent = displayChar;
+  document.getElementById('kana-quiz-feedback').style.display = 'none';
+
+  const allPool = (KANA_DATA[k.group] || KANA_DATA.BASIC).filter(x => !x.empty && x.r !== current.r);
+  const distractors = allPool.sort(() => Math.random() - 0.5).slice(0, 3);
+  const options = [current, ...distractors].sort(() => Math.random() - 0.5);
+  const letters = ['A', 'B', 'C', 'D'];
+
+  document.getElementById('kana-quiz-options').innerHTML = options.map((opt, idx) => `
+    <button
+      type="button"
+      class="quiz-opt-btn"
+      data-romaji="${escapeHtml(opt.r)}"
+      onclick="handleKanaQuizAnswer(this, '${escapeHtml(opt.r)}')"
+    >
+      <span class="opt-letter">${letters[idx]}</span>
+      <span>${escapeHtml(opt.r)} (${escapeHtml(k.script === 'katakana' ? opt.h : opt.k)})</span>
+    </button>
+  `).join('');
+}
+
+function handleKanaQuizAnswer(btnEl, selectedRomaji) {
+  const k = state.kana;
+  if (k.quizAnswered) return;
+  k.quizAnswered = true;
+
+  const current = k.quizQuestions[k.quizIndex];
+  const isCorrect = selectedRomaji === current.r;
+
+  document.querySelectorAll('#kana-quiz-options .quiz-opt-btn').forEach(btn => {
+    btn.disabled = true;
+    const r = btn.getAttribute('data-romaji');
+    if (r === current.r) btn.classList.add('correct');
+    else if (btn === btnEl && !isCorrect) btn.classList.add('wrong');
+  });
+
+  if (isCorrect) {
+    k.quizScore += 1;
+    playFeedbackTone(true);
+  } else {
+    playFeedbackTone(false);
+  }
+
+  markStudyActivityToday();
+  document.getElementById('kana-quiz-score').textContent = `Điểm: ${k.quizScore}`;
+  document.getElementById('kana-quiz-tip').textContent = `💡 ${current.h} / ${current.k} (${current.r}): ${current.tip}`;
+  document.getElementById('kana-quiz-feedback').style.display = 'flex';
+  speakJapanese(current.h);
+}
+
+function nextKanaQuizQuestion() {
+  stopSpeech();
+  state.kana.quizIndex += 1;
+  renderKanaQuizQuestion();
+}
+
+/**
+ * =========================================================================
+ * 16. TRA CỨU TỪ VỰNG NHANH TOÀN KHO (SEARCH MODAL)
  * =========================================================================
  */
 function openSearchModal() {
-  document.getElementById('search-repo-subtitle').textContent =
-    `Đang lưu trữ ${REPO_CARDS.length} từ vựng & ${REPO_EXERCISES.length} bài tập`;
   document.getElementById('search-modal').style.display = 'flex';
+  document.getElementById('repo-search-input').value = '';
   renderSearchResults();
-  setTimeout(() => document.getElementById('repo-search-input').focus(), 100);
+  setTimeout(() => document.getElementById('repo-search-input').focus(), 60);
 }
 
 function closeSearchModal() {
@@ -2982,125 +3255,61 @@ function closeSearchModal() {
 }
 
 function renderSearchResults() {
-  const kw = document.getElementById('repo-search-input').value.trim().toLowerCase();
+  const q = document.getElementById('repo-search-input').value.trim().toLowerCase();
   const lvl = document.getElementById('repo-search-level').value;
 
-  let list = lvl === 'ALL' ? REPO_CARDS : REPO_CARDS.filter(c => c.level === lvl);
-
-  if (kw) {
-    list = list.filter(c =>
-      c.jp.toLowerCase().includes(kw) ||
-      (c.kanji && c.kanji.toLowerCase().includes(kw)) ||
-      c.romaji.toLowerCase().includes(kw) ||
-      c.vi.toLowerCase().includes(kw) ||
-      c.topic.toLowerCase().includes(kw) ||
-      c.mnemonic.toLowerCase().includes(kw)
+  let pool = lvl === 'ALL' ? REPO_CARDS : REPO_CARDS.filter(c => c.level === lvl);
+  if (q) {
+    pool = pool.filter(c =>
+      c.jp.toLowerCase().includes(q) ||
+      (c.kanji && c.kanji.toLowerCase().includes(q)) ||
+      c.romaji.toLowerCase().includes(q) ||
+      c.vi.toLowerCase().includes(q) ||
+      c.mnemonic.toLowerCase().includes(q) ||
+      c.topic.toLowerCase().includes(q)
     );
   }
 
-  const totalMatches = list.length;
-  const shown = list.slice(0, 60);
-
   document.getElementById('search-results-count').textContent =
-    totalMatches > 60
-      ? `Tìm thấy ${totalMatches} từ (hiển thị 60 kết quả đầu tiên)`
-      : `Tìm thấy ${totalMatches} từ khớp`;
+    `Tìm thấy ${pool.length} từ vựng (hiển thị tối đa 60 kết quả đầu)`;
 
-  document.getElementById('search-results-list').innerHTML = shown.map(card => {
-    const title = card.kanji ? `${card.kanji} (${card.jp})` : card.jp;
-    return `
-      <div class="search-item-card">
-        <div class="search-item-top">
-          <div class="badge-group">
-            <span class="level-tag ${card.level.toLowerCase()}">${card.level}</span>
-            <span class="search-jp-title">${escapeHtml(title)}</span>
-          </div>
-          <button type="button" class="audio-btn" onclick="speakJapanese('${escapeHtml(card.jp)}')">🔊</button>
+  const preview = pool.slice(0, 60);
+  const listEl = document.getElementById('search-results-list');
+  listEl.innerHTML = preview.map(card => `
+    <div class="search-item-card">
+      <div class="search-item-top">
+        <div>
+          <span class="level-tag ${card.level.toLowerCase()}">${card.level}</span>
+          <span class="search-item-jp">${escapeHtml(card.kanji ? `${card.kanji} (${card.jp})` : card.jp)}</span>
         </div>
-        <div class="search-vi-text">/${escapeHtml(card.romaji)}/ — ${escapeHtml(card.vi)}</div>
-        <div class="search-note-text">${escapeHtml(card.mnemonic)}</div>
+        <button type="button" class="audio-btn" onclick="speakJapanese('${escapeHtml(card.jp)}')">🔊</button>
       </div>
-    `;
-  }).join('');
+      <div class="search-item-vi">/${escapeHtml(card.romaji)}/ — ${escapeHtml(card.vi)}</div>
+      <div class="search-item-mnem">${escapeHtml(card.mnemonic)}</div>
+    </div>
+  `).join('');
 }
 
 /**
  * =========================================================================
- * 16. NHẬP JSON ĐA KHỐI & XUẤT ĐỘC LẬP VOCAB_DATA.JS / EXERCISE_DATA.JS
+ * 17. NHẬP DỮ LIỆU, XUẤT ĐỘC LẬP 2 TỆP & NẠP BỘ MẪU
  * =========================================================================
  */
-function parseFlexibleJsonBlocks(rawText) {
-  const trimmed = String(rawText || '').trim();
-  if (!trimmed) {
-    throw new Error('Dữ liệu trống.');
+function openImportModal() {
+  document.getElementById('import-error-msg').style.display = 'none';
+  if (state.selectedLevel !== 'ALL') {
+    document.getElementById('import-default-level').value = state.selectedLevel;
   }
-
-  let cleaned = trimmed
-    .replace(/^[\s\S]*?var\s+(?:VOCAB_DATA|EXERCISE_DATA)\s*=\s*/i, '')
-    .replace(/;\s*$/, '')
-    .trim();
-
-  try {
-    const single = JSON.parse(cleaned);
-    if (Array.isArray(single) && single.length > 0) return single;
-  } catch (e) {}
-
-  const merged = [];
-  let depth = 0;
-  let inString = false;
-  let escapeNext = false;
-  let blockStart = -1;
-
-  for (let i = 0; i < cleaned.length; i++) {
-    const ch = cleaned[i];
-    if (escapeNext) {
-      escapeNext = false;
-      continue;
-    }
-    if (ch === '\\' && inString) {
-      escapeNext = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-    if (inString) continue;
-
-    if (ch === '[') {
-      if (depth === 0) blockStart = i;
-      depth++;
-    } else if (ch === ']') {
-      depth--;
-      if (depth === 0 && blockStart !== -1) {
-        const slice = cleaned.slice(blockStart, i + 1);
-        const arr = JSON.parse(slice);
-        if (Array.isArray(arr)) merged.push(...arr);
-        blockStart = -1;
-      }
-    }
-  }
-
-  if (merged.length > 0) return merged;
-  throw new Error('Không tìm thấy mảng JSON [...] hợp lệ. Hãy kiểm tra dấu ngoặc vuông hoặc dấu phẩy.');
+  document.getElementById('import-modal').style.display = 'flex';
+  runLiveDuplicateCheck();
 }
 
-function handleImportFileUpload(event) {
-  const file = event.target.files && event.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    document.getElementById('import-json-text').value = String(e.target.result || '');
-    runLiveDuplicateCheck(false);
-    showToast(`Đã đọc tệp "${file.name}"!`);
-  };
-  reader.readAsText(file, 'utf-8');
-  event.target.value = '';
+function closeImportModal() {
+  document.getElementById('import-modal').style.display = 'none';
 }
 
-async function loadQuickDemoSession() {
-  const demoVocab = [
+function getDemoDataset() {
+  return [
     {
       level: 'N5',
       topic: 'Động từ cốt lõi',
@@ -3113,23 +3322,43 @@ async function loadQuickDemoSession() {
     },
     {
       level: 'N5',
-      topic: 'Địa điểm & Công trình',
+      topic: 'Động từ cốt lõi',
+      tag: 'v2',
+      jp: 'たべます',
+      kanji: '食べます',
+      romaji: 'tabemasu',
+      vi: 'Ăn',
+      mnemonic: 'Chữ Thực (食 - mái nhà che bát cơm ngon) -> Ăn. [N4/N3: Ghép thành しょくじ (bữa ăn), しょくどう (nhà ăn)]'
+    },
+    {
+      level: 'N5',
+      topic: 'Động từ cốt lõi',
+      tag: 'v1',
+      jp: 'よみます',
+      kanji: '読みます',
+      romaji: 'yomimasu',
+      vi: 'Đọc',
+      mnemonic: 'Chữ Độc (読 - bộ Ngôn 言 + chữ Bán 売) -> Đọc sách. [N4/N3: Đọc là ドク trong どくしょ (đọc sách)]'
+    },
+    {
+      level: 'N5',
+      topic: 'Địa điểm & Đời sống',
       tag: 'noun',
       jp: 'えき',
       kanji: '駅',
       romaji: 'eki',
       vi: 'Nhà ga',
-      mnemonic: 'Chữ Dịch (駅 - Mã 馬 con ngựa + Xích 尺 thước đo) -> Trạm dừng ngựa ngày xưa. [N4/N3: Nhân viên nhà ga (駅員 - ekiin)]'
+      mnemonic: 'Chữ Dịch (駅 - bộ Mã 馬 chỉ trạm dừng ngựa xưa) -> Nhà ga. [N4/N3: えきまえ (trước nhà ga)]'
     },
     {
       level: 'N5',
-      topic: 'Tính từ N5 (Phần 1)',
-      tag: 'adj_i',
-      jp: 'あつい',
-      kanji: '暑い',
-      romaji: 'atsui',
-      vi: 'Nóng (thời tiết)',
-      mnemonic: 'Chữ Thử (暑 - Nhật 日 mặt trời + Giả 者 người) -> Người bị mặt trời thiêu đốt. [N4/N3: Mùa hè nóng bức gay gắt]'
+      topic: 'Địa điểm & Đời sống',
+      tag: 'noun',
+      jp: 'としょかん',
+      kanji: '図書館',
+      romaji: 'toshokan',
+      vi: 'Thư viện',
+      mnemonic: 'Đồ Thư Quán (図書館 - tòa nhà lưu giữ sách và bản đồ). [N4/N3: びじゅつかん (bảo tàng mỹ thuật)]'
     },
     {
       level: 'N5',
@@ -3138,12 +3367,9 @@ async function loadQuickDemoSession() {
       jp: 'あつい',
       kanji: '熱い',
       romaji: 'atsui',
-      vi: 'Nóng (nhiệt độ đồ vật, thức uống)',
-      mnemonic: 'Chữ Nhiệt (熱 - Chấp 執 + Hỏa 灬 ngọn lửa) -> Nung chảy bằng lửa. [N4/N3: Danh từ Phát sốt (熱 - netsu)]'
-    }
-  ];
-
-  const demoExercises = [
+      vi: 'Nóng (đồ vật, thức uống)',
+      mnemonic: 'Chữ Nhiệt (熱 - có 4 chấm hỏa 灬 ở dưới) -> Nóng bỏng tay. [N4/N3: Phân biệt với 暑い (trời nóng)]'
+    },
     {
       type: 'exercise',
       kind: 'cloze',
@@ -3158,6 +3384,25 @@ async function loadQuickDemoSession() {
     },
     {
       type: 'exercise',
+      kind: 'sentence',
+      level: 'N5',
+      topic: 'Động từ cốt lõi',
+      refs: ['よみます', 'としょかん'],
+      jp: 'としょかんでほんをよみます。',
+      romaji: 'Toshokan de hon o yomimasu.',
+      tokens: [
+        { jp: 'としょかん', romaji: 'toshokan', vi: 'thư viện', ref: 'としょかん' },
+        { jp: 'で', romaji: 'de', vi: 'ở / tại' },
+        { jp: 'ほん', romaji: 'hon', vi: 'sách' },
+        { jp: 'を', romaji: 'o', vi: '(trợ từ tân ngữ)' },
+        { jp: 'よみます', romaji: 'yomimasu', vi: 'đọc', ref: 'よみます' }
+      ],
+      vi: 'Tôi đọc sách ở thư viện.',
+      vi_blocks: ['Tôi', 'đọc', 'sách', 'ở', 'thư viện'],
+      distractors: ['nhà ga', 'ăn', 'hôm qua']
+    },
+    {
+      type: 'exercise',
       kind: 'trap',
       level: 'N5',
       topic: 'Tính từ N5 (Phần 1)',
@@ -3167,266 +3412,130 @@ async function loadQuickDemoSession() {
       options: ['熱い (あつい)', '暑い (あつい)', '寒い (さむい)', '冷たい (つめたい)'],
       answer: '熱い (あつい)',
       explanation: '熱い dùng cho đồ vật/thức uống nóng; còn 暑い chỉ dùng cho thời tiết nóng.'
-    },
-    {
-      type: 'exercise',
-      kind: 'sentence',
-      level: 'N5',
-      topic: 'Động từ cốt lõi',
-      refs: ['いきます', 'えき'],
-      jp: 'あしたえきへいきます。',
-      romaji: 'Ashita eki e ikimasu.',
-      tokens: [
-        { jp: 'あした', romaji: 'ashita', vi: 'ngày mai' },
-        { jp: 'えき', romaji: 'eki', vi: 'nhà ga', ref: 'えき' },
-        { jp: 'へ', romaji: 'e', vi: 'đến (hướng tới)' },
-        { jp: 'いきます', romaji: 'ikimasu', vi: 'đi', ref: 'いきます' }
-      ],
-      vi: 'Ngày mai tôi đi đến nhà ga.',
-      vi_blocks: ['Ngày', 'mai', 'tôi', 'đi', 'đến', 'nhà ga'],
-      distractors: ['hôm qua', 'bệnh viện', 'không']
     }
   ];
-
-  demoVocab.forEach((raw, idx) => {
-    REPO_CARDS.push({ ...normalizeCardObject(raw, idx), source: 'json' });
-  });
-  demoExercises.forEach((raw, idx) => {
-    REPO_EXERCISES.push({ ...normalizeExerciseObject(raw, idx), source: 'json' });
-  });
-
-  await saveExtraReposToStorage();
-  buildSmartFlashcardBatch();
-  refreshUI();
-  showToast('Đã nạp bộ mẫu Từ vựng + 3 dạng Bài tập liên kết!');
-}
-
-function openImportModal() {
-  document.getElementById('import-error-msg').style.display = 'none';
-  runLiveDuplicateCheck(false);
-  document.getElementById('import-modal').style.display = 'flex';
-}
-
-function closeImportModal() {
-  document.getElementById('import-modal').style.display = 'none';
 }
 
 function fillSampleJson() {
-  const sample = [
-    {
-      level: 'N5',
-      topic: 'Động từ cốt lõi',
-      tag: 'v1',
-      jp: 'かいます',
-      kanji: '買います',
-      romaji: 'kaimasu',
-      vi: 'Mua',
-      mnemonic: 'Chữ Mãi (買 - lưới 罒 bắt sò 貝 tiền tệ) -> Dùng tiền mua đồ.'
-    },
-    {
-      type: 'exercise',
-      kind: 'cloze',
-      level: 'N5',
-      topic: 'Động từ cốt lõi',
-      refs: ['かいます'],
-      prompt_jp: 'スーパー（　）やさいを かいます。',
-      prompt_vi: 'Tôi mua rau ở siêu thị.',
-      options: ['で', 'に', 'へ', 'が'],
-      answer: 'で',
-      explanation: 'Trợ từ で chỉ địa điểm diễn ra hành động (mua đồ ở siêu thị).'
-    }
-  ];
-  document.getElementById('import-json-text').value = JSON.stringify(sample, null, 2);
-  runLiveDuplicateCheck(false);
+  document.getElementById('import-default-level').value = 'N5';
+  document.getElementById('import-default-topic').value = 'Động từ cốt lõi';
+  document.getElementById('import-json-text').value = JSON.stringify(getDemoDataset(), null, 2);
+  runLiveDuplicateCheck();
 }
 
-function analyzeIncomingJson(rawText) {
-  const parsed = parseFlexibleJsonBlocks(rawText);
-
-  const defaultLevel = normalizeLevel(document.getElementById('import-default-level').value);
-  const defaultTopic = document.getElementById('import-default-topic').value.trim() || 'Từ vựng chung';
-
-  const existingMap = new Map([
-    ...REPO_CARDS.map(c => [getDuplicateSignature(c), c]),
-    ...REPO_EXERCISES.map(ex => [getDuplicateSignature(ex), ex])
-  ]);
-  const batchSeen = new Set();
-
-  const newVocab = [];
-  const newExercises = [];
-  const dupWithRepo = [];
-  const dupInBatch = [];
-
-  parsed.forEach((raw, idx) => {
-    const enriched = {
-      ...raw,
-      level: raw.level || defaultLevel,
-      topic: raw.topic || defaultTopic
-    };
-    const isEx = isExerciseItem(enriched);
-    const item = isEx
-      ? normalizeExerciseObject(enriched, idx)
-      : normalizeCardObject(enriched, idx);
-
-    const sig = getDuplicateSignature(item);
-    if (batchSeen.has(sig)) {
-      dupInBatch.push(item);
+async function loadQuickDemoSession() {
+  const demo = getDemoDataset();
+  demo.forEach(raw => {
+    if (isExerciseEntry(raw)) {
+      REPO_EXERCISES.push(normalizeExerciseItem(raw));
     } else {
-      batchSeen.add(sig);
-      if (existingMap.has(sig)) {
-        dupWithRepo.push({ incoming: item, existing: existingMap.get(sig) });
-      } else if (isEx) {
-        newExercises.push(item);
-      } else {
-        newVocab.push(item);
-      }
+      REPO_CARDS.push(normalizeCardItem(raw));
     }
   });
-
-  return { newVocab, newExercises, dupWithRepo, dupInBatch };
-}
-
-function runLiveDuplicateCheck(explicitClick = false) {
-  const jsonText = document.getElementById('import-json-text').value.trim();
-  const boxEl = document.getElementById('import-dup-check-box');
-  const summaryEl = document.getElementById('import-dup-summary');
-  const listEl = document.getElementById('import-dup-list');
-  const policyRowEl = document.getElementById('import-dup-policy-row');
-  const errorEl = document.getElementById('import-error-msg');
-
-  errorEl.style.display = 'none';
-
-  if (!jsonText) {
-    boxEl.className = 'dup-check-box neutral';
-    summaryEl.textContent = '🔍 Dán JSON hoặc chọn tệp để tự động phân luồng & kiểm tra trùng.';
-    listEl.style.display = 'none';
-    policyRowEl.style.display = 'none';
-    if (explicitClick) showToast('Vui lòng dán JSON trước khi kiểm tra');
-    return null;
-  }
-
-  try {
-    const result = analyzeIncomingJson(jsonText);
-    const totalDup = result.dupWithRepo.length + result.dupInBatch.length;
-    const summaryParts = [];
-    if (result.newVocab.length > 0) summaryParts.push(`${result.newVocab.length} từ vựng mới`);
-    if (result.newExercises.length > 0) summaryParts.push(`${result.newExercises.length} bài tập mới`);
-    const validLabel = summaryParts.length > 0 ? summaryParts.join(' & ') : '0 mục mới';
-
-    if (totalDup === 0) {
-      boxEl.className = 'dup-check-box clean';
-      summaryEl.textContent = `✓ Hợp lệ: ${validLabel}, không có mục nào bị trùng!`;
-      listEl.style.display = 'none';
-      policyRowEl.style.display = 'none';
-      if (explicitClick) showToast('Không có mục nào bị trùng lặp!');
-    } else {
-      boxEl.className = 'dup-check-box warning';
-      summaryEl.textContent = `⚠️ Phát hiện ${totalDup} mục trùng (${validLabel}):`;
-
-      const details = [];
-      result.dupWithRepo.slice(0, 40).forEach(d => {
-        const isEx = isExerciseItem(d.incoming);
-        const label = isEx
-          ? `[Bài tập] ${d.incoming.prompt_jp || d.incoming.jp}`
-          : `[Từ vựng] ${d.incoming.kanji ? `${d.incoming.kanji} (${d.incoming.jp})` : d.incoming.jp}`;
-        details.push(`• Trùng với kho: ${label}`);
-      });
-      result.dupInBatch.slice(0, 20).forEach(d => {
-        const isEx = isExerciseItem(d);
-        const label = isEx
-          ? `[Bài tập] ${d.prompt_jp || d.jp}`
-          : `[Từ vựng] ${d.kanji ? `${d.kanji} (${d.jp})` : d.jp}`;
-        details.push(`• Trùng ngay trong danh sách vừa dán: ${label}`);
-      });
-
-      listEl.innerHTML = details.map(line => `<div>${escapeHtml(line)}</div>`).join('');
-      listEl.style.display = 'flex';
-      policyRowEl.style.display = result.dupWithRepo.length > 0 ? 'flex' : 'none';
-      if (explicitClick) showToast(`Phát hiện ${totalDup} mục trùng lặp!`);
-    }
-
-    return result;
-  } catch (err) {
-    boxEl.className = 'dup-check-box neutral';
-    summaryEl.textContent = '⏳ Đang chờ khối JSON hoàn chỉnh để kiểm tra trùng...';
-    listEl.style.display = 'none';
-    policyRowEl.style.display = 'none';
-    if (explicitClick) {
-      errorEl.textContent = 'Lỗi cú pháp JSON: ' + err.message;
-      errorEl.style.display = 'block';
-    }
-    return null;
-  }
+  await saveRepository();
+  buildSmartFlashcardBatch();
+  refreshUI();
+  showToast('⚡ Đã nạp bộ mẫu (Từ vựng + 3 dạng Bài tập liên kết)!');
 }
 
 async function importJsonToRepo() {
-  const jsonText = document.getElementById('import-json-text').value.trim();
+  const defaultLevel = document.getElementById('import-default-level').value;
+  const defaultTopic = document.getElementById('import-default-topic').value.trim() || 'Tổng hợp';
+  const rawJson = document.getElementById('import-json-text').value.trim();
+  const policyEl = document.getElementById('dup-handling-mode');
+  const dupPolicy = policyEl ? policyEl.value : 'skip';
   const errorEl = document.getElementById('import-error-msg');
 
-  if (!jsonText) {
-    errorEl.textContent = 'Vui lòng dán dữ liệu JSON hoặc chọn tệp từ máy.';
+  if (!rawJson) {
+    errorEl.textContent = 'Vui lòng dán mảng JSON hoặc chọn tệp dữ liệu.';
     errorEl.style.display = 'block';
     return;
   }
 
-  let analysis;
   try {
-    analysis = analyzeIncomingJson(jsonText);
-  } catch (err) {
-    errorEl.textContent = 'Lỗi định dạng JSON: ' + err.message;
-    errorEl.style.display = 'block';
-    return;
-  }
+    const parsed = parseMultiJsonBlocks(rawJson);
 
-  const policy = document.getElementById('dup-handling-mode').value;
-  let addedVocab = 0;
-  let addedEx = 0;
-  let updatedCount = 0;
+    const vocabKeyToIndex = new Map();
+    REPO_CARDS.forEach((c, idx) => vocabKeyToIndex.set(getCardUniqueKey(c), idx));
+    const exKeyToIndex = new Map();
+    REPO_EXERCISES.forEach((s, idx) => exKeyToIndex.set(getExerciseUniqueKey(s), idx));
 
-  analysis.newVocab.forEach(item => {
-    REPO_CARDS.push({ ...item, source: 'json' });
-    addedVocab++;
-  });
+    const seenInCurrentBatch = new Set();
+    let addedVocab = 0;
+    let addedEx = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
 
-  analysis.newExercises.forEach(item => {
-    REPO_EXERCISES.push({ ...item, source: 'json' });
-    addedEx++;
-  });
+    parsed.forEach(raw => {
+      if (!raw || typeof raw !== 'object') return;
 
-  if (policy === 'overwrite' && analysis.dupWithRepo.length > 0) {
-    analysis.dupWithRepo.forEach(({ incoming, existing }) => {
-      if (isExerciseItem(existing)) {
-        const idx = REPO_EXERCISES.findIndex(s => s.id === existing.id);
-        if (idx !== -1) {
-          REPO_EXERCISES[idx] = { ...incoming, id: existing.id, source: existing.source };
-          updatedCount++;
+      if (isExerciseEntry(raw)) {
+        const ex = normalizeExerciseItem(raw, defaultLevel, defaultTopic);
+        if (!ex.jp && !ex.prompt_jp) return;
+        const key = getExerciseUniqueKey(ex);
+
+        if (seenInCurrentBatch.has(key)) {
+          skippedCount++;
+          return;
         }
-      } else {
-        const idx = REPO_CARDS.findIndex(c => c.id === existing.id);
-        if (idx !== -1) {
-          REPO_CARDS[idx] = { ...incoming, id: existing.id, source: existing.source };
-          updatedCount++;
+        seenInCurrentBatch.add(key);
+
+        if (exKeyToIndex.has(key)) {
+          if (dupPolicy === 'overwrite') {
+            REPO_EXERCISES[exKeyToIndex.get(key)] = ex;
+            updatedCount++;
+          } else {
+            skippedCount++;
+          }
+        } else {
+          exKeyToIndex.set(key, REPO_EXERCISES.length);
+          REPO_EXERCISES.push(ex);
+          addedEx++;
+        }
+      } else if (raw.jp && raw.vi) {
+        const card = normalizeCardItem(raw, defaultLevel, defaultTopic);
+        const key = getCardUniqueKey(card);
+
+        if (seenInCurrentBatch.has(key)) {
+          skippedCount++;
+          return;
+        }
+        seenInCurrentBatch.add(key);
+
+        if (vocabKeyToIndex.has(key)) {
+          if (dupPolicy === 'overwrite') {
+            REPO_CARDS[vocabKeyToIndex.get(key)] = card;
+            updatedCount++;
+          } else {
+            skippedCount++;
+          }
+        } else {
+          vocabKeyToIndex.set(key, REPO_CARDS.length);
+          REPO_CARDS.push(card);
+          addedVocab++;
         }
       }
     });
+
+    await saveRepository();
+    state.currentIndex = 0;
+    state.isFlipped = false;
+    buildSmartFlashcardBatch();
+
+    document.getElementById('import-json-text').value = '';
+    closeImportModal();
+    refreshUI();
+
+    showToast(`✓ Đã nạp +${addedVocab} từ, +${addedEx} bài tập (cập nhật ${updatedCount}, bỏ qua ${skippedCount})`);
+  } catch (err) {
+    errorEl.textContent = err.message || 'Lỗi định dạng JSON.';
+    errorEl.style.display = 'block';
   }
-
-  await saveExtraReposToStorage();
-  document.getElementById('import-json-text').value = '';
-  closeImportModal();
-  if (state.sessionMode) buildSmartFlashcardBatch();
-  refreshUI();
-
-  const msgParts = [];
-  if (addedVocab > 0) msgParts.push(`${addedVocab} từ vựng`);
-  if (addedEx > 0) msgParts.push(`${addedEx} bài tập`);
-  if (updatedCount > 0) msgParts.push(`cập nhật ${updatedCount} mục`);
-  showToast(msgParts.length > 0 ? `Đã nạp ${msgParts.join(', ')}!` : 'Không có mục mới nào được thêm');
 }
 
 function openExportModal() {
-  document.getElementById('export-vocab-count').textContent = `${REPO_CARDS.length} từ vựng & Kanji (N5 → N3)`;
-  document.getElementById('export-ex-count').textContent = `${REPO_EXERCISES.length} câu bài tập ngữ cảnh (Điền khuyết, Dịch câu, Bẫy từ)`;
+  document.getElementById('export-vocab-count').textContent = `${REPO_CARDS.length} từ vựng & Kanji trong kho`;
+  document.getElementById('export-ex-count').textContent = `${REPO_EXERCISES.length} câu bài tập ngữ cảnh trong kho`;
   document.getElementById('export-modal').style.display = 'flex';
 }
 
@@ -3434,99 +3543,154 @@ function closeExportModal() {
   document.getElementById('export-modal').style.display = 'none';
 }
 
-function triggerFileDownload(filename, content) {
-  const blob = new Blob([content], { type: 'application/javascript;charset=utf-8' });
+function exportVocabDataJsFile() {
+  const cleanVocab = REPO_CARDS.map(c => ({
+    level: c.level,
+    topic: c.topic,
+    tag: c.tag || undefined,
+    jp: c.jp,
+    kanji: c.kanji,
+    romaji: c.romaji,
+    vi: c.vi,
+    mnemonic: c.mnemonic
+  }));
+
+  const fileContent =
+`/**
+ * TỆP 1: KHO TỪ VỰNG & KANJI THUẦN TÚY (N5 -> N3)
+ * Tổng số: ${cleanVocab.length} từ vựng
+ */
+
+var VOCAB_DATA = ${JSON.stringify(cleanVocab, null, 2)};
+`;
+
+  const blob = new Blob([fileContent], { type: 'application/javascript;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename;
+  a.download = 'vocab_data.js';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-}
-
-function exportVocabDataJsFile() {
-  const cleanExport = REPO_CARDS.map(({ id, source, type, posCode, vGroup, posLabel, ...rest }) => rest);
-  const fileContent = `/**
- * TỆP DỮ LIỆU TỪ VỰNG & KANJI TRUNG TÂM (N5 -> N3)
- * Xuất tự động từ ứng dụng Flashcards (${cleanExport.length} từ vựng)
- */
-
-var VOCAB_DATA = ${JSON.stringify(cleanExport, null, 2)};
-`;
-  triggerFileDownload('vocab_data.js', fileContent);
-  showToast(`Đã xuất vocab_data.js (${cleanExport.length} từ)!`);
+  showToast('⬇ Đã tải xuống tệp vocab_data.js');
 }
 
 function exportExerciseDataJsFile() {
-  const cleanExport = REPO_EXERCISES.map(({ id, source, _isPriority, full_jp, ...rest }) => rest);
-  const fileContent = `/**
- * TỆP DỮ LIỆU BÀI TẬP NGỮ CẢNH CHUẨN XÁC (N5 -> N3)
- * Gồm 3 dạng: Điền khuyết (cloze), Dịch câu ghép từ (sentence), Bẫy dễ nhầm (trap)
- * Xuất tự động (${cleanExport.length} bài tập)
+  const cleanEx = REPO_EXERCISES.map(s => {
+    if (s.kind === 'sentence') {
+      return {
+        type: 'exercise',
+        kind: 'sentence',
+        level: s.level,
+        topic: s.topic,
+        refs: s.refs,
+        jp: s.jp,
+        romaji: s.romaji,
+        tokens: s.tokens,
+        vi: s.vi,
+        vi_blocks: s.vi_blocks,
+        distractors: s.distractors
+      };
+    }
+    return {
+      type: 'exercise',
+      kind: s.kind,
+      level: s.level,
+      topic: s.topic,
+      refs: s.refs,
+      prompt_jp: s.prompt_jp,
+      prompt_vi: s.prompt_vi,
+      options: s.options,
+      answer: s.answer,
+      explanation: s.explanation
+    };
+  });
+
+  const fileContent =
+`/**
+ * TỆP 2: KHO BÀI TẬP NGỮ CẢNH CHUẨN XÁC (N5 -> N3)
+ * Tổng số: ${cleanEx.length} câu bài tập
  */
 
-var EXERCISE_DATA = ${JSON.stringify(cleanExport, null, 2)};
+var EXERCISE_DATA = ${JSON.stringify(cleanEx, null, 2)};
 `;
-  triggerFileDownload('exercise_data.js', fileContent);
-  showToast(`Đã xuất exercise_data.js (${cleanExport.length} bài tập)!`);
+
+  const blob = new Blob([fileContent], { type: 'application/javascript;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'exercise_data.js';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('⬇ Đã tải xuống tệp exercise_data.js');
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast-banner');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(() => {
+    toast.classList.remove('show');
+  }, 2400);
 }
 
 /**
  * =========================================================================
- * 17. TIỆN ÍCH, CỬ CHỈ VUỐT & PHÍM TẮT
+ * 18. KHÓA ZOOM IPHONE SAFARI, VUỐT MÀN HÌNH & KHỞI CHẠY
  * =========================================================================
  */
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-let toastTimer = null;
-function showToast(msg) {
-  const toast = document.getElementById('toast-banner');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
-}
-
-function initSwipeGestures() {
+function setupTouchAndKeyboard() {
+  let touchStartX = 0;
+  let touchStartY = 0;
   const stage = document.getElementById('card-stage-wrapper');
-  if (!stage) return;
-  let startX = 0;
-  let startY = 0;
 
-  stage.addEventListener('touchstart', e => {
-    startX = e.changedTouches[0].screenX;
-    startY = e.changedTouches[0].screenY;
-  }, { passive: true });
+  if (stage) {
+    stage.addEventListener('touchstart', e => {
+      touchStartX = e.changedTouches[0].screenX;
+      touchStartY = e.changedTouches[0].screenY;
+    }, { passive: true });
 
-  stage.addEventListener('touchend', e => {
-    const dx = e.changedTouches[0].screenX - startX;
-    const dy = e.changedTouches[0].screenY - startY;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) {
-      if (dx < 0) nextCard();
-      else prevCard();
-    }
-  }, { passive: true });
-}
+    stage.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].screenX - touchStartX;
+      const dy = e.changedTouches[0].screenY - touchStartY;
+      if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        if (dx < 0) nextCard();
+        else prevCard();
+      }
+    }, { passive: true });
+  }
 
-function initKeyboardShortcuts() {
-  document.addEventListener('keydown', e => {
-    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+  // Chặn triệt để Pinch-to-Zoom và Double-tap Zoom trên iPhone Safari
+  document.addEventListener('gesturestart', e => {
+    e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('gesturechange', e => {
+    e.preventDefault();
+  }, { passive: false });
+
+  document.addEventListener('dblclick', e => {
+    e.preventDefault();
+  }, { passive: false });
+
+  window.addEventListener('keydown', e => {
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
     if (state.mode !== 'flashcard') return;
 
     if (e.code === 'Space') {
       e.preventDefault();
       flipCard();
     } else if (e.code === 'ArrowRight') {
+      e.preventDefault();
       nextCard();
     } else if (e.code === 'ArrowLeft') {
+      e.preventDefault();
       prevCard();
     } else if (e.key === '1') {
       rateCurrentCard('review');
@@ -3537,12 +3701,8 @@ function initKeyboardShortcuts() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  initIosZoomLock();
-  document.addEventListener('touchstart', unlockMobileAudio, { once: true, passive: true });
-  document.addEventListener('click', unlockMobileAudio, { once: true });
-  loadStreak();
-  await loadRepository();
-  initSwipeGestures();
-  initKeyboardShortcuts();
+  await initRepository();
+  setupTouchAndKeyboard();
+  buildSmartFlashcardBatch();
   refreshUI();
 });
