@@ -3,6 +3,21 @@
 
   let client = null;
   let sdkPromise = null;
+  const VIRTUAL_EMAIL_DOMAIN = 'accounts.japanese-learning.invalid';
+
+  function normalizeUsername(value) {
+    const username = String(value || '').trim().toLowerCase();
+    if (!/^[a-z0-9_.-]{3,24}$/.test(username)) {
+      throw new Error('Tên đăng nhập phải có 3–24 ký tự, chỉ gồm chữ không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.');
+    }
+    return username;
+  }
+
+  function toAuthEmail(identifier) {
+    const value = String(identifier || '').trim();
+    if (value.includes('@')) return value.toLowerCase();
+    return `${normalizeUsername(value)}@${VIRTUAL_EMAIL_DOMAIN}`;
+  }
 
   function getConfig() {
     return window.APP_CONFIG || {};
@@ -70,20 +85,74 @@
     return data.user || null;
   }
 
-  async function signIn(email, password) {
+  async function signIn(identifier, password) {
     const sb = getClient();
     if (!sb) throw new Error('Chưa cấu hình kết nối Supabase.');
+    const email = toAuthEmail(identifier);
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (error) throw error;
     return data.user;
   }
 
-  async function signUp(email, password) {
+  async function signUp(usernameInput, password) {
     const sb = getClient();
     if (!sb) throw new Error('Chưa cấu hình kết nối Supabase.');
-    const { data, error } = await sb.auth.signUp({ email, password });
-    if (error) throw error;
-    return data.user;
+    const username = normalizeUsername(usernameInput);
+    const passwordText = String(password || '');
+    const passwordBytes = new TextEncoder().encode(passwordText).length;
+    if (passwordBytes < 8 || passwordBytes > 72) {
+      throw new Error('Mật khẩu cần dài ít nhất 8 ký tự và không vượt quá 72 byte.');
+    }
+
+    // Đăng ký qua Edge Function dùng service_role ở máy chủ để xác nhận
+    // email nội bộ ngay khi tạo. Người học không cần email thật và không
+    // cần tắt Confirm email trong Supabase Auth.
+    const { data: registration, error: registrationError } = await sb.functions.invoke('j_register', {
+      body: { username, password: passwordText }
+    });
+    if (registrationError) {
+      let message = registrationError.message || 'Không thể tạo tài khoản.';
+      try {
+        if (registrationError.context && typeof registrationError.context.json === 'function') {
+          const body = await registrationError.context.json();
+          if (body && body.error) message = body.error;
+        }
+      } catch (_) { /* Giữ thông báo gốc từ Supabase Functions. */ }
+      throw new Error(message);
+    }
+    if (!registration || registration.ok !== true) {
+      throw new Error((registration && registration.error) || 'Máy chủ chưa xác nhận tạo tài khoản.');
+    }
+
+    // Tạo tài khoản xong thì đăng nhập ngay bằng email định danh nội bộ.
+    const { data: loginData, error: loginError } = await sb.auth.signInWithPassword({
+      email: `${username}@${VIRTUAL_EMAIL_DOMAIN}`,
+      password: passwordText
+    });
+    if (loginError) {
+      throw new Error(`Tài khoản đã được tạo nhưng chưa thể đăng nhập tự động: ${loginError.message || 'Hãy thử đăng nhập lại.'}`);
+    }
+    return loginData.user || registration.user || null;
+  }
+
+  async function adminUsers(action, payload, gatePassword) {
+    const sb = getClient();
+    if (!sb) throw new Error('Chưa cấu hình kết nối Supabase.');
+    const { data, error } = await sb.functions.invoke('j_admin_users', {
+      body: { action, ...(payload || {}), gatePassword: String(gatePassword || '') }
+    });
+    if (error) {
+      let message = error.message || 'Không thể thực hiện thao tác quản trị.';
+      try {
+        if (error.context && typeof error.context.json === 'function') {
+          const body = await error.context.json();
+          if (body && body.error) message = body.error;
+        }
+      } catch (_) { /* Giữ thông báo gốc của SDK. */ }
+      throw new Error(message);
+    }
+    if (data && data.error) throw new Error(data.error);
+    return data || {};
   }
 
   async function signOut() {
@@ -174,6 +243,6 @@
   window.AppDB = {
     init, loadSdk, isConfigured, getClient, getUser, signIn, signUp, signOut,
     getPublishedContent, isAdmin, importBatch, getBatchHistory, getContentVersions, restoreContentVersion,
-    getUserProgress, syncUserProgress, onAuthStateChange
+    getUserProgress, syncUserProgress, onAuthStateChange, adminUsers, normalizeUsername
   };
 })();

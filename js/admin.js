@@ -3,6 +3,8 @@
   const $ = (id) => document.getElementById(id);
   let pendingData = null;
   let adminUser = null;
+  let adminGatePassword = '';
+  let adminUsersCache = [];
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -220,32 +222,175 @@
     }
   }
 
+  function setUserMessage(text, kind) {
+    const element = $('admin-user-message');
+    element.textContent = text;
+    element.className = `admin-message${kind ? ` ${kind}` : ''}`;
+    element.hidden = false;
+  }
+
+  function showGate(user) {
+    adminUser = user;
+    adminGatePassword = '';
+    $('admin-login-panel').hidden = true;
+    $('admin-denied-panel').hidden = true;
+    $('admin-workspace').hidden = true;
+    $('admin-gate-panel').hidden = false;
+    $('admin-logout').hidden = false;
+    $('admin-gate-password').value = '';
+    $('admin-gate-error').textContent = '';
+  }
+
   function showWorkspace(user) {
     adminUser = user;
     $('admin-login-panel').hidden = true;
     $('admin-denied-panel').hidden = true;
+    $('admin-gate-panel').hidden = true;
     $('admin-workspace').hidden = false;
     $('admin-logout').hidden = false;
     $('batch-code').value = makeBatchCode();
     loadHistory();
     loadVersions();
+    loadUsers();
   }
 
   async function checkAdmin(user) {
     try {
       const allowed = await AppDB.isAdmin();
       if (allowed) {
-        showWorkspace(user);
+        showGate(user);
       } else {
+        adminGatePassword = '';
         $('admin-login-panel').hidden = true;
+        $('admin-gate-panel').hidden = true;
         $('admin-workspace').hidden = true;
         $('admin-denied-panel').hidden = false;
-        $('admin-current-user').textContent = `UUID: ${user.id} · Email: ${user.email || 'không có'}`;
+        $('admin-current-user').textContent = `UUID: ${user.id} · Tài khoản: ${user.user_metadata?.username || user.email || 'không có'}`;
         $('admin-logout').hidden = false;
       }
     } catch (error) {
       $('admin-login-panel').hidden = false;
       $('admin-login-error').textContent = `Không kiểm tra được quyền quản trị. Hãy chạy supabase/schema.sql. ${error.message || ''}`;
+    }
+  }
+
+  async function verifyAdminGate(event) {
+    event.preventDefault();
+    const password = $('admin-gate-password').value;
+    const button = $('admin-gate-form').querySelector('button[type="submit"]');
+    $('admin-gate-error').textContent = '';
+    button.disabled = true;
+    button.textContent = 'Đang xác thực…';
+    try {
+      await AppDB.adminUsers('verify_gate', {}, password);
+      adminGatePassword = password;
+      showWorkspace(adminUser || await AppDB.getUser());
+    } catch (error) {
+      $('admin-gate-error').textContent = `${error.message || 'Không xác thực được.'} Nếu Edge Function chưa được triển khai, hãy làm theo mục Quản trị tài khoản trong README.`;
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Mở trang quản trị';
+    }
+  }
+
+  function formatUserDate(value) {
+    if (!value) return 'Chưa đăng nhập';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  }
+
+  function renderUsers(users) {
+    adminUsersCache = Array.isArray(users) ? users : [];
+    const learners = adminUsersCache.filter((user) => !user.is_admin).length;
+    $('admin-user-count').textContent = `${learners} học viên · Không giới hạn`;
+    const host = $('admin-user-list');
+    if (!adminUsersCache.length) {
+      host.innerHTML = '<div class="empty-message">Chưa có tài khoản nào. Người học có thể tự đăng ký từ ứng dụng.</div>';
+      return;
+    }
+    host.innerHTML = adminUsersCache.map((user) => {
+      const locked = Boolean(user.banned_until && new Date(user.banned_until).getTime() > Date.now());
+      const role = user.is_admin ? 'Quản trị viên' : 'Học viên';
+      const status = user.is_admin ? 'Tài khoản được bảo vệ' : locked ? 'Đang khóa' : 'Đang hoạt động';
+      const avatar = Array.from(String(user.username || 'U'))[0].toUpperCase();
+      const controls = user.is_admin ? '<p class="admin-user-protected">Không hiển thị thao tác đối với tài khoản quản trị.</p>' : `
+        <div class="admin-user-reset-row">
+          <input class="admin-user-password" data-user-password="${escapeHtml(user.id)}" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="Mật khẩu mới (ít nhất 8 ký tự)">
+          <button class="button button-outline" data-user-action="reset_password" data-user-id="${escapeHtml(user.id)}" type="button">Đặt lại mật khẩu</button>
+        </div>
+        <div class="admin-user-buttons">
+          <button class="button button-outline" data-user-action="set_status" data-user-id="${escapeHtml(user.id)}" data-disabled="${locked ? 'true' : 'false'}" type="button">${locked ? 'Mở khóa' : 'Khóa tài khoản'}</button>
+          <button class="button button-danger" data-user-action="delete" data-user-id="${escapeHtml(user.id)}" type="button">Xóa tài khoản</button>
+        </div>`;
+      return `<article class="admin-user-card">
+        <div class="admin-user-main"><span class="admin-user-avatar">${escapeHtml(avatar)}</span><div class="admin-user-copy"><strong>${escapeHtml(user.username || 'Tài khoản')}</strong><small>${escapeHtml(role)} · Tạo ${escapeHtml(formatUserDate(user.created_at))}</small><small>Đăng nhập gần nhất: ${escapeHtml(formatUserDate(user.last_sign_in_at))}</small><span class="admin-user-status ${locked ? 'is-locked' : ''}">${escapeHtml(status)}</span></div></div>
+        <div class="admin-user-actions">${controls}</div>
+      </article>`;
+    }).join('');
+  }
+
+  async function loadUsers() {
+    const host = $('admin-user-list');
+    host.innerHTML = '<div class="empty-message">Đang tải danh sách tài khoản…</div>';
+    try {
+      const result = await AppDB.adminUsers('list', {}, adminGatePassword);
+      renderUsers(result.users || []);
+    } catch (error) {
+      host.innerHTML = `<div class="empty-message">Không tải được tài khoản: ${escapeHtml(error.message)}. Kiểm tra Edge Function j_admin_users.</div>`;
+    }
+  }
+
+  async function createLearner(event) {
+    event.preventDefault();
+    const username = $('admin-new-username').value.trim().toLowerCase();
+    const password = $('admin-new-password').value;
+    const button = $('admin-create-user-button');
+    button.disabled = true;
+    button.textContent = 'Đang tạo…';
+    try {
+      const result = await AppDB.adminUsers('create', { username, password }, adminGatePassword);
+      $('admin-create-user-form').reset();
+      setUserMessage(`Đã tạo tài khoản ${result.user?.username || username}. Có thể đăng nhập ngay bằng tên đăng nhập và mật khẩu vừa đặt.`, 'success');
+      await loadUsers();
+    } catch (error) {
+      setUserMessage(`Không tạo được tài khoản: ${error.message}`, 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = '+ Tạo tài khoản học viên';
+    }
+  }
+
+  async function handleUserAction(event) {
+    const button = event.target.closest('[data-user-action]');
+    if (!button) return;
+    const userId = button.dataset.userId;
+    const action = button.dataset.userAction;
+    button.disabled = true;
+    try {
+      if (action === 'reset_password') {
+        const input = $('admin-user-list').querySelector(`[data-user-password="${userId}"]`);
+        const password = input ? input.value : '';
+        if (password.length < 8) throw new Error('Mật khẩu mới cần ít nhất 8 ký tự.');
+        await AppDB.adminUsers('reset_password', { userId, password }, adminGatePassword);
+        input.value = '';
+        setUserMessage('Đã đặt lại mật khẩu. Hãy gửi mật khẩu mới cho đúng người học.', 'success');
+      } else if (action === 'set_status') {
+        const currentlyLocked = button.dataset.disabled === 'true';
+        await AppDB.adminUsers('set_status', { userId, disabled: !currentlyLocked }, adminGatePassword);
+        setUserMessage(currentlyLocked ? 'Đã mở khóa tài khoản.' : 'Đã khóa tài khoản. Người dùng sẽ không thể đăng nhập.', 'success');
+      } else if (action === 'delete') {
+        const target = adminUsersCache.find((user) => user.id === userId);
+        const username = target ? target.username : 'tài khoản này';
+        if (!window.confirm(`Xóa ${username}? Thao tác này xóa tài khoản Supabase và dữ liệu tiến độ gắn với tài khoản đó, không thể hoàn tác.`)) return;
+        await AppDB.adminUsers('delete', { userId }, adminGatePassword);
+        setUserMessage(`Đã xóa ${username}. Dữ liệu tiến độ của tài khoản này cũng đã bị xóa.`, 'success');
+      }
+      await loadUsers();
+    } catch (error) {
+      setUserMessage(`Không thực hiện được thao tác: ${error.message}`, 'error');
+    } finally {
+      button.disabled = false;
     }
   }
 
@@ -271,7 +416,9 @@
     AppDB.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session && session.user) checkAdmin(session.user);
       if (event === 'SIGNED_OUT') {
+        adminGatePassword = '';
         $('admin-workspace').hidden = true;
+        $('admin-gate-panel').hidden = true;
         $('admin-denied-panel').hidden = true;
         $('admin-login-panel').hidden = false;
         $('admin-logout').hidden = true;
@@ -291,7 +438,12 @@
         $('admin-login-error').textContent = error.message || 'Không thể đăng nhập.';
       }
     });
+    $('admin-gate-form').addEventListener('submit', verifyAdminGate);
+    $('admin-create-user-form').addEventListener('submit', createLearner);
+    $('admin-user-list').addEventListener('click', handleUserAction);
+    $('admin-refresh-users').addEventListener('click', loadUsers);
     $('admin-logout').addEventListener('click', async () => {
+      adminGatePassword = '';
       try { await AppDB.signOut(); } catch (error) { $('admin-login-error').textContent = error.message; }
     });
     $('admin-file').addEventListener('change', async (event) => {
