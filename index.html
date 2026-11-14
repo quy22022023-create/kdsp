@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>Nhật Ngữ N5–N3 Flashcards</title>
+  <meta name="referrer" content="no-referrer" />
+  <title>Nhật Ngữ N5–N3 Flashcards &amp; Dịch Câu</title>
 
   <!-- Hỗ trợ thêm vào Màn hình chính iPhone (Safari Web App) -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -17,7 +18,7 @@
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet" />
 
   <!-- Liên kết tệp CSS rời -->
   <link rel="stylesheet" href="style.css" />
@@ -34,7 +35,7 @@
           <div class="brand-logo">文</div>
           <div>
             <h1 class="brand-title">Kho Từ Vựng N5–N3</h1>
-            <p class="brand-sub">Lộ trình JLPT phân cấp thông minh</p>
+            <p class="brand-sub">Lộ trình JLPT &amp; Luyện dịch câu</p>
           </div>
         </div>
 
@@ -84,14 +85,17 @@
         </div>
       </div>
 
-      <!-- TẦNG 2: CHẾ ĐỘ HỌC & BỘ LỌC CHỦ ĐỀ -->
+      <!-- TẦNG 2: CHẾ ĐỘ HỌC (3 CHẾ ĐỘ) & BỘ LỌC CHỦ ĐỀ -->
       <div id="toolbar-section" style="display: none;">
-        <div class="mode-switcher">
+        <div class="mode-switcher three-cols">
           <button id="mode-flashcard-btn" type="button" class="mode-btn active" onclick="setMode('flashcard')">
             Lật Thẻ 3D
           </button>
           <button id="mode-quiz-btn" type="button" class="mode-btn" onclick="setMode('quiz')">
-            Trắc Nghiệm Theo Cấp
+            Trắc Nghiệm
+          </button>
+          <button id="mode-translate-btn" type="button" class="mode-btn" onclick="setMode('translate')">
+            Dịch Câu
           </button>
         </div>
 
@@ -122,9 +126,12 @@
       <section id="empty-app-state" class="empty-box">
         <div class="empty-icon">{ }</div>
         <h2>Kho từ vựng N5–N3 đang trống</h2>
-        <p>Bạn có thể thêm từ vựng trực tiếp vào tệp <strong>data.js</strong> hoặc bấm nút bên dưới để dán dữ liệu <strong>JSON</strong> (có tự động kiểm tra trùng lặp).</p>
+        <p>Bạn có thể thêm từ vựng và câu dịch vào tệp <strong>data.js</strong> hoặc bấm nút bên dưới để dán dữ liệu <strong>JSON</strong>.</p>
         <button type="button" class="btn-primary" onclick="openImportModal()">
           + Nhập Dữ Liệu JSON Ngay
+        </button>
+        <button type="button" class="btn-outline full" onclick="loadQuickDemoSession()">
+          ⚡ Dùng thử nhanh bài mẫu (Từ vựng + Dịch câu)
         </button>
       </section>
 
@@ -250,6 +257,91 @@
           </div>
         </div>
       </section>
+
+      <!-- CHẾ ĐỘ 3: DỊCH CÂU GHÉP TỪ (PHONG CÁCH DUOLINGO) -->
+      <section id="translate-view" class="duo-view" style="display: none;">
+        <!-- Bài luyện đang diễn ra -->
+        <div id="duo-active-box" class="duo-active">
+          <!-- Thanh tiến độ vàng + điểm năng lượng -->
+          <div class="duo-top-bar">
+            <span id="duo-step-label" class="duo-step-text">1/5</span>
+            <div class="duo-progress-track">
+              <div id="duo-progress-fill" class="duo-progress-fill" style="width: 0%;"></div>
+            </div>
+            <div class="duo-energy-pill" title="Điểm năng lượng bài dịch">
+              <span class="duo-bolt">⚡</span>
+              <span id="duo-energy-count">0</span>
+            </div>
+          </div>
+
+          <div class="duo-heading-row">
+            <h2 class="duo-heading">Dịch câu này</h2>
+            <span id="duo-source-badge" class="duo-source-tag">N5</span>
+          </div>
+
+          <!-- Dòng câu tiếng Nhật có loa xanh & từ gạch chân nét đứt -->
+          <div class="duo-prompt-row">
+            <button type="button" class="duo-speaker-btn" onclick="speakTranslateSentence()" aria-label="Nghe cả câu">
+              🔊
+            </button>
+            <div id="duo-tokens-wrap" class="duo-tokens-wrap"></div>
+          </div>
+
+          <!-- Popover giải nghĩa khi chạm vào từng từ tiếng Nhật -->
+          <div id="duo-token-tooltip" class="duo-token-tooltip" style="display: none;">
+            <div class="duo-tip-top">
+              <span id="duo-tip-jp" class="duo-tip-jp">ちいさい</span>
+              <span id="duo-tip-romaji" class="duo-tip-romaji">chiisai</span>
+            </div>
+            <div id="duo-tip-vi" class="duo-tip-vi">nhỏ, bé</div>
+          </div>
+
+          <!-- Khu vực 2 dòng kẻ để ghép câu trả lời -->
+          <div class="duo-answer-stage" onclick="hideTokenTooltip()">
+            <div id="duo-answer-slots" class="duo-answer-slots"></div>
+            <div class="duo-ruled-line"></div>
+            <div class="duo-ruled-line second"></div>
+          </div>
+
+          <!-- Ngân hàng thẻ từ (Word Bank) -->
+          <div id="duo-word-bank" class="duo-word-bank"></div>
+
+          <!-- Khu vực kiểm tra & phản hồi dưới cùng -->
+          <div class="duo-bottom-area">
+            <button id="duo-check-btn" type="button" class="duo-check-btn" disabled onclick="checkTranslateAnswer()">
+              KIỂM TRA
+            </button>
+
+            <div id="duo-feedback-sheet" class="duo-feedback-sheet" style="display: none;">
+              <div class="duo-fb-header">
+                <span id="duo-fb-icon" class="duo-fb-icon">✓</span>
+                <div>
+                  <div id="duo-fb-title" class="duo-fb-title">Tuyệt vời!</div>
+                  <div id="duo-fb-subtitle" class="duo-fb-subtitle"></div>
+                </div>
+              </div>
+              <button id="duo-continue-btn" type="button" class="duo-continue-btn" onclick="nextTranslateQuestion()">
+                TIẾP TỤC
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Màn hình tổng kết bài Dịch Câu -->
+        <div id="duo-summary-box" class="empty-box" style="display: none;">
+          <div class="empty-icon success">⚡</div>
+          <h3>Hoàn thành bài luyện Dịch Câu!</h3>
+          <p id="duo-final-score-text" class="final-score">Đạt 0 điểm năng lượng</p>
+          <div class="summary-actions">
+            <button type="button" class="btn-primary" onclick="startTranslateLesson()">
+              Luyện bài dịch mới ↻
+            </button>
+            <button type="button" class="btn-outline full" onclick="setMode('flashcard')">
+              Quay lại Lật Thẻ 3D
+            </button>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -258,8 +350,8 @@
     <div class="modal-panel">
       <div class="modal-header">
         <div>
-          <h2>Nhập Từ Vựng Vào Kho Chung</h2>
-          <p>Hỗ trợ phân cấp N5, N4, N3 &amp; tự động kiểm tra trùng</p>
+          <h2>Nhập Dữ Liệu Vào Kho Chung</h2>
+          <p>Hỗ trợ từ vựng N5–N3 &amp; bài tập Dịch Câu (Duolingo)</p>
         </div>
         <button type="button" class="close-btn" onclick="closeImportModal()">✕</button>
       </div>
@@ -276,7 +368,7 @@
 
         <div class="form-group">
           <label for="import-default-topic">Chủ đề / Bài mặc định</label>
-          <input type="text" id="import-default-topic" placeholder="VD: Bài 1, Động từ..." oninput="runLiveDuplicateCheck()" />
+          <input type="text" id="import-default-topic" placeholder="VD: Bài 1, Hội thoại..." oninput="runLiveDuplicateCheck()" />
         </div>
       </div>
 
@@ -286,7 +378,7 @@
           <div class="label-actions">
             <button type="button" class="link-btn" onclick="runLiveDuplicateCheck(true)">🔍 Check trùng</button>
             <span class="dot">•</span>
-            <button type="button" class="link-btn" onclick="fillSampleJson()">Điền mẫu N5–N3</button>
+            <button type="button" class="link-btn" onclick="fillSampleJson()">Điền mẫu Từ &amp; Câu</button>
           </div>
         </div>
         <textarea
@@ -296,12 +388,29 @@
           placeholder='[
   {
     "level": "N5",
-    "topic": "Bài 1",
-    "jp": "たべます",
-    "kanji": "食べます",
-    "romaji": "tabemasu",
-    "vi": "Ăn",
-    "mnemonic": "Bộ Thực (食 - ăn)"
+    "topic": "Tính từ & Quốc gia",
+    "jp": "ちいさい",
+    "kanji": "小さい",
+    "romaji": "chiisai",
+    "vi": "Nhỏ, bé",
+    "mnemonic": "Chữ Tiểu (小)"
+  },
+  {
+    "type": "sentence",
+    "level": "N5",
+    "topic": "Tính từ & Quốc gia",
+    "jp": "ベトナムはちいさいですか。",
+    "romaji": "Betonamu wa chiisai desu ka.",
+    "tokens": [
+      { "jp": "ベトナム", "romaji": "Betonamu", "vi": "Việt Nam" },
+      { "jp": "は", "romaji": "wa", "vi": "thì" },
+      { "jp": "ちいさい", "romaji": "chiisai", "vi": "nhỏ" },
+      { "jp": "です", "romaji": "desu", "vi": "là/thì" },
+      { "jp": "か", "romaji": "ka", "vi": "không?" }
+    ],
+    "vi": "Việt Nam có nhỏ không?",
+    "vi_blocks": ["Việt", "Nam", "có", "nhỏ", "không"],
+    "distractors": ["người Nhật", "người Canada"]
   }
 ]'
         ></textarea>
@@ -310,13 +419,13 @@
       <!-- DÒNG CHECK TỪ VỰNG BỊ TRÙNG TRỰC TIẾP -->
       <div id="import-dup-check-box" class="dup-check-box neutral">
         <div class="dup-check-header">
-          <span id="import-dup-summary">🔍 Dán JSON để tự động kiểm tra từ trùng lặp với kho hiện tại.</span>
+          <span id="import-dup-summary">🔍 Dán JSON để tự động kiểm tra trùng lặp với kho hiện tại.</span>
         </div>
         <div id="import-dup-list" class="dup-detail-list" style="display: none;"></div>
         <div id="import-dup-policy-row" class="dup-policy-row" style="display: none;">
-          <label for="dup-handling-mode">Xử lý từ trùng:</label>
+          <label for="dup-handling-mode">Xử lý mục trùng:</label>
           <select id="dup-handling-mode" class="mini-select">
-            <option value="skip">Bỏ qua từ trùng (chỉ thêm từ mới)</option>
+            <option value="skip">Bỏ qua mục trùng (chỉ thêm mới)</option>
             <option value="overwrite">Cập nhật đè thông tin mới</option>
           </select>
         </div>
@@ -366,7 +475,7 @@
         var banner = document.getElementById('data-error-banner');
         if (banner) {
           banner.style.display = 'block';
-          banner.innerHTML = '⚠️ <strong>Lỗi cú pháp trong tệp data.js (dòng ' + e.lineno + '):</strong> ' + e.message + '<br/>Hãy kiểm tra xem có thiếu dấu phẩy (,) giữa các từ hoặc còn dính ký tự ``` ở đầu/cuối tệp không.';
+          banner.innerHTML = '⚠️ <strong>Lỗi cú pháp trong tệp data.js (dòng ' + e.lineno + '):</strong> ' + e.message + '<br/>Hãy kiểm tra xem có thiếu dấu phẩy (,) giữa các mục hoặc còn dính ký tự thừa ở đầu/cuối tệp không.';
         }
       }
     });
