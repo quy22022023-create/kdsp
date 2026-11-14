@@ -5,8 +5,8 @@
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f6f7fb",
-  "theme_color": "#f6f7fb",
+  "background_color": "#fff8fc",
+  "theme_color": "#fff8fc",
   "description": "Ứng dụng học tiếng Nhật theo lộ trình, có từ vựng, ngữ pháp, luyện tập và ôn tập.",
   "icons": [
     {

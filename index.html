@@ -142,8 +142,8 @@
             <summary><span><strong>🎧 Cài đặt giọng đọc</strong><small>Chọn giọng Nhật và điều chỉnh tốc độ, cao độ.</small></span><span class="voice-settings-chevron">⌄</span></summary>
             <div class="voice-settings-body">
               <label class="voice-field">Giọng tiếng Nhật<select id="speech-voice-select"><option value="">Đang tìm giọng đọc…</option></select></label>
-              <div class="voice-slider-row"><label for="speech-rate">Tốc độ đọc <strong id="speech-rate-value">0.84×</strong></label><input id="speech-rate" type="range" min="0.70" max="1.05" step="0.01" value="0.84"></div>
-              <div class="voice-slider-row"><label for="speech-pitch">Độ cao giọng <strong id="speech-pitch-value">1.10</strong></label><input id="speech-pitch" type="range" min="0.85" max="1.30" step="0.01" value="1.10"></div>
+              <div class="voice-slider-row"><label for="speech-rate">Tốc độ đọc <strong id="speech-rate-value">0.92×</strong></label><input id="speech-rate" type="range" min="0.70" max="1.15" step="0.01" value="0.92"></div>
+              <div class="voice-slider-row"><label for="speech-pitch">Độ cao giọng <strong id="speech-pitch-value">1.04</strong></label><input id="speech-pitch" type="range" min="0.85" max="1.30" step="0.01" value="1.04"></div>
               <button id="speech-preview-button" class="button button-outline button-full" type="button">♡ Nghe thử giọng đọc</button>
               <p class="voice-note">Giọng khả dụng phụ thuộc vào iPhone, Android hoặc trình duyệt. Nếu chưa có giọng Nhật, hãy cài thêm Japanese trong cài đặt giọng nói của thiết bị.</p>
             </div>
@@ -198,8 +198,8 @@
       <p class="eyebrow">ĐỒNG BỘ TIẾN ĐỘ</p><h2 id="account-modal-title">Học không cần tài khoản</h2>
       <p id="account-modal-description" class="muted">Tiến độ hiện tại được lưu trên thiết bị. Đăng nhập để đồng bộ sang thiết bị khác.</p>
       <div id="account-user-panel" hidden><div class="signed-in-card"><span class="signed-in-mark">✓</span><div><strong id="account-user-email"></strong><small>Đã kết nối tài khoản</small></div></div><button id="sync-now-button" class="button button-primary button-full" type="button">Đồng bộ ngay</button><button id="sign-out-button" class="button button-outline button-full" type="button">Đăng xuất</button></div>
-      <form id="account-form"><label>Email<input id="account-email" type="email" required autocomplete="email" placeholder="ban@email.com"></label><label>Mật khẩu<input id="account-password" type="password" required minlength="6" autocomplete="current-password" placeholder="Tối thiểu 6 ký tự"></label><p id="account-error" class="form-error" role="alert"></p><button id="account-submit" class="button button-primary button-full" type="submit">Đăng nhập và đồng bộ</button><button id="account-mode-toggle" class="text-button button-full" type="button">Chưa có tài khoản? Tạo tài khoản</button></form>
-      <p class="privacy-note">Không đăng nhập vẫn học được. Dữ liệu tiến độ khách được giữ trên trình duyệt hiện tại; hãy đăng nhập nếu muốn đồng bộ nhiều thiết bị.</p>
+      <form id="account-form"><label>Tên đăng nhập<input id="account-username" type="text" required minlength="3" maxlength="254" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Ví dụ: yuki_01"></label><label>Mật khẩu<input id="account-password" type="password" required minlength="1" autocomplete="current-password" placeholder="Nhập mật khẩu"></label><small id="account-identity-note" class="account-identity-note">Đăng nhập bằng tên đăng nhập. Không cần email thật.</small><p id="account-error" class="form-error" role="alert"></p><button id="account-submit" class="button button-primary button-full" type="submit">Đăng nhập và đồng bộ</button><button id="account-mode-toggle" class="text-button button-full" type="button">Chưa có tài khoản? Tạo tài khoản</button></form>
+      <p class="privacy-note">Không cần email thật. Tên đăng nhập giúp lưu tiến độ riêng và đồng bộ giữa các thiết bị. Không đăng nhập vẫn có thể học trên thiết bị hiện tại.</p>
     </section>
   </div>
 

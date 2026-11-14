@@ -28,7 +28,7 @@
     <section id="admin-login-panel" class="panel admin-login" hidden>
       <p class="eyebrow">XÁC THỰC QUẢN TRỊ</p><h2>Đăng nhập</h2><p class="muted">Dùng tài khoản Supabase đã được cấp quyền quản trị.</p>
       <form id="admin-login-form">
-        <label>Email<input id="admin-email" type="email" required autocomplete="username" placeholder="admin@email.com"></label>
+        <label>Email hoặc tên đăng nhập<input id="admin-email" type="text" required autocomplete="username" autocapitalize="none" placeholder="admin hoặc admin@email.com"></label>
         <label>Mật khẩu<input id="admin-password" type="password" required autocomplete="current-password" placeholder="Mật khẩu"></label>
         <button class="button button-primary" type="submit">Đăng nhập</button>
         <p id="admin-login-error" class="form-error" role="alert"></p>
@@ -40,7 +40,29 @@
       <h2>Tài khoản chưa có quyền quản trị</h2><p>Đăng nhập thành công nhưng UUID tài khoản chưa được thêm vào bảng <code>j_admins</code>. Hãy cấp quyền trong Supabase SQL Editor rồi tải lại trang.</p><p id="admin-current-user" class="admin-message"></p>
     </section>
 
-    <div id="admin-workspace" class="admin-grid" hidden>
+    <section id="admin-gate-panel" class="panel admin-login" hidden>
+      <p class="eyebrow">LỚP BẢO VỆ THỨ HAI</p><h2>Mật khẩu quản trị</h2>
+      <p class="muted">Tài khoản đã có quyền quản trị. Nhập mật khẩu riêng để mở khu vực quản lý.</p>
+      <form id="admin-gate-form">
+        <label>Mật khẩu quản trị<input id="admin-gate-password" type="password" required autocomplete="current-password" placeholder="Mật khẩu quản trị"></label>
+        <button class="button button-primary" type="submit">Mở trang quản trị</button>
+        <p id="admin-gate-error" class="form-error" role="alert"></p>
+      </form>
+      <p class="admin-footer">Lớp mật khẩu này được xác thực ở Supabase Edge Function, không lưu trong mã nguồn trình duyệt.</p>
+    </section>
+
+    <div id="admin-workspace" class="admin-workspace" hidden>
+      <section id="admin-users-panel" class="panel admin-panel">
+        <div class="admin-users-heading"><div><p class="eyebrow">TÀI KHOẢN NGƯỜI HỌC</p><h2>Quản lý học viên</h2><p class="muted">Không giới hạn số lượng tài khoản. Có thể tạo tài khoản, đặt lại mật khẩu, khóa/mở và xóa người dùng.</p><span id="admin-user-count" class="admin-user-count">Đang tải…</span></div><button id="admin-refresh-users" class="button button-outline" type="button">Làm mới danh sách</button></div>
+        <form id="admin-create-user-form" class="admin-form admin-create-user-form">
+          <div class="admin-row"><label>Tên đăng nhập<input id="admin-new-username" type="text" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_.-]{3,24}" autocomplete="off" placeholder="Ví dụ: hana_02"></label><label>Mật khẩu ban đầu<input id="admin-new-password" type="password" required minlength="8" autocomplete="new-password" placeholder="Ít nhất 8 ký tự"></label></div>
+          <button id="admin-create-user-button" class="button button-primary" type="submit">+ Tạo tài khoản học viên</button>
+        </form>
+        <p id="admin-user-message" class="admin-message" hidden role="status"></p>
+        <div id="admin-user-list" class="admin-user-list"><div class="empty-message">Đang tải danh sách tài khoản…</div></div>
+      </section>
+
+      <div class="admin-grid">
       <section class="panel admin-panel">
         <p class="eyebrow">NẠP DỮ LIỆU THEO ĐỢT</p><h2>Tạo đợt học liệu mới</h2><p>Nhận mảng JSON, object có các khóa vocabulary/grammar/exercises hoặc tệp JS xuất từ kho cũ (VOCAB_DATA, EXERCISE_DATA, GRAMMAR_DATA). Dữ liệu chỉ được xuất bản sau khi xác nhận nạp.</p>
         <form id="admin-import-form" class="admin-form">
@@ -68,6 +90,7 @@ Hoặc object: {"vocabulary":[],"grammar":[],"exercises":[]}'></textarea></label
         <div id="admin-versions" class="history-list"><div class="empty-message">Chưa có bản lưu phiên bản.</div></div>
         <div class="admin-footer">Chính sách mặc định: không ghi đè nội dung trùng. Nếu bật cập nhật, bản cũ được lưu vào j_content_versions trước khi cập nhật. Có thể khôi phục bản lưu; tiến độ người học vẫn được giữ theo ID.</div>
       </aside>
+      </div>
     </div>
   </main>
 </body>
