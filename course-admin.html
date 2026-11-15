@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fff8fc">
+  <meta name="description" content="Quản lý khóa học, chương, bài học và học liệu KDSP.">
+  <title>Quản trị khóa học — KDSP</title>
+  <link rel="stylesheet" href="./course-admin.css">
+  <script defer src="./config.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script defer src="./js/db.js"></script>
+  <script defer src="./js/course-admin.js"></script>
+</head>
+<body class="cms-body">
+  <main class="cms-shell">
+    <header class="cms-header">
+      <div>
+        <a class="cms-brand" href="./index.html"><span class="cms-brand-mark">文</span><span><strong>KDSP · Quản trị khóa học</strong><small>Kho học liệu GitHub</small></span></a>
+        <h1>Quản lý khóa học</h1>
+        <p class="cms-subtitle">Tạo khóa học, chương, bài học và các hoạt động luyện tập.</p>
+      </div>
+      <div class="cms-header-actions">
+        <a class="cms-button cms-button-light" href="./admin.html">Quản trị tài khoản</a>
+        <a class="cms-button cms-button-light" href="./index.html">Về ứng dụng</a>
+        <button id="cms-logout" class="cms-button cms-button-light" type="button" hidden>Đăng xuất</button>
+      </div>
+    </header>
+
+    <section id="cms-setup-warning" class="cms-panel" hidden>
+      <h2>Chưa cấu hình Supabase</h2>
+      <p>Trang này dùng Supabase Auth để xác thực quản trị. Kiểm tra <code>config.js</code> và thư viện Supabase trước khi tiếp tục.</p>
+    </section>
+
+    <section id="cms-login-panel" class="cms-panel cms-auth-panel" hidden>
+      <p class="cms-eyebrow">XÁC THỰC QUẢN TRỊ</p>
+      <h2>Đăng nhập</h2>
+      <p class="cms-muted">Dùng tài khoản Admin đã được cấp quyền trong bảng <code>j_admins</code>.</p>
+      <form id="cms-login-form" class="cms-form">
+        <label>Email hoặc tên đăng nhập<input id="cms-login-identifier" type="text" required autocomplete="username" autocapitalize="none" placeholder="Tên đăng nhập hoặc email"></label>
+        <label>Mật khẩu tài khoản<input id="cms-login-password" type="password" required autocomplete="current-password" placeholder="Mật khẩu đăng nhập"></label>
+        <button class="cms-button cms-button-primary" type="submit">Đăng nhập</button>
+        <p id="cms-login-error" class="cms-message cms-message-error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <section id="cms-denied-panel" class="cms-panel" hidden>
+      <h2>Tài khoản chưa có quyền quản trị</h2>
+      <p>Tài khoản đã đăng nhập nhưng chưa có UUID trong bảng <code>public.j_admins</code>. Hãy cấp quyền Admin rồi tải lại trang.</p>
+      <p id="cms-denied-user" class="cms-muted"></p>
+    </section>
+
+    <section id="cms-gate-panel" class="cms-panel cms-auth-panel" hidden>
+      <p class="cms-eyebrow">LỚP BẢO VỆ THỨ HAI</p>
+      <h2>Mật khẩu quản trị</h2>
+      <p class="cms-muted">Nhập mật khẩu quản trị riêng đã cấu hình trong Supabase Edge Function Secrets.</p>
+      <form id="cms-gate-form" class="cms-form">
+        <label>Mật khẩu quản trị<input id="cms-gate-password" type="password" required autocomplete="current-password" placeholder="Mật khẩu quản trị"></label>
+        <button class="cms-button cms-button-primary" type="submit">Mở trình quản lý</button>
+        <p id="cms-gate-error" class="cms-message cms-message-error" role="alert" hidden></p>
+      </form>
+    </section>
+
+    <div id="cms-workspace" hidden>
+      <section class="cms-panel cms-toolbar-panel">
+        <div class="cms-toolbar-top">
+          <div>
+            <p class="cms-eyebrow">TRẠNG THÁI KHO HỌC LIỆU</p>
+            <h2 id="cms-repo-status">Đang tải dữ liệu…</h2>
+            <p id="cms-version-status" class="cms-muted">Đang đọc manifest từ GitHub.</p>
+          </div>
+          <span id="cms-dirty-indicator" class="cms-status-pill">Đã đồng bộ</span>
+        </div>
+        <div class="cms-counts" id="cms-counts"></div>
+        <div class="cms-toolbar-actions">
+          <button id="cms-refresh" class="cms-button cms-button-light" type="button">Tải lại GitHub</button>
+          <button id="cms-import-workspace" class="cms-button cms-button-light" type="button">Nhập JSON</button>
+          <input id="cms-import-file" type="file" accept=".json,application/json" hidden>
+          <button id="cms-export-workspace" class="cms-button cms-button-light" type="button">Xuất JSON</button>
+          <button id="cms-save-draft" class="cms-button cms-button-secondary" type="button">Lưu bản nháp</button>
+          <button id="cms-publish" class="cms-button cms-button-primary" type="button">Xuất bản lên GitHub</button>
+        </div>
+        <p id="cms-global-message" class="cms-message" role="status" hidden></p>
+        <p class="cms-public-note"><strong>Lưu ý:</strong> Tất cả khóa học được xuất bản công khai theo chính sách đã chọn. Đáp án và lời giải cũng có thể được tải xuống; không đưa nội dung riêng tư vào đây.</p>
+      </section>
+
+      <section class="cms-panel">
+        <div class="cms-section-heading"><div><p class="cms-eyebrow">BƯỚC 1</p><h2>Khóa học</h2><p class="cms-muted">Mỗi khóa học có cấp độ, mô tả và danh sách chương.</p></div><button id="cms-add-course" class="cms-button cms-button-primary" type="button">+ Tạo khóa học</button></div>
+        <div class="cms-editor-grid">
+          <div><h3 class="cms-small-heading">Danh sách khóa học</h3><div id="cms-course-list" class="cms-item-list"><p class="cms-empty">Chưa có khóa học. Hãy tạo khóa học đầu tiên.</p></div></div>
+          <form id="cms-course-form" class="cms-form cms-editor-form">
+            <div class="cms-form-heading"><h3>Thông tin khóa học</h3><span id="cms-course-id-label" class="cms-id-label">Chưa chọn</span></div>
+            <label>Tên khóa học<input id="cms-course-title" type="text" maxlength="120" required placeholder="Ví dụ: Tiếng Nhật N5 từ cơ bản"></label>
+            <div class="cms-form-row">
+              <label>Cấp độ<select id="cms-course-level"><option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option><option value="OTHER">Khác</option></select></label>
+              <label>Thứ tự<input id="cms-course-order" type="number" min="0" step="1" value="1"></label>
+            </div>
+            <label>Slug đường dẫn<input id="cms-course-slug" type="text" maxlength="48" required placeholder="tieng-nhat-n5"></label>
+            <label>Mô tả<textarea id="cms-course-description" rows="3" maxlength="1500" placeholder="Mục tiêu và nội dung khóa học"></textarea></label>
+            <label>Thời lượng dự kiến (phút)<input id="cms-course-minutes" type="number" min="0" step="1" value="0"></label>
+            <label>Tags, cách nhau bằng dấu phẩy<input id="cms-course-tags" type="text" placeholder="JLPT, nhập môn, giao tiếp"></label>
+            <label>Mục tiêu học tập, mỗi dòng một mục<textarea id="cms-course-objectives" rows="3" placeholder="Đọc được Hiragana và Katakana&#10;Giới thiệu bản thân"></textarea></label>
+            <div class="cms-form-actions"><button class="cms-button cms-button-primary" type="submit">Lưu thông tin khóa học</button><button id="cms-delete-course" class="cms-button cms-button-danger" type="button" disabled>Xóa khóa học</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="cms-panel">
+        <div class="cms-section-heading"><div><p class="cms-eyebrow">BƯỚC 2</p><h2>Chương học</h2><p class="cms-muted">Chọn khóa học trước, sau đó thêm các chương.</p></div><button id="cms-add-module" class="cms-button cms-button-primary" type="button" disabled>+ Thêm chương</button></div>
+        <div class="cms-editor-grid">
+          <div><h3 class="cms-small-heading">Danh sách chương</h3><div id="cms-module-list" class="cms-item-list"><p class="cms-empty">Chưa chọn khóa học.</p></div></div>
+          <form id="cms-module-form" class="cms-form cms-editor-form">
+            <div class="cms-form-heading"><h3>Thông tin chương</h3><span id="cms-module-id-label" class="cms-id-label">Chưa chọn</span></div>
+            <label>Tên chương<input id="cms-module-title" type="text" maxlength="120" required placeholder="Ví dụ: Làm quen tiếng Nhật"></label>
+            <label>Mô tả<textarea id="cms-module-description" rows="3" maxlength="1200"></textarea></label>
+            <label>Thứ tự<input id="cms-module-order" type="number" min="0" step="1" value="1"></label>
+            <div class="cms-form-actions"><button class="cms-button cms-button-primary" type="submit" disabled>Lưu chương</button><button id="cms-delete-module" class="cms-button cms-button-danger" type="button" disabled>Xóa chương</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="cms-panel">
+        <div class="cms-section-heading"><div><p class="cms-eyebrow">BƯỚC 3</p><h2>Bài học</h2><p class="cms-muted">Mỗi bài học chứa nhiều hoạt động theo thứ tự.</p></div><button id="cms-add-lesson" class="cms-button cms-button-primary" type="button" disabled>+ Thêm bài học</button></div>
+        <div class="cms-editor-grid">
+          <div><h3 class="cms-small-heading">Danh sách bài học</h3><div id="cms-lesson-list" class="cms-item-list"><p class="cms-empty">Chưa chọn chương.</p></div></div>
+          <form id="cms-lesson-form" class="cms-form cms-editor-form">
+            <div class="cms-form-heading"><h3>Thông tin bài học</h3><span id="cms-lesson-id-label" class="cms-id-label">Chưa chọn</span></div>
+            <label>Tên bài học<input id="cms-lesson-title" type="text" maxlength="120" required placeholder="Ví dụ: Chào hỏi cơ bản"></label>
+            <label>Mô tả<textarea id="cms-lesson-description" rows="3" maxlength="1500"></textarea></label>
+            <div class="cms-form-row"><label>Thứ tự<input id="cms-lesson-order" type="number" min="0" step="1" value="1"></label><label>Thời lượng (phút)<input id="cms-lesson-minutes" type="number" min="0" step="1" value="10"></label></div>
+            <label>Mục tiêu bài học, mỗi dòng một mục<textarea id="cms-lesson-objectives" rows="3"></textarea></label>
+            <div class="cms-form-actions"><button class="cms-button cms-button-primary" type="submit" disabled>Lưu bài học</button><button id="cms-delete-lesson" class="cms-button cms-button-danger" type="button" disabled>Xóa bài học</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="cms-panel">
+        <div class="cms-section-heading"><div><p class="cms-eyebrow">BƯỚC 4</p><h2>Hoạt động trong bài học</h2><p class="cms-muted">Chọn dạng bài, điền nội dung JSON và xem trước trước khi xuất bản.</p></div><button id="cms-add-activity" class="cms-button cms-button-primary" type="button" disabled>+ Thêm hoạt động</button></div>
+        <div class="cms-editor-grid">
+          <div><h3 class="cms-small-heading">Danh sách hoạt động</h3><div id="cms-activity-list" class="cms-item-list"><p class="cms-empty">Chưa chọn bài học.</p></div></div>
+          <form id="cms-activity-form" class="cms-form cms-editor-form">
+            <div class="cms-form-heading"><h3>Soạn hoạt động</h3><span id="cms-activity-id-label" class="cms-id-label">Chưa chọn</span></div>
+            <label>Tên hoạt động<input id="cms-activity-title" type="text" maxlength="120" required placeholder="Ví dụ: Chọn nghĩa đúng"></label>
+            <div class="cms-form-row"><label>Dạng hoạt động<select id="cms-activity-type">
+              <option value="explanation">Lý thuyết / Giải thích</option><option value="vocabulary">Từ vựng</option><option value="kanji">Kanji</option><option value="grammar">Ngữ pháp</option><option value="tap_translate">Chạm từ để dịch</option><option value="matching">Ghép đôi</option><option value="multiple_choice">Trắc nghiệm</option><option value="fill_blank">Điền chỗ trống</option><option value="sentence_order">Sắp xếp câu</option><option value="listening">Luyện nghe</option><option value="speaking">Luyện nói</option><option value="dictation">Nghe và chép</option><option value="quiz">Kiểm tra tổng hợp</option>
+            </select></label><label>Thứ tự<input id="cms-activity-order" type="number" min="0" step="1" value="1"></label></div>
+            <label>Hướng dẫn<textarea id="cms-activity-instructions" rows="2" maxlength="1000" placeholder="Hướng dẫn người học thực hiện hoạt động"></textarea></label>
+            <div class="cms-json-heading"><label for="cms-activity-data">Dữ liệu hoạt động (JSON)</label><button id="cms-fill-activity-template" class="cms-text-button" type="button">Chèn mẫu theo dạng bài</button></div>
+            <textarea id="cms-activity-data" class="cms-code-textarea" rows="10" spellcheck="false" required>{}</textarea>
+            <label>Tham chiếu học liệu (JSON array, tùy chọn)<textarea id="cms-activity-refs" class="cms-code-textarea" rows="3" spellcheck="false" placeholder='[{"type":"vocabulary","id":"n5-vocab-watashi"}]'></textarea></label>
+            <div class="cms-form-actions"><button class="cms-button cms-button-primary" type="submit" disabled>Lưu hoạt động</button><button id="cms-delete-activity" class="cms-button cms-button-danger" type="button" disabled>Xóa hoạt động</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="cms-panel">
+        <div class="cms-section-heading"><div><p class="cms-eyebrow">BƯỚC 5</p><h2>Ngân hàng học liệu</h2><p class="cms-muted">Nhập nhiều từ vựng, ngữ pháp hoặc bài tập bằng JSON. ID trùng sẽ được cập nhật theo lựa chọn.</p></div></div>
+        <div id="cms-bank-tabs" class="cms-bank-tabs" role="tablist" aria-label="Loại học liệu">
+          <button class="cms-bank-tab active" type="button" data-bank="vocabulary">Từ vựng <span id="cms-bank-count-vocabulary">0</span></button>
+          <button class="cms-bank-tab" type="button" data-bank="grammar">Ngữ pháp <span id="cms-bank-count-grammar">0</span></button>
+          <button class="cms-bank-tab" type="button" data-bank="exercises">Bài tập <span id="cms-bank-count-exercises">0</span></button>
+        </div>
+        <div class="cms-bank-editor">
+          <div class="cms-form">
+            <label>Nhập dữ liệu JSON<textarea id="cms-bank-json" class="cms-code-textarea" rows="10" spellcheck="false" placeholder='Dán một object hoặc mảng JSON vào đây'></textarea></label>
+            <div class="cms-form-row"><label>Cách xử lý ID trùng<select id="cms-bank-duplicate-mode"><option value="skip">Giữ bản đang có</option><option value="replace">Cập nhật bằng dữ liệu mới</option></select></label><label>Nhóm cấp độ mặc định<select id="cms-bank-default-level"><option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option></select></label></div>
+            <div class="cms-form-actions"><button id="cms-preview-bank" class="cms-button cms-button-light" type="button">Kiểm tra dữ liệu</button><button id="cms-import-bank" class="cms-button cms-button-primary" type="button" disabled>Thêm vào ngân hàng</button></div>
+            <p id="cms-bank-message" class="cms-message" role="status" hidden></p>
+          </div>
+          <div><h3 class="cms-small-heading">Nội dung hiện có</h3><div id="cms-bank-list" class="cms-bank-list"><p class="cms-empty">Chưa có học liệu.</p></div></div>
+        </div>
+      </section>
+
+      <section class="cms-panel">
+        <div class="cms-section-heading"><div><p class="cms-eyebrow">KIỂM TRA</p><h2>Xem trước bài học</h2><p class="cms-muted">Bản xem trước giúp kiểm tra cấu trúc, thứ tự và dữ liệu trước khi xuất bản.</p></div><button id="cms-run-validation" class="cms-button cms-button-light" type="button">Kiểm tra toàn bộ kho</button></div>
+        <div id="cms-preview" class="cms-preview"><p class="cms-empty">Chọn một bài học để xem trước.</p></div>
+        <div id="cms-validation" class="cms-validation" hidden></div>
+      </section>
+
+      <section class="cms-panel">
+        <div class="cms-section-heading"><div><p class="cms-eyebrow">BẢN NHÁP</p><h2>Lưu và mở bản nháp</h2><p class="cms-muted">Bản nháp được lưu riêng theo tài khoản Admin trong Supabase. Học liệu đã xuất bản vẫn nằm trên GitHub.</p></div></div>
+        <div class="cms-draft-controls"><label>Tên bản nháp<input id="cms-draft-title" type="text" maxlength="120" placeholder="Ví dụ: Khóa N5 – bản đang soạn"></label><div class="cms-form-actions"><button id="cms-refresh-drafts" class="cms-button cms-button-light" type="button">Tải danh sách nháp</button></div></div>
+        <div id="cms-draft-list" class="cms-draft-list"><p class="cms-empty">Chưa tải danh sách bản nháp.</p></div>
+      </section>
+    </div>
+
+    <footer class="cms-footer">KDSP Content CMS · Nội dung công khai lưu trên GitHub · Bản nháp riêng lưu trên Supabase</footer>
+  </main>
+<script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    }
+  </script>
+</body>
+</html>
