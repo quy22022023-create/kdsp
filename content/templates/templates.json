@@ -1,0 +1,60 @@
+{
+  "course": {
+    "schema_version": 1,
+    "id": "replace-course-id",
+    "slug": "replace-course-slug",
+    "title": "Tên khóa học",
+    "description": "",
+    "level": "N5",
+    "language": "ja",
+    "target_language": "vi",
+    "order": 1,
+    "estimated_minutes": 0,
+    "tags": [],
+    "objectives": [],
+    "cover_image": null,
+    "module_refs": [],
+    "updated_at": null
+  },
+  "module": {
+    "schema_version": 1,
+    "id": "replace-module-id",
+    "course_id": "replace-course-id",
+    "title": "Tên chương",
+    "description": "",
+    "order": 1,
+    "lesson_refs": [],
+    "updated_at": null
+  },
+  "lesson": {
+    "schema_version": 1,
+    "id": "replace-lesson-id",
+    "course_id": "replace-course-id",
+    "module_id": "replace-module-id",
+    "title": "Tên bài học",
+    "description": "",
+    "order": 1,
+    "estimated_minutes": 10,
+    "objectives": [],
+    "activities": [],
+    "updated_at": null
+  },
+  "vocabulary_shard": {
+    "schema_version": 1,
+    "bank_type": "vocabulary",
+    "level": "N5",
+    "items": []
+  },
+  "grammar_shard": {
+    "schema_version": 1,
+    "bank_type": "grammar",
+    "level": "N5",
+    "items": []
+  },
+  "exercise_shard": {
+    "schema_version": 1,
+    "bank_type": "exercises",
+    "level": "N5",
+    "items": []
+  }
+}
