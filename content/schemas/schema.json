@@ -182,7 +182,21 @@
         },
         "type": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*$"
+          "enum": [
+            "explanation",
+            "vocabulary",
+            "kanji",
+            "grammar",
+            "tap_translate",
+            "matching",
+            "multiple_choice",
+            "fill_blank",
+            "sentence_order",
+            "listening",
+            "speaking",
+            "dictation",
+            "quiz"
+          ]
         },
         "title": {
           "type": "string",
@@ -423,6 +437,262 @@
         }
       },
       "additionalProperties": true
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "content_version",
+        "published_at",
+        "catalog",
+        "banks_index",
+        "schemas"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "catalog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "version"
+          ],
+          "properties": {
+            "path": {
+              "const": "catalog.json"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "banks_index": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "version"
+          ],
+          "properties": {
+            "path": {
+              "const": "banks/index.json"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "schemas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "version"
+          ],
+          "properties": {
+            "path": {
+              "const": "schemas/schema.json"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "courses"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "courses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "title",
+              "level",
+              "path",
+              "version",
+              "order"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "level": {
+                "$ref": "#/$defs/level"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^courses/[a-z0-9_-]+/course\\.json$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "description": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "shard_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "level",
+        "path",
+        "version",
+        "item_count"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z0-9_./-]+\\.json$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "shard_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shards"
+      ],
+      "properties": {
+        "shards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/shard_ref"
+          }
+        }
+      }
+    },
+    "bank_index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "vocabulary",
+        "grammar",
+        "exercises"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "vocabulary": {
+          "$ref": "#/$defs/shard_list"
+        },
+        "grammar": {
+          "$ref": "#/$defs/shard_list"
+        },
+        "exercises": {
+          "$ref": "#/$defs/shard_list"
+        }
+      }
+    },
+    "bank_shard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "bank_type",
+        "level",
+        "items"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "bank_type": {
+          "enum": [
+            "vocabulary",
+            "grammar",
+            "exercises"
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
     }
   }
 }
