@@ -26,7 +26,7 @@
 - `banks/grammar/<shard>.json`
 - `banks/exercises/<shard>.json`
 
-Mỗi shard được khai báo trong `banks/index.json` bằng `id`, `level`, `path`, `version`, `item_count`.
+Mỗi shard được khai báo trong `banks/index.json` bằng `id`, `level`, `path`, `version`, `item_count`. Cấu trúc chỉ mục được định nghĩa tại `$defs.bank_index`; mỗi file shard dùng `$defs.bank_shard` và chứa `schema_version`, `bank_type`, `level`, `items[]`.
 
 ## Tương thích với app hiện tại
 Schema giữ tên trường hiện được `normalizeContent()` trong `js/app.js` sử dụng:
@@ -44,4 +44,4 @@ Ví dụ:
 ## Xuất bản dự kiến
 Admin tạo hoặc nhập JSON → kiểm tra schema/ID/tham chiếu → xem trước → Edge Function dùng GitHub token phía máy chủ để tạo commit → app kiểm tra manifest và tải file có version mới.
 
-Không đặt GitHub token trong JavaScript trình duyệt. Giai đoạn 1 chỉ tạo kho, manifest, catalog, schema và mẫu; CMS, Edge Function và kết nối app sẽ làm ở giai đoạn sau.
+Không đặt GitHub token trong JavaScript trình duyệt. CMS quản lý nội dung qua `course-admin.html`. Bản nháp được lưu riêng trong Supabase; nội dung đã xuất bản được ghi vào GitHub bằng Edge Function. Ứng dụng học sẽ được kết nối đọc các khóa học từ GitHub ở giai đoạn tích hợp tiếp theo.
