@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "content_version": 1,
+  "published_at": null,
+  "catalog": {
+    "path": "catalog.json",
+    "version": 1
+  },
+  "banks_index": {
+    "path": "banks/index.json",
+    "version": 1
+  },
+  "schemas": {
+    "path": "schemas/schema.json",
+    "version": 1
+  }
+}
