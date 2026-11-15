@@ -406,7 +406,21 @@
     return rows;
   }
 
+  let kanaTtsPreconnected = false;
+
+  function warmKanaTtsConnection() {
+    if (kanaTtsPreconnected || !document.head) return;
+    kanaTtsPreconnected = true;
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = 'https://translate.googleapis.com';
+    link.crossOrigin = 'anonymous';
+    link.setAttribute('data-kana-tts-preconnect', 'true');
+    document.head.appendChild(link);
+  }
+
   function renderKana() {
+    warmKanaTtsConnection();
     const rows = getKanaRows();
     if (!selectedKana || !rows.some((row) => row[0] === selectedKana[0])) selectedKana = rows[0];
     $('kana-selected-char').textContent = selectedKana[0];
@@ -484,6 +498,7 @@
   let speechRequestId = 0;
 
   function speakJapanese(text, options = {}) {
+    stopKanaAudio();
     if (!text || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
       showToast('Trình duyệt này chưa hỗ trợ phát âm tự động.');
       return;
@@ -516,11 +531,149 @@
     }, 60);
   }
 
+  const KANA_GOOGLE_TTS_CACHE_LIMIT = 24;
+  const kanaGoogleAudioCache = new Map();
+  let currentKanaAudio = null;
+  let kanaAudioRequestId = 0;
+
+  function stopKanaAudio() {
+    kanaAudioRequestId += 1;
+    if (!currentKanaAudio) return;
+    try {
+      currentKanaAudio.pause();
+      currentKanaAudio.currentTime = 0;
+    } catch (_) { /* Audio reset is best-effort on Safari. */ }
+    currentKanaAudio = null;
+  }
+
+  function getKanaSpeechText(row) {
+    const suppliedAudioText = String(row && row[3] || '').trim();
+    if (suppliedAudioText) return suppliedAudioText;
+
+    let text = String(row && row[0] || '').trim();
+    if (kanaScript === 'katakana') {
+      text = Array.from(text).map((character) => {
+        const codePoint = character.codePointAt(0);
+        return codePoint >= 0x30A1 && codePoint <= 0x30F6
+          ? String.fromCodePoint(codePoint - 0x60)
+          : character;
+      }).join('');
+    }
+    return text;
+  }
+
+  function normalizeKanaSpeechText(rawText) {
+    let clean = String(rawText || '')
+      .replace(/\([^)]*\)/g, '')
+      .replace(/（[^）]*）/g, '')
+      .replace(/\[[^\]]*\]/g, '')
+      .replace(/[〜～~]/g, '')
+      .trim();
+    if (!clean) return '';
+    if (!/[。！？.!?,、]$/.test(clean)) clean += '。';
+    return clean;
+  }
+
+  function getKanaGoogleAudio(cleanText) {
+    let audio = kanaGoogleAudioCache.get(cleanText);
+    if (audio) {
+      kanaGoogleAudioCache.delete(cleanText);
+      kanaGoogleAudioCache.set(cleanText, audio);
+      return audio;
+    }
+
+    const streamUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&ttsspeed=0.9&q=${encodeURIComponent(cleanText)}`;
+    audio = new Audio();
+    audio.preload = 'auto';
+    audio.playsInline = true;
+    audio.referrerPolicy = 'no-referrer';
+    if ('preservesPitch' in audio) audio.preservesPitch = true;
+    else if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
+    audio.src = streamUrl;
+    kanaGoogleAudioCache.set(cleanText, audio);
+
+    if (kanaGoogleAudioCache.size > KANA_GOOGLE_TTS_CACHE_LIMIT) {
+      for (const [oldText, oldAudio] of kanaGoogleAudioCache) {
+        if (oldAudio !== currentKanaAudio && oldText !== cleanText) {
+          try {
+            oldAudio.pause();
+            oldAudio.removeAttribute('src');
+            oldAudio.load();
+          } catch (_) { /* Cache cleanup is best-effort. */ }
+          kanaGoogleAudioCache.delete(oldText);
+          break;
+        }
+      }
+    }
+    return audio;
+  }
+
   function speakKana(row) {
     if (!row) return;
-    const spoken = row[3] || row[0];
+    const cleanText = normalizeKanaSpeechText(getKanaSpeechText(row));
+    if (!cleanText) return;
+
+    const requestId = ++kanaAudioRequestId;
+    if (currentKanaAudio) {
+      try {
+        currentKanaAudio.pause();
+        currentKanaAudio.currentTime = 0;
+      } catch (_) { /* Ignore interrupted audio reset. */ }
+    }
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+
+    if (typeof Audio === 'undefined') {
+      speakJapanese(cleanText, { rate: Number(speechSettings.rate) || 1, pitch: 1 });
+      return;
+    }
+
+    let audio;
+    try {
+      audio = getKanaGoogleAudio(cleanText);
+    } catch (_) {
+      speakJapanese(cleanText, { rate: Number(speechSettings.rate) || 1, pitch: 1 });
+      return;
+    }
+    currentKanaAudio = audio;
     const rate = Number(speechSettings.rate);
-    speakJapanese(spoken, { rate: Math.min(Number.isFinite(rate) && rate > 0 ? rate : 1, 1), pitch: 1 });
+    try {
+      audio.playbackRate = Math.max(0.75, Math.min(1.15, Number.isFinite(rate) && rate > 0 ? rate : 1));
+    } catch (_) { /* Keep the browser's default playback rate if unsupported. */ }
+
+    let settled = false;
+    let fallbackTimer = null;
+    const fallbackToDeviceVoice = () => {
+      if (settled || requestId !== kanaAudioRequestId) return;
+      settled = true;
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (_) { /* Ignore interrupted audio reset. */ }
+      speakJapanese(cleanText, { rate: Number(speechSettings.rate) || 1, pitch: 1 });
+    };
+
+    audio.onplaying = () => {
+      if (requestId !== kanaAudioRequestId) {
+        audio.pause();
+        return;
+      }
+      settled = true;
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+    };
+    audio.onended = () => {
+      if (fallbackTimer) window.clearTimeout(fallbackTimer);
+      if (requestId === kanaAudioRequestId && currentKanaAudio === audio) currentKanaAudio = null;
+    };
+    audio.onerror = fallbackToDeviceVoice;
+
+    fallbackTimer = window.setTimeout(fallbackToDeviceVoice, 1600);
+    try {
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(fallbackToDeviceVoice);
+    } catch (_) {
+      fallbackToDeviceVoice();
+    }
   }
 
   function startKanaQuiz(mode) {
@@ -1118,9 +1271,9 @@
         return;
       }
       const kanaScriptButton = event.target.closest('[data-kana-script]');
-      if (kanaScriptButton) { kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      if (kanaScriptButton) { stopKanaAudio(); kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
       const kanaGroupButton = event.target.closest('[data-kana-group]');
-      if (kanaGroupButton) { kanaGroup = kanaGroupButton.dataset.kanaGroup; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      if (kanaGroupButton) { stopKanaAudio(); kanaGroup = kanaGroupButton.dataset.kanaGroup; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
       const kanaQuizModeButton = event.target.closest('[data-kana-quiz-mode]');
       if (kanaQuizModeButton) { startKanaQuiz(kanaQuizModeButton.dataset.kanaQuizMode); return; }
       const kanaQuizOption = event.target.closest('[data-kana-quiz-option]');
