@@ -57,7 +57,7 @@
   let selectedKana = null;
   let kanaQuiz = null;
   let speechVoices = [];
-  let speechSettings = { voiceURI: '', rate: 0.92, pitch: 1.04 };
+  let speechSettings = { voiceURI: '', voiceSelectedByUser: false, rate: 1, pitch: 1 };
   let studyPointer = null;
   let suppressStudyClick = false;
   let studyAdvanceLocked = false;
@@ -427,19 +427,26 @@
 
   function scoreJapaneseVoice(voice) {
     const identity = `${voice.name || ''} ${voice.voiceURI || ''}`.toLowerCase();
+    const language = String(voice.lang || '').toLowerCase();
     let score = 0;
-    if (/nanami|kyoko|haruka|mizuki|sayaka|sakura|hikari|yui|aoi|hina|female|woman/i.test(identity)) score += 8;
-    if (/google|microsoft|siri|apple|enhanced|premium|neural|online/i.test(identity)) score += 2;
-    if (/otoya|ichiro|male|man/i.test(identity)) score -= 3;
-    if (/^ja-jp$/i.test(String(voice.lang || ''))) score += 2;
-    if (voice.localService === false) score += 1;
+
+    // Ưu tiên giọng Google tiếng Nhật nếu thiết bị có cung cấp.
+    if (/google.*(japanese|日本語)|(japanese|日本語).*google/i.test(identity)) score += 100;
+    // Ưu tiên các giọng neural/enhanced làm phương án dự phòng.
+    if (/nanami.*neural|neural.*nanami|microsoft.*online|enhanced|premium/i.test(identity)) score += 35;
+    if (/apple|siri/i.test(identity)) score += 20;
+    if (/^ja-jp(?:-|$)/i.test(language)) score += 12;
+    else if (/^ja(?:-|$)/i.test(language)) score += 6;
+    if (voice.localService === false) score += 3;
     if (voice.default) score += 0.5;
     return score;
   }
 
   function getPreferredJapaneseVoice(voices) {
     if (!voices.length) return null;
-    const saved = voices.find((voice) => voice.voiceURI === speechSettings.voiceURI);
+    const saved = speechSettings.voiceSelectedByUser
+      ? voices.find((voice) => voice.voiceURI === speechSettings.voiceURI)
+      : null;
     if (saved) return saved;
     return [...voices].sort((a, b) => scoreJapaneseVoice(b) - scoreJapaneseVoice(a))[0];
   }
@@ -453,7 +460,7 @@
       select.disabled = true;
     } else {
       const preferred = getPreferredJapaneseVoice(speechVoices);
-      if (!speechSettings.voiceURI || !speechVoices.some((voice) => voice.voiceURI === speechSettings.voiceURI)) {
+      if (!speechSettings.voiceSelectedByUser || !speechVoices.some((voice) => voice.voiceURI === speechSettings.voiceURI)) {
         speechSettings.voiceURI = preferred ? preferred.voiceURI : '';
         saveSpeechSettings();
       }
@@ -474,31 +481,46 @@
     AppStore.set(SPEECH_SETTINGS_KEY, speechSettings);
   }
 
+  let speechRequestId = 0;
+
   function speakJapanese(text, options = {}) {
     if (!text || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
       showToast('Trình duyệt này chưa hỗ trợ phát âm tự động.');
       return;
     }
+
     speechVoices = getJapaneseVoices();
     if (!speechVoices.length) renderVoiceOptions();
-    const utterance = new SpeechSynthesisUtterance(String(text));
-    const voice = getPreferredJapaneseVoice(speechVoices.length ? speechVoices : getJapaneseVoices());
+
+    const utterance = new SpeechSynthesisUtterance(String(text).trim());
+    const availableVoices = speechVoices.length ? speechVoices : getJapaneseVoices();
+    const voice = getPreferredJapaneseVoice(availableVoices);
+    const requestedRate = Number(options.rate ?? speechSettings.rate);
+    const requestedPitch = Number(options.pitch ?? speechSettings.pitch);
+
     utterance.lang = voice && voice.lang ? voice.lang : 'ja-JP';
-    utterance.rate = Math.max(0.70, Math.min(1.15, Number(options.rate ?? speechSettings.rate) || 0.92));
-    utterance.pitch = Math.max(0.85, Math.min(1.30, Number(options.pitch ?? speechSettings.pitch) || 1.04));
+    utterance.rate = Math.max(0.70, Math.min(1.15, Number.isFinite(requestedRate) && requestedRate > 0 ? requestedRate : 1));
+    utterance.pitch = Math.max(0.85, Math.min(1.30, Number.isFinite(requestedPitch) && requestedPitch > 0 ? requestedPitch : 1));
     utterance.volume = 1;
     if (voice) utterance.voice = voice;
     utterance.onerror = (event) => {
       if (event && event.error === 'not-allowed') showToast('Thiết bị chưa cho phép phát âm. Hãy chạm nút nghe một lần nữa.');
     };
+
+    // iOS Safari đôi khi bỏ qua lệnh speak ngay sau cancel.
+    // Chỉ phát yêu cầu mới nhất khi người học chạm liên tục.
+    const requestId = ++speechRequestId;
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    window.setTimeout(() => {
+      if (requestId === speechRequestId) window.speechSynthesis.speak(utterance);
+    }, 60);
   }
 
   function speakKana(row) {
     if (!row) return;
     const spoken = row[3] || row[0];
-    speakJapanese(spoken, { rate: Math.min(Number(speechSettings.rate) || 0.92, 0.86), pitch: speechSettings.pitch });
+    const rate = Number(speechSettings.rate);
+    speakJapanese(spoken, { rate: Math.min(Number.isFinite(rate) && rate > 0 ? rate : 1, 1), pitch: 1 });
   }
 
   function startKanaQuiz(mode) {
@@ -1036,9 +1058,13 @@
       const savedSpeech = await AppStore.get(SPEECH_SETTINGS_KEY, null);
       if (savedSpeech && typeof savedSpeech === 'object') {
         speechSettings = { ...speechSettings, ...savedSpeech };
-        if (Number(savedSpeech.rate) === 0.84 && Number(savedSpeech.pitch) === 1.10) {
-          speechSettings.rate = 0.92;
-          speechSettings.pitch = 1.04;
+        if (
+          (Number(savedSpeech.rate) === 0.84 && Number(savedSpeech.pitch) === 1.10) ||
+          (Number(savedSpeech.rate) === 0.92 && Number(savedSpeech.pitch) === 1.04)
+        ) {
+          // Chuyển thiết lập mặc định cũ sang tốc độ và cao độ tự nhiên hơn.
+          speechSettings.rate = 1;
+          speechSettings.pitch = 1;
         }
       }
       const cached = await AppStore.get(CONTENT_CACHE_KEY, null);
@@ -1197,10 +1223,10 @@
     $('kana-audio-button').addEventListener('click', () => selectedKana && speakKana(selectedKana));
     $('kana-quiz-audio').addEventListener('click', () => kanaQuiz && kanaQuiz.answer && speakKana(kanaQuiz.answer));
     $('kana-quiz-next').addEventListener('click', () => { if (kanaQuiz && kanaQuiz.complete) startKanaQuiz(kanaQuiz.mode); else nextKanaQuizQuestion(); });
-    $('speech-voice-select').addEventListener('change', () => { speechSettings.voiceURI = $('speech-voice-select').value; saveSpeechSettings(); });
+    $('speech-voice-select').addEventListener('change', () => { speechSettings.voiceURI = $('speech-voice-select').value; speechSettings.voiceSelectedByUser = true; saveSpeechSettings(); });
     $('speech-rate').addEventListener('input', () => { speechSettings.rate = Number($('speech-rate').value); $('speech-rate-value').textContent = `${speechSettings.rate.toFixed(2)}×`; saveSpeechSettings(); });
     $('speech-pitch').addEventListener('input', () => { speechSettings.pitch = Number($('speech-pitch').value); $('speech-pitch-value').textContent = speechSettings.pitch.toFixed(2); saveSpeechSettings(); });
-    $('speech-preview-button').addEventListener('click', () => speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { rate: Math.min(Number(speechSettings.rate) || 0.92, 0.90), pitch: speechSettings.pitch }));
+    $('speech-preview-button').addEventListener('click', () => speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { rate: Math.min(Number(speechSettings.rate) || 1, 1), pitch: 1 }));
     document.querySelectorAll('.modal-backdrop').forEach((modal) => modal.addEventListener('click', (event) => {
       if (event.target === modal) modal.hidden = true;
     }));
