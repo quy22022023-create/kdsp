@@ -57,12 +57,18 @@
   let selectedKana = null;
   let kanaQuiz = null;
   let speechVoices = [];
-  let speechSettings = { voiceURI: '', voiceSelectedByUser: false, rate: 1, pitch: 1 };
+  let speechSettings = { voiceURI: '', rate: 0.92, pitch: 1.04 };
   let studyPointer = null;
   let suppressStudyClick = false;
   let studyAdvanceLocked = false;
   let currentUser = null;
+  let activeProgressUserId = null;
+  let progressSwitching = false;
+  let progressSwitchSequence = 0;
+  let progressSwitchPromise = null;
+  let progressSwitchTarget = null;
   let accountSyncPromise = null;
+  let accountSyncUserId = null;
   let isDemoMode = false;
 
   const KANA = {
@@ -178,6 +184,14 @@
     return (data.vocabulary || []).length + (data.grammar || []).length + (data.exercises || []).length;
   }
 
+  function progressStorageKey(userId = activeProgressUserId) {
+    return userId ? `${PROGRESS_KEY}:user:${userId}` : PROGRESS_KEY;
+  }
+
+  function normalizeProgressMap(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  }
+
   function getProgress(type, id) {
     return progress[`${type}:${id}`] || null;
   }
@@ -206,13 +220,19 @@
   }
 
   function saveProgressMap() {
-    AppStore.set(PROGRESS_KEY, progress).then((saved) => {
+    const storageKey = progressStorageKey();
+    const snapshot = { ...progress };
+    AppStore.set(storageKey, snapshot).then((saved) => {
       if (!saved) showToast('Không thể lưu tiến độ trên thiết bị. Hãy kiểm tra dung lượng trình duyệt.');
     });
-    scheduleRemoteSync();
+    if (!progressSwitching && currentUser && activeProgressUserId === currentUser.id) scheduleRemoteSync();
   }
 
   function updateProgress(type, id, data) {
+    if (progressSwitching) {
+      showToast('Đang chuyển vùng tiến độ. Vui lòng thử lại sau giây lát.');
+      return;
+    }
     const key = `${type}:${id}`;
     progress[key] = { itemType: type, itemId: id, data: { ...(getProgressData(type, id)), ...data }, updatedAt: new Date().toISOString() };
     saveProgressMap();
@@ -406,21 +426,7 @@
     return rows;
   }
 
-  let kanaTtsPreconnected = false;
-
-  function warmKanaTtsConnection() {
-    if (kanaTtsPreconnected || !document.head) return;
-    kanaTtsPreconnected = true;
-    const link = document.createElement('link');
-    link.rel = 'preconnect';
-    link.href = 'https://translate.googleapis.com';
-    link.crossOrigin = 'anonymous';
-    link.setAttribute('data-kana-tts-preconnect', 'true');
-    document.head.appendChild(link);
-  }
-
   function renderKana() {
-    warmKanaTtsConnection();
     const rows = getKanaRows();
     if (!selectedKana || !rows.some((row) => row[0] === selectedKana[0])) selectedKana = rows[0];
     $('kana-selected-char').textContent = selectedKana[0];
@@ -441,26 +447,19 @@
 
   function scoreJapaneseVoice(voice) {
     const identity = `${voice.name || ''} ${voice.voiceURI || ''}`.toLowerCase();
-    const language = String(voice.lang || '').toLowerCase();
     let score = 0;
-
-    // Ưu tiên giọng Google tiếng Nhật nếu thiết bị có cung cấp.
-    if (/google.*(japanese|日本語)|(japanese|日本語).*google/i.test(identity)) score += 100;
-    // Ưu tiên các giọng neural/enhanced làm phương án dự phòng.
-    if (/nanami.*neural|neural.*nanami|microsoft.*online|enhanced|premium/i.test(identity)) score += 35;
-    if (/apple|siri/i.test(identity)) score += 20;
-    if (/^ja-jp(?:-|$)/i.test(language)) score += 12;
-    else if (/^ja(?:-|$)/i.test(language)) score += 6;
-    if (voice.localService === false) score += 3;
+    if (/nanami|kyoko|haruka|mizuki|sayaka|sakura|hikari|yui|aoi|hina|female|woman/i.test(identity)) score += 8;
+    if (/google|microsoft|siri|apple|enhanced|premium|neural|online/i.test(identity)) score += 2;
+    if (/otoya|ichiro|male|man/i.test(identity)) score -= 3;
+    if (/^ja-jp$/i.test(String(voice.lang || ''))) score += 2;
+    if (voice.localService === false) score += 1;
     if (voice.default) score += 0.5;
     return score;
   }
 
   function getPreferredJapaneseVoice(voices) {
     if (!voices.length) return null;
-    const saved = speechSettings.voiceSelectedByUser
-      ? voices.find((voice) => voice.voiceURI === speechSettings.voiceURI)
-      : null;
+    const saved = voices.find((voice) => voice.voiceURI === speechSettings.voiceURI);
     if (saved) return saved;
     return [...voices].sort((a, b) => scoreJapaneseVoice(b) - scoreJapaneseVoice(a))[0];
   }
@@ -474,7 +473,7 @@
       select.disabled = true;
     } else {
       const preferred = getPreferredJapaneseVoice(speechVoices);
-      if (!speechSettings.voiceSelectedByUser || !speechVoices.some((voice) => voice.voiceURI === speechSettings.voiceURI)) {
+      if (!speechSettings.voiceURI || !speechVoices.some((voice) => voice.voiceURI === speechSettings.voiceURI)) {
         speechSettings.voiceURI = preferred ? preferred.voiceURI : '';
         saveSpeechSettings();
       }
@@ -495,185 +494,31 @@
     AppStore.set(SPEECH_SETTINGS_KEY, speechSettings);
   }
 
-  let speechRequestId = 0;
-
   function speakJapanese(text, options = {}) {
-    stopKanaAudio();
     if (!text || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
       showToast('Trình duyệt này chưa hỗ trợ phát âm tự động.');
       return;
     }
-
     speechVoices = getJapaneseVoices();
     if (!speechVoices.length) renderVoiceOptions();
-
-    const utterance = new SpeechSynthesisUtterance(String(text).trim());
-    const availableVoices = speechVoices.length ? speechVoices : getJapaneseVoices();
-    const voice = getPreferredJapaneseVoice(availableVoices);
-    const requestedRate = Number(options.rate ?? speechSettings.rate);
-    const requestedPitch = Number(options.pitch ?? speechSettings.pitch);
-
+    const utterance = new SpeechSynthesisUtterance(String(text));
+    const voice = getPreferredJapaneseVoice(speechVoices.length ? speechVoices : getJapaneseVoices());
     utterance.lang = voice && voice.lang ? voice.lang : 'ja-JP';
-    utterance.rate = Math.max(0.70, Math.min(1.15, Number.isFinite(requestedRate) && requestedRate > 0 ? requestedRate : 1));
-    utterance.pitch = Math.max(0.85, Math.min(1.30, Number.isFinite(requestedPitch) && requestedPitch > 0 ? requestedPitch : 1));
+    utterance.rate = Math.max(0.70, Math.min(1.15, Number(options.rate ?? speechSettings.rate) || 0.92));
+    utterance.pitch = Math.max(0.85, Math.min(1.30, Number(options.pitch ?? speechSettings.pitch) || 1.04));
     utterance.volume = 1;
     if (voice) utterance.voice = voice;
     utterance.onerror = (event) => {
       if (event && event.error === 'not-allowed') showToast('Thiết bị chưa cho phép phát âm. Hãy chạm nút nghe một lần nữa.');
     };
-
-    // iOS Safari đôi khi bỏ qua lệnh speak ngay sau cancel.
-    // Chỉ phát yêu cầu mới nhất khi người học chạm liên tục.
-    const requestId = ++speechRequestId;
     window.speechSynthesis.cancel();
-    window.setTimeout(() => {
-      if (requestId === speechRequestId) window.speechSynthesis.speak(utterance);
-    }, 60);
-  }
-
-  const KANA_GOOGLE_TTS_CACHE_LIMIT = 24;
-  const kanaGoogleAudioCache = new Map();
-  let currentKanaAudio = null;
-  let kanaAudioRequestId = 0;
-
-  function stopKanaAudio() {
-    kanaAudioRequestId += 1;
-    if (!currentKanaAudio) return;
-    try {
-      currentKanaAudio.pause();
-      currentKanaAudio.currentTime = 0;
-    } catch (_) { /* Audio reset is best-effort on Safari. */ }
-    currentKanaAudio = null;
-  }
-
-  function getKanaSpeechText(row) {
-    const suppliedAudioText = String(row && row[3] || '').trim();
-    if (suppliedAudioText) return suppliedAudioText;
-
-    let text = String(row && row[0] || '').trim();
-    if (kanaScript === 'katakana') {
-      text = Array.from(text).map((character) => {
-        const codePoint = character.codePointAt(0);
-        return codePoint >= 0x30A1 && codePoint <= 0x30F6
-          ? String.fromCodePoint(codePoint - 0x60)
-          : character;
-      }).join('');
-    }
-    return text;
-  }
-
-  function normalizeKanaSpeechText(rawText) {
-    let clean = String(rawText || '')
-      .replace(/\([^)]*\)/g, '')
-      .replace(/（[^）]*）/g, '')
-      .replace(/\[[^\]]*\]/g, '')
-      .replace(/[〜～~]/g, '')
-      .trim();
-    if (!clean) return '';
-    if (!/[。！？.!?,、]$/.test(clean)) clean += '。';
-    return clean;
-  }
-
-  function getKanaGoogleAudio(cleanText) {
-    let audio = kanaGoogleAudioCache.get(cleanText);
-    if (audio) {
-      kanaGoogleAudioCache.delete(cleanText);
-      kanaGoogleAudioCache.set(cleanText, audio);
-      return audio;
-    }
-
-    const streamUrl = `https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=ja&ttsspeed=0.9&q=${encodeURIComponent(cleanText)}`;
-    audio = new Audio();
-    audio.preload = 'auto';
-    audio.playsInline = true;
-    audio.referrerPolicy = 'no-referrer';
-    if ('preservesPitch' in audio) audio.preservesPitch = true;
-    else if ('webkitPreservesPitch' in audio) audio.webkitPreservesPitch = true;
-    audio.src = streamUrl;
-    kanaGoogleAudioCache.set(cleanText, audio);
-
-    if (kanaGoogleAudioCache.size > KANA_GOOGLE_TTS_CACHE_LIMIT) {
-      for (const [oldText, oldAudio] of kanaGoogleAudioCache) {
-        if (oldAudio !== currentKanaAudio && oldText !== cleanText) {
-          try {
-            oldAudio.pause();
-            oldAudio.removeAttribute('src');
-            oldAudio.load();
-          } catch (_) { /* Cache cleanup is best-effort. */ }
-          kanaGoogleAudioCache.delete(oldText);
-          break;
-        }
-      }
-    }
-    return audio;
+    window.speechSynthesis.speak(utterance);
   }
 
   function speakKana(row) {
     if (!row) return;
-    const cleanText = normalizeKanaSpeechText(getKanaSpeechText(row));
-    if (!cleanText) return;
-
-    const requestId = ++kanaAudioRequestId;
-    if (currentKanaAudio) {
-      try {
-        currentKanaAudio.pause();
-        currentKanaAudio.currentTime = 0;
-      } catch (_) { /* Ignore interrupted audio reset. */ }
-    }
-    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-
-    if (typeof Audio === 'undefined') {
-      speakJapanese(cleanText, { rate: Number(speechSettings.rate) || 1, pitch: 1 });
-      return;
-    }
-
-    let audio;
-    try {
-      audio = getKanaGoogleAudio(cleanText);
-    } catch (_) {
-      speakJapanese(cleanText, { rate: Number(speechSettings.rate) || 1, pitch: 1 });
-      return;
-    }
-    currentKanaAudio = audio;
-    const rate = Number(speechSettings.rate);
-    try {
-      audio.playbackRate = Math.max(0.75, Math.min(1.15, Number.isFinite(rate) && rate > 0 ? rate : 1));
-    } catch (_) { /* Keep the browser's default playback rate if unsupported. */ }
-
-    let settled = false;
-    let fallbackTimer = null;
-    const fallbackToDeviceVoice = () => {
-      if (settled || requestId !== kanaAudioRequestId) return;
-      settled = true;
-      if (fallbackTimer) window.clearTimeout(fallbackTimer);
-      try {
-        audio.pause();
-        audio.currentTime = 0;
-      } catch (_) { /* Ignore interrupted audio reset. */ }
-      speakJapanese(cleanText, { rate: Number(speechSettings.rate) || 1, pitch: 1 });
-    };
-
-    audio.onplaying = () => {
-      if (requestId !== kanaAudioRequestId) {
-        audio.pause();
-        return;
-      }
-      settled = true;
-      if (fallbackTimer) window.clearTimeout(fallbackTimer);
-    };
-    audio.onended = () => {
-      if (fallbackTimer) window.clearTimeout(fallbackTimer);
-      if (requestId === kanaAudioRequestId && currentKanaAudio === audio) currentKanaAudio = null;
-    };
-    audio.onerror = fallbackToDeviceVoice;
-
-    fallbackTimer = window.setTimeout(fallbackToDeviceVoice, 1600);
-    try {
-      const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === 'function') playPromise.catch(fallbackToDeviceVoice);
-    } catch (_) {
-      fallbackToDeviceVoice();
-    }
+    const spoken = row[3] || row[0];
+    speakJapanese(spoken, { rate: Math.min(Number(speechSettings.rate) || 0.92, 0.86), pitch: speechSettings.pitch });
   }
 
   function startKanaQuiz(mode) {
@@ -998,49 +843,71 @@
     showToast('Đã nạp dữ liệu minh họa trên thiết bị này. Chưa gửi dữ liệu lên Supabase.');
   }
 
-  async function refreshContent() {
-    if (!AppDB.isConfigured()) {
-      showToast('Chưa cấu hình Supabase. Hãy nhập URL và anon key trong config.js.');
+  async function refreshPublicContent(forceRefresh) {
+    if (!window.CourseContent) {
+      setConnectionState('Thiếu thư viện học liệu', 'offline');
       return;
     }
     try {
-      setConnectionState('Đang tải dữ liệu…', '');
-      const sdkReady = await AppDB.loadSdk();
-      if (!sdkReady) throw new Error('Không tải được thư viện Supabase. Ứng dụng vẫn hoạt động ngoại tuyến.');
-      AppDB.init();
-      const remote = normalizeContent(await AppDB.getPublishedContent());
-      if (totalContentCount(remote) > 0) {
-        content = remote;
-        isDemoMode = false;
-        await AppStore.set(CONTENT_CACHE_KEY, content);
-        setConnectionState('Đã đồng bộ học liệu', 'online');
-        renderAll();
-        showToast(`Đã tải ${content.vocabulary.length} từ, ${content.grammar.length} ngữ pháp và ${content.exercises.length} bài tập.`);
-      } else {
-        setConnectionState('Máy chủ chưa có học liệu', 'offline');
-        showToast('Supabase chưa có nội dung đã xuất bản. Dữ liệu đang lưu trên thiết bị được giữ nguyên.');
+      setConnectionState('Đang kiểm tra học liệu…', '');
+      const manifest = forceRefresh ? await CourseContent.refresh() : await CourseContent.getManifest();
+      if (!manifest.published_at) {
+        // Release bootstrap chưa xuất bản. Không xóa dữ liệu cũ hoặc dữ liệu minh họa.
+        setConnectionState('Chưa có khóa học đã xuất bản', 'offline');
+        if (forceRefresh) showToast('Kho GitHub đã sẵn sàng nhưng chưa xuất bản học liệu thật.');
+        return;
       }
+      const [vocabulary, grammar, exercises] = await Promise.all([
+        CourseContent.getBank('vocabulary'),
+        CourseContent.getBank('grammar'),
+        CourseContent.getBank('exercises')
+      ]);
+      // Giao diện flashcard cũ chỉ hỗ trợ N5–N3. N2/N1 có trình khóa học riêng.
+      const keepOldLevel = (item) => ['N5', 'N4', 'N3'].includes(String(item.level || '').toUpperCase());
+      const remote = normalizeContent({
+        vocabulary: vocabulary.filter(keepOldLevel),
+        grammar: grammar.filter(keepOldLevel),
+        exercises: exercises.filter(keepOldLevel)
+      });
+      content = remote;
+      isDemoMode = false;
+      // Không chép toàn bộ bank JSON vào localStorage: file đã cache theo version trong IndexedDB.
+      await AppStore.remove(CONTENT_CACHE_KEY);
+      const offline = CourseContent.status().mode === 'offline';
+      setConnectionState(offline ? 'Dùng học liệu đã lưu' : 'Đã cập nhật học liệu', offline ? 'offline' : 'online');
+      renderAll();
+      if (forceRefresh) showToast(`Đã tải ${content.vocabulary.length} từ, ${content.grammar.length} ngữ pháp, ${content.exercises.length} bài tập.`);
     } catch (error) {
-      setConnectionState('Đang dùng dữ liệu trên máy', 'offline');
-      showToast(`Không tải được dữ liệu: ${error.message || 'Lỗi kết nối'}`);
+      console.warn('Không thể tải ngân hàng học liệu:', error);
+      setConnectionState('Học liệu chưa sẵn sàng', 'offline');
+      if (forceRefresh) showToast(`Không thể cập nhật học liệu: ${error.message || 'Lỗi kết nối'}`);
     }
+  }
+
+  async function refreshContent() {
+    return refreshPublicContent(true);
   }
 
   let remoteSyncTimer;
   function scheduleRemoteSync() {
-    if (!currentUser || !AppDB.isConfigured() || isDemoMode) return;
+    if (!currentUser || !AppDB.isConfigured() || isDemoMode || progressSwitching || activeProgressUserId !== currentUser.id) return;
     clearTimeout(remoteSyncTimer);
     remoteSyncTimer = setTimeout(() => syncProgressToRemote(false), 1800);
   }
 
   async function syncProgressToRemote(showMessage) {
-    if (!currentUser || !AppDB.isConfigured() || isDemoMode) return;
+    const targetUserId = currentUser && currentUser.id;
+    if (!targetUserId || !AppDB.isConfigured() || isDemoMode || progressSwitching || activeProgressUserId !== targetUserId) return;
     try {
-      const records = Object.values(progress).filter((record) => !String(record.itemId || '').startsWith('demo-')).map((record) => ({
+      const snapshot = { ...progress };
+      const records = Object.values(snapshot).filter((record) => record && !String(record.itemId || '').startsWith('demo-')).map((record) => ({
         item_type: record.itemType, item_id: record.itemId,
         data: record.data || {}, updated_at: record.updatedAt || new Date().toISOString()
       }));
+      const authenticatedUser = await AppDB.getUser();
+      if (!authenticatedUser || authenticatedUser.id !== targetUserId || currentUser?.id !== targetUserId || activeProgressUserId !== targetUserId) return;
       for (let i = 0; i < records.length; i += 2000) {
+        if (currentUser?.id !== targetUserId || activeProgressUserId !== targetUserId) return;
         await AppDB.syncUserProgress(records.slice(i, i + 2000));
       }
       if (showMessage) showToast('Tiến độ đã đồng bộ lên tài khoản.');
@@ -1049,23 +916,103 @@
     }
   }
 
-  async function syncAccountProgress() {
-    if (!currentUser) return;
-    if (accountSyncPromise) return accountSyncPromise;
-    accountSyncPromise = (async () => {
+  async function syncAccountProgress(targetUserId = currentUser && currentUser.id) {
+    if (!targetUserId || !currentUser || currentUser.id !== targetUserId || activeProgressUserId !== targetUserId || progressSwitching) return;
+    if (accountSyncPromise) {
+      if (accountSyncUserId === targetUserId) return accountSyncPromise;
+      await accountSyncPromise.catch(() => {});
+      if (!currentUser || currentUser.id !== targetUserId || activeProgressUserId !== targetUserId) return;
+    }
+    const run = (async () => {
       try {
         const remoteRows = await AppDB.getUserProgress();
-        progress = AppStore.mergeProgress(progress, remoteRows);
-        await AppStore.set(PROGRESS_KEY, progress);
+        if (!currentUser || currentUser.id !== targetUserId || activeProgressUserId !== targetUserId) return;
+        const storageKey = progressStorageKey(targetUserId);
+        const localProgress = normalizeProgressMap(await AppStore.get(storageKey, {}));
+        if (!currentUser || currentUser.id !== targetUserId || activeProgressUserId !== targetUserId) return;
+        progress = AppStore.mergeProgress(localProgress, remoteRows);
+        await AppStore.set(storageKey, progress);
+        if (!currentUser || currentUser.id !== targetUserId || activeProgressUserId !== targetUserId) return;
         await syncProgressToRemote(false);
         renderAll();
-        showToast('Đã hợp nhất tiến độ trên thiết bị và tài khoản.');
+        showToast('Đã hợp nhất tiến độ riêng của tài khoản.');
       } catch (error) {
-        showToast(`Đăng nhập được nhưng chưa tải được tiến độ: ${error.message || 'Lỗi đồng bộ'}`);
+        if (currentUser && currentUser.id === targetUserId) {
+          showToast(`Đăng nhập được nhưng chưa tải được tiến độ: ${error.message || 'Lỗi đồng bộ'}`);
+        }
       }
     })();
-    try { await accountSyncPromise; }
-    finally { accountSyncPromise = null; }
+    accountSyncPromise = run;
+    accountSyncUserId = targetUserId;
+    try { await run; }
+    finally {
+      if (accountSyncPromise === run) {
+        accountSyncPromise = null;
+        accountSyncUserId = null;
+      }
+    }
+  }
+
+  async function switchProgressScope(user) {
+    const targetUserId = user && user.id ? String(user.id) : null;
+    currentUser = user || null;
+    clearTimeout(remoteSyncTimer);
+    if (activeProgressUserId === targetUserId && !progressSwitching) {
+      if (targetUserId) await syncAccountProgress(targetUserId);
+      return;
+    }
+    if (progressSwitchPromise && progressSwitchTarget === targetUserId) return progressSwitchPromise;
+
+    const sequence = ++progressSwitchSequence;
+    progressSwitching = true;
+    const run = (async () => {
+      try {
+        const saved = await AppStore.get(progressStorageKey(targetUserId), {});
+        if (sequence !== progressSwitchSequence || (currentUser?.id || null) !== targetUserId) return;
+        progress = normalizeProgressMap(saved);
+        activeProgressUserId = targetUserId;
+        progressSwitching = false;
+        renderAll();
+        if (targetUserId) await syncAccountProgress(targetUserId);
+      } finally {
+        if (sequence === progressSwitchSequence) progressSwitching = false;
+      }
+    })();
+    progressSwitchPromise = run;
+    progressSwitchTarget = targetUserId;
+    try { await run; }
+    finally {
+      if (progressSwitchPromise === run) {
+        progressSwitchPromise = null;
+        progressSwitchTarget = null;
+      }
+    }
+  }
+
+  async function importGuestProgressToAccount() {
+    if (!currentUser || activeProgressUserId !== currentUser.id || progressSwitching) {
+      showToast('Hãy đăng nhập lại trước khi nhập tiến độ khách.');
+      return;
+    }
+    const guestProgress = normalizeProgressMap(await AppStore.get(PROGRESS_KEY, {}));
+    const merged = { ...progress };
+    let imported = 0;
+    Object.values(guestProgress).forEach((record) => {
+      if (!record || !record.itemType || !record.itemId || String(record.itemId).startsWith('demo-')) return;
+      const key = `${record.itemType}:${record.itemId}`;
+      const existing = merged[key];
+      const oldTime = existing ? Date.parse(existing.updatedAt || 0) || 0 : 0;
+      const newTime = Date.parse(record.updatedAt || 0) || 0;
+      if (!existing || newTime >= oldTime) {
+        merged[key] = record;
+        imported += 1;
+      }
+    });
+    progress = merged;
+    await AppStore.set(progressStorageKey(currentUser.id), progress);
+    renderAll();
+    await syncProgressToRemote(false);
+    showToast(imported ? `Đã nhập ${imported} mục tiến độ khách vào tài khoản. Bản khách vẫn được giữ trên thiết bị.` : 'Không có tiến độ khách mới để nhập. Bản khách vẫn được giữ nguyên.');
   }
 
   function updateAccountModal() {
@@ -1076,7 +1023,7 @@
     $('account-user-email').textContent = currentUser ? username || currentUser.email || 'Tài khoản Supabase' : '';
     $('account-modal-title').textContent = loggedIn ? 'Tài khoản đã kết nối' : 'Học không cần tài khoản';
     $('account-modal-description').textContent = loggedIn
-      ? 'Tiến độ học được lưu trên thiết bị và đồng bộ lên tài khoản.'
+      ? 'Tiến độ tài khoản được lưu riêng trên thiết bị và đồng bộ lên tài khoản. Tiến độ khách vẫn được giữ riêng.'
       : 'Bạn có thể học ngay không cần tài khoản. Tạo tên đăng nhập để đồng bộ tiến độ giữa các thiết bị.';
   }
 
@@ -1122,8 +1069,8 @@
         await AppDB.signIn(username, password);
         currentUser = await AppDB.getUser();
       }
+      await switchProgressScope(currentUser);
       updateAccountModal();
-      await syncAccountProgress();
     } catch (error) {
       errorEl.textContent = error.message || 'Không thể xác thực tài khoản.';
     } finally {
@@ -1135,9 +1082,9 @@
   async function handleSignOut() {
     try {
       await AppDB.signOut();
-      currentUser = null;
+      await switchProgressScope(null);
       updateAccountModal();
-      showToast('Đã đăng xuất. Tiến độ trên thiết bị vẫn được giữ lại.');
+      showToast('Đã đăng xuất. Tiến độ tài khoản và tiến độ khách vẫn được lưu riêng.');
     } catch (error) {
       showToast(error.message || 'Không thể đăng xuất.');
     }
@@ -1160,10 +1107,9 @@
     authListenerRegistered = true;
     AppDB.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session && session.user) {
-        currentUser = session.user;
-        syncAccountProgress();
+        switchProgressScope(session.user).catch((error) => console.warn('Không thể chuyển tiến độ tài khoản:', error));
       } else if (event === 'SIGNED_OUT') {
-        currentUser = null;
+        switchProgressScope(null).catch((error) => console.warn('Không thể tải lại tiến độ khách:', error));
       }
     });
   }
@@ -1171,53 +1117,29 @@
   async function connectSupabaseInBackground() {
     try {
       const sdkReady = await AppDB.loadSdk();
-      if (!sdkReady) {
-        setConnectionState('Chế độ ngoại tuyến', 'offline');
-        return;
-      }
+      if (!sdkReady) return;
       AppDB.init();
-      try {
-        const remote = normalizeContent(await AppDB.getPublishedContent());
-        if (totalContentCount(remote) > 0) {
-          content = remote;
-          await AppStore.set(CONTENT_CACHE_KEY, content);
-          isDemoMode = false;
-          setConnectionState('Đã tải học liệu', 'online');
-          renderAll();
-        } else if (totalContentCount(content) > 0) {
-          setConnectionState('Dùng học liệu đã lưu', 'offline');
-        } else {
-          setConnectionState('Máy chủ chưa có học liệu', 'offline');
-        }
-      } catch (error) {
-        console.warn('Tải học liệu từ Supabase không thành công:', error);
-        setConnectionState('Đang dùng dữ liệu trên máy', 'offline');
-      }
-      currentUser = await AppDB.getUser();
-      if (currentUser) await syncAccountProgress();
+      const user = await AppDB.getUser();
+      await switchProgressScope(user);
       registerAuthListener();
     } catch (error) {
-      console.warn('Không thể khởi tạo kết nối Supabase:', error);
-      setConnectionState('Chế độ ngoại tuyến', 'offline');
+      console.warn('Không thể khởi tạo xác thực Supabase:', error);
     }
   }
 
   async function initialize() {
     try {
       const savedProgress = await AppStore.get(PROGRESS_KEY, {});
-      progress = savedProgress && typeof savedProgress === 'object' ? savedProgress : {};
+      progress = normalizeProgressMap(savedProgress);
+      activeProgressUserId = null;
       const savedMeta = await AppStore.get(META_KEY, null);
       if (savedMeta && typeof savedMeta === 'object') meta = { ...meta, ...savedMeta };
       const savedSpeech = await AppStore.get(SPEECH_SETTINGS_KEY, null);
       if (savedSpeech && typeof savedSpeech === 'object') {
         speechSettings = { ...speechSettings, ...savedSpeech };
-        if (
-          (Number(savedSpeech.rate) === 0.84 && Number(savedSpeech.pitch) === 1.10) ||
-          (Number(savedSpeech.rate) === 0.92 && Number(savedSpeech.pitch) === 1.04)
-        ) {
-          // Chuyển thiết lập mặc định cũ sang tốc độ và cao độ tự nhiên hơn.
-          speechSettings.rate = 1;
-          speechSettings.pitch = 1;
+        if (Number(savedSpeech.rate) === 0.84 && Number(savedSpeech.pitch) === 1.10) {
+          speechSettings.rate = 0.92;
+          speechSettings.pitch = 1.04;
         }
       }
       const cached = await AppStore.get(CONTENT_CACHE_KEY, null);
@@ -1232,12 +1154,9 @@
       window.speechSynthesis.onvoiceschanged = renderVoiceOptions;
       window.setTimeout(renderVoiceOptions, 350);
     }
-    if (AppDB.isConfigured()) {
-      setConnectionState('Đang kết nối…', '');
-      connectSupabaseInBackground();
-    } else {
-      setConnectionState('Chế độ ngoại tuyến', 'offline');
-    }
+    // Nguồn học liệu công khai hoạt động độc lập với trạng thái đăng nhập Supabase.
+    refreshPublicContent(false);
+    if (AppDB.isConfigured()) connectSupabaseInBackground();
   }
 
   function bindEvents() {
@@ -1271,9 +1190,9 @@
         return;
       }
       const kanaScriptButton = event.target.closest('[data-kana-script]');
-      if (kanaScriptButton) { stopKanaAudio(); kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      if (kanaScriptButton) { kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
       const kanaGroupButton = event.target.closest('[data-kana-group]');
-      if (kanaGroupButton) { stopKanaAudio(); kanaGroup = kanaGroupButton.dataset.kanaGroup; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      if (kanaGroupButton) { kanaGroup = kanaGroupButton.dataset.kanaGroup; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
       const kanaQuizModeButton = event.target.closest('[data-kana-quiz-mode]');
       if (kanaQuizModeButton) { startKanaQuiz(kanaQuizModeButton.dataset.kanaQuizMode); return; }
       const kanaQuizOption = event.target.closest('[data-kana-quiz-option]');
@@ -1300,10 +1219,16 @@
     });
     $('sign-out-button').addEventListener('click', handleSignOut);
     $('sync-now-button').addEventListener('click', () => syncProgressToRemote(true));
+    $('import-guest-progress-button').addEventListener('click', () => {
+      const confirmed = window.confirm('Nhập tiến độ khách trên thiết bị vào tài khoản đang đăng nhập? Tiến độ khách sẽ được giữ nguyên; các mục trùng sẽ ưu tiên bản cập nhật mới hơn.');
+      if (confirmed) importGuestProgressToAccount();
+    });
 
     $('continue-learning').addEventListener('click', () => content.vocabulary.length ? startVocabSession() : setPage('kana'));
     $('load-demo-button').addEventListener('click', loadDemoData);
     $('refresh-content-button').addEventListener('click', refreshContent);
+    const refreshTop = $('refresh-content-top-button');
+    if (refreshTop) refreshTop.addEventListener('click', refreshContent);
     $('start-vocab-session').addEventListener('click', startVocabSession);
     $('vocab-search').addEventListener('input', renderVocabList);
     $('vocab-level-filter').addEventListener('change', renderVocabList);
@@ -1376,14 +1301,14 @@
     $('kana-audio-button').addEventListener('click', () => selectedKana && speakKana(selectedKana));
     $('kana-quiz-audio').addEventListener('click', () => kanaQuiz && kanaQuiz.answer && speakKana(kanaQuiz.answer));
     $('kana-quiz-next').addEventListener('click', () => { if (kanaQuiz && kanaQuiz.complete) startKanaQuiz(kanaQuiz.mode); else nextKanaQuizQuestion(); });
-    $('speech-voice-select').addEventListener('change', () => { speechSettings.voiceURI = $('speech-voice-select').value; speechSettings.voiceSelectedByUser = true; saveSpeechSettings(); });
+    $('speech-voice-select').addEventListener('change', () => { speechSettings.voiceURI = $('speech-voice-select').value; saveSpeechSettings(); });
     $('speech-rate').addEventListener('input', () => { speechSettings.rate = Number($('speech-rate').value); $('speech-rate-value').textContent = `${speechSettings.rate.toFixed(2)}×`; saveSpeechSettings(); });
     $('speech-pitch').addEventListener('input', () => { speechSettings.pitch = Number($('speech-pitch').value); $('speech-pitch-value').textContent = speechSettings.pitch.toFixed(2); saveSpeechSettings(); });
-    $('speech-preview-button').addEventListener('click', () => speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { rate: Math.min(Number(speechSettings.rate) || 1, 1), pitch: 1 }));
+    $('speech-preview-button').addEventListener('click', () => speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { rate: Math.min(Number(speechSettings.rate) || 0.92, 0.90), pitch: speechSettings.pitch }));
     document.querySelectorAll('.modal-backdrop').forEach((modal) => modal.addEventListener('click', (event) => {
       if (event.target === modal) modal.hidden = true;
     }));
-    window.addEventListener('online', () => { if (AppDB.isConfigured()) refreshContent(); });
+    window.addEventListener('online', () => refreshPublicContent(true));
   }
 
   document.addEventListener('DOMContentLoaded', () => {
