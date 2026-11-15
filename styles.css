@@ -262,6 +262,8 @@ a { color: inherit; text-decoration: none; }
 .signed-in-card div { display: grid; gap: 4px; }
 .signed-in-card strong { font-size: 12px; }
 .signed-in-card small { color: var(--muted); font-size: 10px; }
+.account-guest-import-note { margin: 0 0 9px; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.account-user-panel > .button + .button { margin-top: 8px; }
 .vocab-detail-modal { text-align: center; }
 .detail-tags { display: flex; justify-content: center; gap: 7px; }
 .detail-japanese { margin: 19px 0 4px !important; font-family: "Noto Sans JP", sans-serif; font-size: 44px !important; }
