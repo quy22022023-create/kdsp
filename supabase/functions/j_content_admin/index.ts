@@ -11,6 +11,7 @@ const OWNER = Deno.env.get('GITHUB_OWNER') || 'quy22022023-create';
 const REPO = Deno.env.get('GITHUB_REPO') || 'kdsp';
 const BRANCH = Deno.env.get('GITHUB_BRANCH') || 'main';
 const API = 'https://api.github.com';
+const DRAFT_BUCKET = 'kdsp-cms-drafts';
 const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const LEVELS = new Set(['N5', 'N4', 'N3', 'N2', 'N1', 'OTHER']);
 const BANK_TYPES = ['vocabulary', 'grammar', 'exercises'] as const;
@@ -23,11 +24,14 @@ const ACTIVITY_TYPES = new Set([
 type BankType = typeof BANK_TYPES[number];
 type Workspace = {
   baseContentVersion: number;
+  headSha: string;
   manifest: Record<string, any>;
   courses: any[];
   banks: Record<BankType, any[]>;
   currentPaths: string[];
   versions: Record<string, number>;
+  // Server-only snapshot: do not transfer duplicate objects to the browser.
+  existingFiles: Record<string, any>;
 };
 
 function response(status: number, body: Record<string, unknown>) {
@@ -71,6 +75,15 @@ function slug(value: unknown) {
   return result || 'general';
 }
 
+function stableHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function encodePath(path: string) {
   return path.split('/').map(encodeURIComponent).join('/');
 }
@@ -108,9 +121,9 @@ async function githubRequest(path: string, init: RequestInit = {}) {
   return data;
 }
 
-async function readJson(path: string, fallback: any = null) {
+async function readJson(path: string, ref: string, fallback: any = null) {
   try {
-    const data = await githubRequest('/contents/' + encodePath(path) + '?ref=' + encodeURIComponent(BRANCH));
+    const data = await githubRequest('/contents/' + encodePath(path) + '?ref=' + encodeURIComponent(ref));
     if (data.encoding === 'base64' && data.content) return JSON.parse(decodeBase64Utf8(data.content));
     if (data.download_url) {
       const raw = await fetch(data.download_url, { cache: 'no-store' });
@@ -132,7 +145,13 @@ function addRefVersion(versions: Record<string, number>, ref: any) {
 }
 
 async function loadWorkspace(): Promise<Workspace> {
-  const manifest = await readJson('content/manifest.json', {
+  const branchRef = await githubRequest('/git/ref/heads/' + encodeURIComponent(BRANCH));
+  const headSha = String(branchRef.object?.sha || '');
+  if (!headSha) throw new Error('Không đọc được commit hiện tại của nhánh GitHub.');
+
+  // Read every file from the same immutable commit so the editor never mixes
+  // content from two different GitHub snapshots.
+  const manifest = await readJson('content/manifest.json', headSha, {
     schema_version: 1,
     content_version: 1,
     catalog: { path: 'catalog.json', version: 1 },
@@ -141,14 +160,19 @@ async function loadWorkspace(): Promise<Workspace> {
 
   const catalogPath = safeRelativePath(manifest.catalog?.path || 'catalog.json');
   const banksPath = safeRelativePath(manifest.banks_index?.path || 'banks/index.json');
-  const catalog = await readJson('content/' + catalogPath, { schema_version: 1, courses: [] });
-  const banksIndex = await readJson('content/' + banksPath, {
+  const catalog = await readJson('content/' + catalogPath, headSha, { schema_version: 1, courses: [] });
+  const banksIndex = await readJson('content/' + banksPath, headSha, {
     schema_version: 1,
     vocabulary: { shards: [] },
     grammar: { shards: [] },
     exercises: { shards: [] }
   });
 
+  const existingFiles: Record<string, any> = {
+    'content/manifest.json': manifest,
+    ['content/' + catalogPath]: catalog,
+    ['content/' + banksPath]: banksIndex
+  };
   const versions: Record<string, number> = {
     'content/manifest.json': Number(manifest.content_version) || 1,
     ['content/' + catalogPath]: Number(manifest.catalog?.version) || 1,
@@ -165,21 +189,25 @@ async function loadWorkspace(): Promise<Workspace> {
     addRefVersion(versions, courseRef);
     const coursePath = 'content/' + safeRelativePath(courseRef.path);
     currentPaths.add(coursePath);
-    const course = await readJson(coursePath);
+    const course = await readJson(coursePath, headSha);
+    existingFiles[coursePath] = course;
     const modules: any[] = [];
 
     for (const moduleRef of Array.isArray(course.module_refs) ? course.module_refs : []) {
       addRefVersion(versions, moduleRef);
       const modulePath = 'content/' + safeRelativePath(moduleRef.path);
       currentPaths.add(modulePath);
-      const module = await readJson(modulePath);
+      const module = await readJson(modulePath, headSha);
+      existingFiles[modulePath] = module;
       const lessons: any[] = [];
 
       for (const lessonRef of Array.isArray(module.lesson_refs) ? module.lesson_refs : []) {
         addRefVersion(versions, lessonRef);
         const lessonPath = 'content/' + safeRelativePath(lessonRef.path);
         currentPaths.add(lessonPath);
-        lessons.push(await readJson(lessonPath));
+        const lesson = await readJson(lessonPath, headSha);
+        existingFiles[lessonPath] = lesson;
+        lessons.push(lesson);
       }
       modules.push({ module, lessons });
     }
@@ -193,18 +221,21 @@ async function loadWorkspace(): Promise<Workspace> {
       addRefVersion(versions, ref);
       const path = 'content/' + safeRelativePath(ref.path);
       currentPaths.add(path);
-      const shard = await readJson(path);
+      const shard = await readJson(path, headSha);
+      existingFiles[path] = shard;
       if (Array.isArray(shard.items)) banks[type].push(...shard.items);
     }
   }
 
   return {
     baseContentVersion: Number(manifest.content_version) || 1,
+    headSha,
     manifest,
     courses,
     banks,
     currentPaths: Array.from(currentPaths),
-    versions
+    versions,
+    existingFiles
   };
 }
 
@@ -340,6 +371,30 @@ function validateWorkspace(bundle: any, current: Workspace) {
           if (!String(activity.title || '').trim()) errors.push('Hoạt động ' + activity.id + ' chưa có tiêu đề.');
           if (!activity.data || typeof activity.data !== 'object' || Array.isArray(activity.data)) {
             errors.push('data của hoạt động ' + activity.id + ' phải là object.');
+          } else {
+            const data = activity.data;
+            const type = String(activity.type || '');
+            if (type === 'explanation' && !String(data.body_markdown || data.content || '').trim()) {
+              errors.push('Hoạt động lý thuyết ' + activity.id + ' cần body_markdown hoặc content.');
+            }
+            if (type === 'tap_translate' && (!String(data.sentence_jp || '').trim() || !Array.isArray(data.tokens))) {
+              errors.push('Hoạt động chạm để dịch ' + activity.id + ' cần sentence_jp và tokens[].');
+            }
+            if (type === 'matching' && (!Array.isArray(data.pairs) || !data.pairs.length)) {
+              errors.push('Hoạt động ghép đôi ' + activity.id + ' cần pairs[].');
+            }
+            if (['multiple_choice', 'fill_blank', 'sentence_order', 'quiz'].includes(type) && (!Array.isArray(data.questions) || !data.questions.length)) {
+              errors.push('Hoạt động ' + activity.id + ' cần questions[].');
+            }
+            if (['listening', 'speaking', 'dictation'].includes(type) && (!Array.isArray(data.prompts) || !data.prompts.length)) {
+              errors.push('Hoạt động ' + activity.id + ' cần prompts[].');
+            }
+            if (['vocabulary', 'kanji', 'grammar'].includes(type) && !((Array.isArray(data.items) && data.items.length) || (Array.isArray(activity.item_refs) && activity.item_refs.length))) {
+              errors.push('Hoạt động ' + activity.id + ' cần items[] hoặc item_refs[].');
+            }
+          }
+          if (activity.item_refs != null && !Array.isArray(activity.item_refs)) {
+            errors.push('item_refs của hoạt động ' + activity.id + ' phải là mảng.');
           }
           for (const ref of Array.isArray(activity.item_refs) ? activity.item_refs : []) {
             if (!ref || typeof ref !== 'object' || Array.isArray(ref)) {
@@ -428,11 +483,30 @@ function cleanLesson(source: any, courseId: string, moduleId: string) {
   };
 }
 
+function semanticSnapshot(value: any): string {
+  if (Array.isArray(value)) return '[' + value.map(semanticSnapshot).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).filter((key) => key !== 'updated_at').sort()
+      .map((key) => JSON.stringify(key) + ':' + semanticSnapshot(value[key])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+
 async function publishWorkspace(bundle: any, current: Workspace) {
   validateWorkspace(bundle, current);
   const files = new Map<string, any>();
+  const changedFiles = new Set<string>();
   const versions = current.versions || {};
-  const nextVersion = (path: string) => (Number(versions[path]) || 0) + 1;
+  const stage = (path: string, value: any): number => {
+    const previous = current.existingFiles[path];
+    if (previous && semanticSnapshot(previous) === semanticSnapshot(value)) {
+      files.set(path, previous); // Keep old timestamps; no new Git blob required.
+      return Number(versions[path]) || 1;
+    }
+    files.set(path, value);
+    changedFiles.add(path);
+    return (Number(versions[path]) || 0) + 1;
+  };
   const courseRefs: any[] = [];
   const sortedCourses = [...bundle.courses].sort(
     (a: any, b: any) => (Number(a.course?.order) || 0) - (Number(b.course?.order) || 0)
@@ -459,23 +533,20 @@ async function publishWorkspace(bundle: any, current: Workspace) {
         const lesson = cleanLesson(lessonSource, course.id, module.id);
         const lessonPath = base + '/lessons/' + lesson.id + '.json';
         const lessonFilePath = 'content/' + lessonPath;
-        const lessonVersion = nextVersion(lessonFilePath);
+        const lessonVersion = stage(lessonFilePath, lesson);
         lessonRefs.push({ id: lesson.id, path: lessonPath, version: lessonVersion });
-        files.set(lessonFilePath, lesson);
       }
 
-      const moduleVersion = nextVersion(moduleFilePath);
       module.lesson_refs = lessonRefs;
+      const moduleVersion = stage(moduleFilePath, module);
       moduleRefs.push({ id: module.id, path: modulePath, version: moduleVersion });
-      files.set(moduleFilePath, module);
     }
 
     const coursePath = base + '/course.json';
     const courseFilePath = 'content/' + coursePath;
-    const courseVersion = nextVersion(courseFilePath);
     course.module_refs = moduleRefs;
+    const courseVersion = stage(courseFilePath, course);
     courseRefs.push({ id: course.id, path: coursePath, version: courseVersion });
-    files.set(courseFilePath, course);
   }
 
   const banksIndex: any = {
@@ -498,11 +569,10 @@ async function publishWorkspace(bundle: any, current: Workspace) {
       const parts = key.split('|');
       const level = parts[0];
       const topic = parts.slice(1).join('|');
-      const shardId = (type + '-' + level.toLowerCase() + '-' + slug(topic)).slice(0, 64);
+      const shardId = (type + '-' + level.toLowerCase() + '-' + slug(topic) + '-' + stableHash(key)).slice(0, 64);
       const shardPath = 'banks/' + type + '/' + shardId + '.json';
       const filePath = 'content/' + shardPath;
-      const version = nextVersion(filePath);
-      files.set(filePath, { schema_version: 1, bank_type: type, level, items });
+      const version = stage(filePath, { schema_version: 1, bank_type: type, level, items });
       banksIndex[type].shards.push({ id: shardId, level, path: shardPath, version, item_count: items.length });
     }
 
@@ -517,24 +587,32 @@ async function publishWorkspace(bundle: any, current: Workspace) {
     updated_at: new Date().toISOString(),
     courses: courseRefs
   };
+  const catalogVersion = stage('content/catalog.json', catalog);
+  const banksVersion = stage('content/banks/index.json', banksIndex);
+  const resultingPaths = new Set([...files.keys(), 'content/manifest.json']);
+  const deletedPaths = (current.currentPaths || []).filter((path) => !resultingPaths.has(path));
+  if (!changedFiles.size && !deletedPaths.length) {
+    const unchanged = new Error('Nội dung học liệu chưa có thay đổi so với bản đã xuất bản.');
+    (unchanged as any).status = 409;
+    throw unchanged;
+  }
   const manifest = {
     ...current.manifest,
     schema_version: 1,
     content_version: nextContentVersion,
     published_at: new Date().toISOString(),
-    catalog: { path: 'catalog.json', version: nextVersion('content/catalog.json') },
-    banks_index: { path: 'banks/index.json', version: nextVersion('content/banks/index.json') }
+    catalog: { path: 'catalog.json', version: catalogVersion },
+    banks_index: { path: 'banks/index.json', version: banksVersion }
   };
 
-  files.set('content/catalog.json', catalog);
-  files.set('content/banks/index.json', banksIndex);
-  files.set('content/manifest.json', manifest);
+  stage('content/manifest.json', manifest);
 
   const newPaths = new Set(files.keys());
   const deletions = (current.currentPaths || []).filter((path) => !newPaths.has(path));
   const entries: any[] = [];
 
   for (const [path, value] of files.entries()) {
+    if (!changedFiles.has(path)) continue;
     const blob = await githubRequest('/git/blobs', {
       method: 'POST',
       body: JSON.stringify({ content: JSON.stringify(value, null, 2) + '\n', encoding: 'utf-8' })
@@ -545,9 +623,8 @@ async function publishWorkspace(bundle: any, current: Workspace) {
     entries.push({ path, mode: '100644', type: 'blob', sha: null });
   }
 
-  const ref = await githubRequest('/git/ref/heads/' + encodeURIComponent(BRANCH));
-  const parentSha = ref.object?.sha;
-  if (!parentSha) throw new Error('Không đọc được commit hiện tại của nhánh GitHub.');
+  const parentSha = String(current.headSha || '');
+  if (!parentSha) throw new Error('Thiếu commit nền của workspace. Hãy tải lại dữ liệu GitHub.');
   const parent = await githubRequest('/git/commits/' + parentSha);
   const tree = await githubRequest('/git/trees', {
     method: 'POST',
@@ -562,7 +639,14 @@ async function publishWorkspace(bundle: any, current: Workspace) {
     })
   });
 
-  // force=false prevents overwriting a newer commit pushed after the initial read.
+  // Check the branch again before moving it. The new commit is based on the
+  // exact SHA read with the workspace; a concurrent update must never be lost.
+  const latestRef = await githubRequest('/git/ref/heads/' + encodeURIComponent(BRANCH));
+  if (latestRef.object?.sha !== parentSha) {
+    const conflict = new Error('Nhánh GitHub đã có commit mới trong lúc bạn soạn. Không có dữ liệu nào bị ghi đè; hãy tải lại kho và áp dụng lại chỉnh sửa.');
+    (conflict as any).status = 409;
+    throw conflict;
+  }
   await githubRequest('/git/refs/heads/' + encodeURIComponent(BRANCH), {
     method: 'PATCH',
     body: JSON.stringify({ sha: commit.sha, force: false })
@@ -623,7 +707,7 @@ Deno.serve(async (request: Request) => {
 
     const action = String(body.action || '');
     if (action === 'load_workspace') {
-      const workspace = await loadWorkspace();
+      const { existingFiles: _privateSnapshot, ...workspace } = await loadWorkspace();
       return response(200, { ok: true, workspace });
     }
 
@@ -639,13 +723,17 @@ Deno.serve(async (request: Request) => {
 
     if (action === 'get_draft') {
       const { data, error } = await adminClient.from('j_content_drafts')
-        .select('id,title,payload,status,updated_at')
+        .select('id,title,storage_path,status,updated_at')
         .eq('id', String(body.draftId || ''))
         .eq('user_id', caller.id)
         .maybeSingle();
       if (error) throw error;
       if (!data) return response(404, { error: 'Không tìm thấy bản nháp.' });
-      return response(200, { ok: true, draft: data });
+      const { data: draftBlob, error: downloadError } = await adminClient.storage
+        .from(DRAFT_BUCKET).download(data.storage_path);
+      if (downloadError || !draftBlob) throw downloadError || new Error('Không tải được bản nháp từ Storage.');
+      const payload = JSON.parse(await draftBlob.text());
+      return response(200, { ok: true, draft: { id: data.id, title: data.title, status: data.status, updated_at: data.updated_at, payload } });
     }
 
     if (action === 'save_draft') {
@@ -655,36 +743,55 @@ Deno.serve(async (request: Request) => {
         throw new Error('Nội dung bản nháp không hợp lệ.');
       }
 
+      let existing: any = null;
       if (body.draftId) {
-        const { data: existing, error: lookupError } = await adminClient.from('j_content_drafts')
-          .select('id')
+        const { data, error } = await adminClient.from('j_content_drafts')
+          .select('id,storage_path')
           .eq('id', String(body.draftId))
           .eq('user_id', caller.id)
           .maybeSingle();
-        if (lookupError) throw lookupError;
-        if (existing) {
-          const { error } = await adminClient.from('j_content_drafts')
-            .update({ title, payload, status: 'draft', updated_at: new Date().toISOString(), published_at: null })
-            .eq('id', existing.id)
-            .eq('user_id', caller.id);
-          if (error) throw error;
-          return response(200, { ok: true, draftId: existing.id });
+        if (error) throw error;
+        if (!data) return response(404, { error: 'Không tìm thấy bản nháp để cập nhật.' });
+        existing = data;
+      }
+      const draftId = existing?.id || crypto.randomUUID();
+      const storagePath = existing?.storage_path || caller.id + '/' + draftId + '.json';
+      // The full content is kept in private Supabase Storage. The Database
+      // stores only compact ownership/status metadata.
+      const { error: uploadError } = await adminClient.storage.from(DRAFT_BUCKET).upload(
+        storagePath,
+        new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+        { contentType: 'application/json', cacheControl: '0', upsert: true }
+      );
+      if (uploadError) throw uploadError;
+      if (existing) {
+        const { error } = await adminClient.from('j_content_drafts')
+          .update({ title, status: 'draft', updated_at: new Date().toISOString(), published_at: null })
+          .eq('id', draftId).eq('user_id', caller.id);
+        if (error) throw error;
+      } else {
+        const { error } = await adminClient.from('j_content_drafts')
+          .insert({ id: draftId, user_id: caller.id, title, storage_path: storagePath, status: 'draft' });
+        if (error) {
+          await adminClient.storage.from(DRAFT_BUCKET).remove([storagePath]);
+          throw error;
         }
       }
-
-      const { data, error } = await adminClient.from('j_content_drafts')
-        .insert({ user_id: caller.id, title, payload, status: 'draft' })
-        .select('id')
-        .single();
-      if (error) throw error;
-      return response(200, { ok: true, draftId: data.id });
+      return response(200, { ok: true, draftId });
     }
 
     if (action === 'delete_draft') {
-      const { error } = await adminClient.from('j_content_drafts')
-        .delete()
+      const { data, error: lookupError } = await adminClient.from('j_content_drafts')
+        .select('id,storage_path')
         .eq('id', String(body.draftId || ''))
-        .eq('user_id', caller.id);
+        .eq('user_id', caller.id)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+      if (!data) return response(404, { error: 'Bản nháp không tồn tại.' });
+      const { error: removeError } = await adminClient.storage.from(DRAFT_BUCKET).remove([data.storage_path]);
+      if (removeError) throw removeError;
+      const { error } = await adminClient.from('j_content_drafts')
+        .delete().eq('id', data.id).eq('user_id', caller.id);
       if (error) throw error;
       return response(200, { ok: true });
     }
@@ -692,10 +799,11 @@ Deno.serve(async (request: Request) => {
     if (action === 'publish') {
       const bundle = body.workspace;
       const current = await loadWorkspace();
-      if (Number(bundle?.baseContentVersion) !== Number(current.baseContentVersion)) {
+      if (Number(bundle?.baseContentVersion) !== Number(current.baseContentVersion) || String(bundle?.headSha || '') !== current.headSha) {
         return response(409, {
-          error: 'Kho học liệu đã thay đổi sau lần tải gần nhất. Hãy tải lại dữ liệu GitHub, kiểm tra và áp dụng lại thay đổi trước khi xuất bản.',
-          currentContentVersion: current.baseContentVersion
+          error: 'Repository đã thay đổi sau lần tải gần nhất. Hãy tải lại dữ liệu GitHub, kiểm tra và áp dụng lại thay đổi trước khi xuất bản.',
+          currentContentVersion: current.baseContentVersion,
+          currentHeadSha: current.headSha
         });
       }
       const result = await publishWorkspace(bundle, current);
