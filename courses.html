@@ -7,12 +7,83 @@
   <meta name="description" content="Khóa học tiếng Nhật theo chương và bài học, luyện tập và theo dõi tiến độ.">
   <title>Khóa học tiếng Nhật — Nhật Ngữ</title>
   <link rel="stylesheet" href="./course-learning.css">
+  <script>
+    // Recover a blocked startup script only after the complete shell release is active.
+    (function () {
+      if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+      const expected = 'jp-learning-shell-v15-step-c';
+      const recoveryKey = 'kdsp_shell_recovery_v15_step_c';
+      let failed = false;
+      let ready = false;
+      let checking = false;
+      let reloading = false;
+      function explainFailure() {
+        if (!failed || ready || reloading) return;
+        const status = document.getElementById('connection-state') || document.getElementById('course-network-status');
+        const message = 'Bản cập nhật chưa tải đầy đủ. Hãy kết nối mạng và tải lại trang.';
+        if (status) status.textContent = message;
+        const toast = document.getElementById('toast') || document.getElementById('course-toast');
+        if (toast) {
+          toast.textContent = message;
+          toast.hidden = false;
+          if (toast.id === 'toast') toast.classList.add('show');
+        }
+      }
+      async function recover() {
+        const controller = navigator.serviceWorker.controller;
+        if (!failed || ready || checking || reloading || !controller) return;
+        checking = true;
+        const version = await new Promise((resolve) => {
+          const channel = new MessageChannel();
+          const timeout = setTimeout(() => { channel.port1.close(); resolve(null); }, 1200);
+          channel.port1.onmessage = (event) => {
+            clearTimeout(timeout);
+            channel.port1.close();
+            resolve(event.data && event.data.shellVersion);
+          };
+          try { controller.postMessage({ type: 'KDSP_SHELL_VERSION' }, [channel.port2]); }
+          catch (_) { clearTimeout(timeout); channel.port1.close(); resolve(null); }
+        });
+        checking = false;
+        if (navigator.serviceWorker.controller !== controller) { recover(); return; }
+        if (version !== expected || ready || reloading) return;
+        // If storage is unavailable, require an explicit reload rather than risk a loop.
+        try {
+          if (sessionStorage.getItem(recoveryKey)) { explainFailure(); return; }
+          sessionStorage.setItem(recoveryKey, '1');
+        } catch (_) { explainFailure(); return; }
+        reloading = true;
+        location.reload();
+      }
+      window.addEventListener('kdsp:consumer-ready', () => {
+        ready = true;
+        try { sessionStorage.removeItem(recoveryKey); } catch (_) { /* Recovery remains optional. */ }
+      }, { once: true });
+      window.addEventListener('error', (event) => {
+        const script = event.target;
+        if (!script || script.tagName !== 'SCRIPT' || !script.hasAttribute('data-kdsp-shell')) return;
+        failed = true;
+        explainFailure();
+        recover();
+        setTimeout(explainFailure, 12000);
+      }, true);
+      navigator.serviceWorker.addEventListener('controllerchange', recover);
+      window.addEventListener('load', () => {
+        explainFailure();
+        navigator.serviceWorker.register('./sw.js').then((registration) => {
+          recover();
+          return registration.update();
+        }).catch(explainFailure);
+      }, { once: true });
+    })();
+  </script>
   <script defer src="./config.js"></script>
   <script defer src="./js/store.js"></script>
+  <script defer src="./js/audio.js" data-kdsp-shell="audio" integrity="sha256-+gjSPYfjcuYw8JDBrb/I+w8hrRTgNA9MC/ARvLZJdIY="></script>
   <script defer src="./js/db.js"></script>
   <script defer src="./js/course-content.js"></script>
   <script defer src="./js/course-progress.js"></script>
-  <script defer src="./js/course-player.js"></script>
+  <script defer src="./js/course-player.js" data-kdsp-shell="consumer" integrity="sha256-PK71VcrV4LpGWIDQBqX36T3LifyFikd8SyOY5gBw++o="></script>
 </head>
 <body class="course-body">
   <div class="course-shell">
@@ -104,10 +175,6 @@
     <footer class="course-footer"><span>Nhật Ngữ · Học theo khóa</span><a href="./index.html">Về ứng dụng học</a></footer>
   </div>
   <div id="course-toast" class="course-toast" role="status" hidden></div>
-<script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-    }
-  </script>
+
 </body>
 </html>
