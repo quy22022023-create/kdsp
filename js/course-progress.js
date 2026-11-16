@@ -13,7 +13,8 @@
   let userId = null;
   let writable = true;
   let syncPromise = null;
-  let localQueue = Promise.resolve();
+  let scopeEpoch = 0;
+  const importTransactions = new Set();
   let channel = null;
   let lastError = '';
 
@@ -61,10 +62,10 @@
     });
   }
 
-  async function list(owner = scope()) {
+  async function list(owner = scope(), requireComplete = false) {
     const db = await openDb();
     if (!db) return Array.from(memory.entries()).filter(([key]) => key.startsWith(STORE + ':' + owner + '|')).map(([, value]) => value);
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const rows = [];
       try {
         const tx = db.transaction(STORE, 'readonly');
@@ -76,8 +77,14 @@
           cursor.continue();
         };
         tx.oncomplete = () => resolve(rows);
-        tx.onabort = tx.onerror = () => resolve(rows);
-      } catch (_) { resolve(rows); }
+        tx.onabort = tx.onerror = () => {
+          if (requireComplete) reject(new Error('Không thể đọc đầy đủ tiến độ khách; chưa nhập dữ liệu.'));
+          else resolve(rows);
+        };
+      } catch (_) {
+        if (requireComplete) reject(new Error('Không thể đọc đầy đủ tiến độ khách; chưa nhập dữ liệu.'));
+        else resolve(rows);
+      }
     });
   }
 
@@ -117,10 +124,10 @@
     };
   }
 
-  function notifyChange(lessonId) {
-    emit();
+  function notifyChange(lessonId, owner = scope()) {
+    if (owner === scope()) emit();
     if (channel) {
-      try { channel.postMessage({ lessonId, scope: scope() }); } catch (_) { /* channel not available */ }
+      try { channel.postMessage({ lessonId, scope: owner }); } catch (_) { /* channel not available */ }
     }
   }
 
@@ -344,7 +351,13 @@
     const previous = userId;
     userId = user?.id || null;
     const intended = userId;
-    if (userId !== previous) emit();
+    if (userId !== previous) {
+      scopeEpoch += 1;
+      for (const tx of importTransactions) {
+        try { tx.abort(); } catch (_) { /* A completed import already belongs to its captured owner. */ }
+      }
+      emit();
+    }
     if (intended && intended !== previous) {
       try {
         if (syncPromise) await syncPromise.catch(() => {});
@@ -353,15 +366,101 @@
     }
   }
 
+  function prepareImport(records) {
+    return records.map((record, index) => {
+      if (!obj(record) || !isId(record.itemId) || record.itemType !== 'lesson' || !obj(record.data)) {
+        throw new Error(`Tiến độ mục ${index + 1} không hợp lệ; chưa nhập dữ liệu.`);
+      }
+      for (const field of ['completedActivities', 'expectedActivities']) {
+        if (record.data[field] !== undefined && (!Array.isArray(record.data[field]) || !record.data[field].every(isId))) {
+          throw new Error(`Danh sách hoạt động ở mục ${index + 1} không hợp lệ; chưa nhập dữ liệu.`);
+        }
+      }
+      let data;
+      try { data = JSON.parse(JSON.stringify(record.data)); }
+      catch (_) { throw new Error(`Dữ liệu mục ${index + 1} không thể sao lưu; chưa nhập dữ liệu.`); }
+      return { itemType: 'lesson', itemId: record.itemId, data, updatedAt: isoNow(), dirty: true };
+    });
+  }
+
+  async function importRecords(records, owner, epoch) {
+    const unchanged = () => scope() === owner && scopeEpoch === epoch;
+    const scopeError = () => new Error('Tài khoản đã thay đổi; chưa nhập tiến độ. Hãy thử lại.');
+    if (!unchanged()) throw scopeError();
+    const db = await openDb();
+    if (!unchanged()) throw scopeError();
+    if (!records.length) return { imported: 0 };
+    if (!db) {
+      const staged = new Map();
+      for (const record of records) {
+        const key = STORE + ':' + recordKey(record.itemId, owner);
+        staged.set(key, mergeRecords(staged.get(key) || memory.get(key), record));
+      }
+      if (!unchanged()) throw scopeError();
+      for (const [key, value] of staged) memory.set(key, value);
+    } else {
+      await new Promise((resolve, reject) => {
+        let tx;
+        let failure = null;
+        const abort = (error) => {
+          failure = error;
+          try { tx.abort(); } catch (_) { /* Abort may already be in progress. */ }
+        };
+        try {
+          tx = db.transaction(STORE, 'readwrite');
+          importTransactions.add(tx);
+          const store = tx.objectStore(STORE);
+          let index = 0;
+          const next = () => {
+            if (!unchanged()) { abort(scopeError()); return; }
+            if (index >= records.length) return;
+            const record = records[index++];
+            const key = recordKey(record.itemId, owner);
+            const request = store.get(key);
+            request.onsuccess = () => {
+              if (!unchanged()) { abort(scopeError()); return; }
+              try {
+                store.put(mergeRecords(request.result, record), key);
+                next();
+              } catch (_) { abort(new Error('Không thể nhập tiến độ; toàn bộ đợt nhập đã bị hủy.')); }
+            };
+          };
+          tx.oncomplete = () => { importTransactions.delete(tx); writable = true; resolve(); };
+          tx.onabort = () => {
+            importTransactions.delete(tx);
+            if (!unchanged()) failure = scopeError();
+            if (unchanged()) writable = false;
+            if (!failure) failure = new Error('Không thể nhập tiến độ; toàn bộ đợt nhập đã bị hủy. Kiểm tra dung lượng lưu trữ.');
+            lastError = failure.message;
+            emit();
+            reject(failure);
+          };
+          // Request errors abort the transaction by default; reject only after rollback finishes.
+          tx.onerror = () => {};
+          next();
+        } catch (_) {
+          if (tx && tx.onabort) abort(new Error('Không thể nhập tiến độ; toàn bộ đợt nhập đã bị hủy.'));
+          else if (tx) {
+            importTransactions.delete(tx);
+            try { tx.abort(); } catch (_) { /* No writes have been queued. */ }
+            reject(new Error('Không thể mở giao dịch nhập tiến độ.'));
+          }
+          else reject(new Error('Không thể mở giao dịch nhập tiến độ.'));
+        }
+      });
+    }
+    lastError = '';
+    for (const id of new Set(records.map((record) => record.itemId))) notifyChange(id, owner);
+    if (owner !== GUEST && unchanged()) scheduleSync();
+    return { imported: records.length };
+  }
+
   async function importGuestProgress() {
     if (!userId) throw new Error('Cần đăng nhập trước khi nhập tiến độ khách.');
-    const rows = await list(GUEST);
-    for (const row of rows) {
-      if (!isId(row.itemId)) continue;
-      await mutate(row.itemId, { ...row.data, completedActivities: normalizedActivities(row.data?.completedActivities) }, userId);
-    }
-    if (rows.length) scheduleSync();
-    return { imported: rows.length };
+    const owner = scope();
+    const epoch = scopeEpoch;
+    const rows = await list(GUEST, true);
+    return importRecords(prepareImport(rows), owner, epoch);
   }
 
   async function exportBackup() {
@@ -370,18 +469,13 @@
   }
 
   async function importBackup(backup) {
+    const owner = scope();
+    const epoch = scopeEpoch;
     if (!obj(backup) || backup.format !== 'kdsp-lesson-progress' || backup.schema_version !== 1 ||
         !Array.isArray(backup.records) || backup.records.length > 5000) {
       throw new Error('Tệp sao lưu tiến độ không hợp lệ.');
     }
-    let imported = 0;
-    for (const record of backup.records) {
-      if (!isId(record.itemId) || record.itemType !== 'lesson' || !obj(record.data)) continue;
-      await mutate(record.itemId, record.data);
-      imported += 1;
-    }
-    if (userId) scheduleSync();
-    return { imported };
+    return importRecords(prepareImport(backup.records), owner, epoch);
   }
 
   function status() { return { scope: userId ? 'account' : 'guest', persistence: writable, syncing: Boolean(syncPromise), error: lastError }; }
