@@ -1,0 +1,189 @@
+{
+  "course": {
+    "schema_version": 1,
+    "id": "replace-course-id",
+    "slug": "replace-course-slug",
+    "title": "Tên khóa học",
+    "description": "",
+    "level": "N5",
+    "language": "ja",
+    "target_language": "vi",
+    "order": 1,
+    "estimated_minutes": 0,
+    "tags": [],
+    "objectives": [],
+    "cover_image": null,
+    "module_refs": [],
+    "updated_at": null
+  },
+  "module": {
+    "schema_version": 1,
+    "id": "replace-module-id",
+    "course_id": "replace-course-id",
+    "title": "Tên chương",
+    "description": "",
+    "order": 1,
+    "lesson_refs": [],
+    "updated_at": null
+  },
+  "lesson": {
+    "schema_version": 1,
+    "id": "replace-lesson-id",
+    "course_id": "replace-course-id",
+    "module_id": "replace-module-id",
+    "title": "Tên bài học",
+    "description": "",
+    "order": 1,
+    "estimated_minutes": 10,
+    "objectives": [],
+    "activities": [],
+    "updated_at": null
+  },
+  "vocabulary_shard": {
+    "schema_version": 1,
+    "bank_type": "vocabulary",
+    "level": "N5",
+    "items": []
+  },
+  "grammar_shard": {
+    "schema_version": 1,
+    "bank_type": "grammar",
+    "level": "N5",
+    "items": []
+  },
+  "exercise_shard": {
+    "schema_version": 1,
+    "bank_type": "exercises",
+    "level": "N5",
+    "items": []
+  },
+  "vocabulary_master_item": {
+    "id": "n5-daily-001",
+    "level": "N5",
+    "topic": "Đời sống hằng ngày",
+    "tag": "verb",
+    "jp": "たべます",
+    "kanji": "食べます",
+    "reading": "たべます",
+    "romaji": "tabemasu",
+    "dictionary_form": "食べる",
+    "part_of_speech": [
+      "verb"
+    ],
+    "verb_group": "ichidan",
+    "adjective_type": null,
+    "vi": "ăn",
+    "mnemonic": "Ghi chú ghi nhớ tùy chọn.",
+    "senses": [
+      {
+        "id": "n5-daily-001-s1",
+        "meaning_vi": "ăn",
+        "part_of_speech": "động từ",
+        "usage_note": "Dùng cho hành động ăn thức ăn.",
+        "register": "neutral",
+        "examples": [
+          {
+            "jp": "毎朝パンを食べます。",
+            "reading": "まいあさパンをたべます。",
+            "romaji": "Maiasa pan o tabemasu.",
+            "vi": "Tôi ăn bánh mì mỗi sáng."
+          }
+        ],
+        "collocations": [
+          "ご飯を食べる",
+          "昼ご飯を食べる"
+        ],
+        "tags": [
+          "đời sống"
+        ]
+      }
+    ],
+    "common_collocations": [
+      "ご飯を食べる"
+    ],
+    "synonyms": [],
+    "antonyms": [],
+    "related_vocabulary_ids": [],
+    "kanji_components": [
+      "食"
+    ],
+    "jlpt_confidence": "reference_based",
+    "source_notes": [],
+    "review_status": "draft",
+    "updated_at": null
+  },
+  "vocabulary_master_package": {
+    "schema_version": 1,
+    "package_type": "vocabulary_master",
+    "package_id": "n5-daily-life-001",
+    "level": "N5",
+    "metadata": {
+      "title": "Đời sống hằng ngày N5",
+      "description": "Gói từ vựng mẫu theo Vocabulary Master Schema v1.",
+      "language": "ja",
+      "target_language": "vi",
+      "topic": "Đời sống hằng ngày",
+      "batch": "part-001",
+      "created_by": "external-ai",
+      "source_policy": "Ghi nguồn tham khảo cụ thể khi có; không tuyên bố đây là danh sách JLPT chính thức.",
+      "generated_at": null
+    },
+    "items": [
+      {
+        "id": "n5-daily-001",
+        "level": "N5",
+        "topic": "Đời sống hằng ngày",
+        "tag": "verb",
+        "jp": "たべます",
+        "kanji": "食べます",
+        "reading": "たべます",
+        "romaji": "tabemasu",
+        "dictionary_form": "食べる",
+        "part_of_speech": [
+          "verb"
+        ],
+        "verb_group": "ichidan",
+        "adjective_type": null,
+        "vi": "ăn",
+        "mnemonic": "Ghi chú ghi nhớ tùy chọn.",
+        "senses": [
+          {
+            "id": "n5-daily-001-s1",
+            "meaning_vi": "ăn",
+            "part_of_speech": "động từ",
+            "usage_note": "Dùng cho hành động ăn thức ăn.",
+            "register": "neutral",
+            "examples": [
+              {
+                "jp": "毎朝パンを食べます。",
+                "reading": "まいあさパンをたべます。",
+                "romaji": "Maiasa pan o tabemasu.",
+                "vi": "Tôi ăn bánh mì mỗi sáng."
+              }
+            ],
+            "collocations": [
+              "ご飯を食べる",
+              "昼ご飯を食べる"
+            ],
+            "tags": [
+              "đời sống"
+            ]
+          }
+        ],
+        "common_collocations": [
+          "ご飯を食べる"
+        ],
+        "synonyms": [],
+        "antonyms": [],
+        "related_vocabulary_ids": [],
+        "kanji_components": [
+          "食"
+        ],
+        "jlpt_confidence": "reference_based",
+        "source_notes": [],
+        "review_status": "draft",
+        "updated_at": null
+      }
+    ]
+  }
+}
