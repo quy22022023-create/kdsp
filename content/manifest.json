@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "content_version": 5,
-  "published_at": "2026-11-16T07:19:38.198Z",
+  "content_version": 1,
+  "published_at": null,
   "catalog": {
     "path": "catalog.json",
-    "version": 3
+    "version": 1
   },
   "banks_index": {
     "path": "banks/index.json",
-    "version": 4
+    "version": 1
   },
   "schemas": {
     "path": "schemas/schema.json",
