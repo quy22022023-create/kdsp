@@ -8,6 +8,13 @@
         "path": "banks/vocabulary/vocabulary-n5-con-nguoi-va-gia-inh-1dgc0dn.json",
         "version": 1,
         "item_count": 30
+      },
+      {
+        "id": "vocabulary-n5-truong-hoc-va-hoc-tap-2777g1",
+        "level": "N5",
+        "path": "banks/vocabulary/vocabulary-n5-truong-hoc-va-hoc-tap-2777g1.json",
+        "version": 1,
+        "item_count": 60
       }
     ]
   },

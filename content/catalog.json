@@ -1,11 +1,5 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-15T18:22:58.431Z",
-  "courses": [
-    {
-      "id": "course-khoa-hoc-moi-i5vn9f-1",
-      "path": "courses/tieng-nhat-n5-tu-co-ban/course.json",
-      "version": 1
-    }
-  ]
+  "updated_at": "2026-11-16T06:24:24.773Z",
+  "courses": []
 }
