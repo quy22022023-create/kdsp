@@ -1,0 +1,972 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KDSP content schemas",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "level": {
+      "type": "string",
+      "enum": [
+        "N5",
+        "N4",
+        "N3",
+        "N2",
+        "N1",
+        "OTHER"
+      ]
+    },
+    "file_ref": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z0-9_./-]+\\.json$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "course": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "id",
+        "slug",
+        "title",
+        "level",
+        "module_refs"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "language": {
+          "const": "ja"
+        },
+        "target_language": {
+          "const": "vi"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_minutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "objectives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "module_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/file_ref"
+          }
+        },
+        "cover_image": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "module": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "id",
+        "course_id",
+        "title",
+        "order",
+        "lesson_refs"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "course_id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lesson_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/file_ref"
+          }
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "activity": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "title",
+        "order",
+        "data"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "explanation",
+            "vocabulary",
+            "kanji",
+            "grammar",
+            "tap_translate",
+            "matching",
+            "multiple_choice",
+            "fill_blank",
+            "sentence_order",
+            "listening",
+            "speaking",
+            "dictation",
+            "quiz"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "instructions": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object"
+        },
+        "item_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type",
+              "id"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "vocabulary",
+                  "grammar",
+                  "exercise"
+                ]
+              },
+              "id": {
+                "$ref": "#/$defs/id"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "lesson": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "id",
+        "course_id",
+        "module_id",
+        "title",
+        "order",
+        "activities"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "course_id": {
+          "$ref": "#/$defs/id"
+        },
+        "module_id": {
+          "$ref": "#/$defs/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "estimated_minutes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "objectives": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "activities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/activity"
+          }
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "vocabulary_item": {
+      "type": "object",
+      "required": [
+        "id",
+        "level",
+        "jp",
+        "vi"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "jp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kanji": {
+          "type": "string"
+        },
+        "romaji": {
+          "type": "string"
+        },
+        "vi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mnemonic": {
+          "type": "string"
+        },
+        "reading": {
+          "type": "string",
+          "description": "Cách đọc chính bằng kana; giữ tương thích với jp hiện tại."
+        },
+        "part_of_speech": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "dictionary_form": {
+          "type": "string"
+        },
+        "verb_group": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "godan",
+            "ichidan",
+            "irregular",
+            null
+          ]
+        },
+        "adjective_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "i",
+            "na",
+            null
+          ]
+        },
+        "senses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/vocabulary_sense"
+          }
+        },
+        "common_collocations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "synonyms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "antonyms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_vocabulary_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "kanji_components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "jlpt_confidence": {
+          "type": "string",
+          "enum": [
+            "official_source",
+            "reference_based",
+            "editorial_estimate"
+          ]
+        },
+        "source_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "reviewed",
+            "approved"
+          ],
+          "default": "draft"
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": true
+    },
+    "grammar_item": {
+      "type": "object",
+      "required": [
+        "id",
+        "level",
+        "pattern"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "meaning": {
+          "type": "string"
+        },
+        "structure": {
+          "type": "string"
+        },
+        "usage": {
+          "type": "string"
+        },
+        "explanation": {
+          "type": "string"
+        },
+        "examples": {
+          "type": "array"
+        },
+        "commonMistakes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "exercise_item": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "level",
+        "prompt_jp",
+        "answer"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "exercise"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prompt_jp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_vi": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "answer": {
+          "type": "string"
+        },
+        "explanation": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "content_version",
+        "published_at",
+        "catalog",
+        "banks_index",
+        "schemas"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "published_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "catalog": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "version"
+          ],
+          "properties": {
+            "path": {
+              "const": "catalog.json"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "banks_index": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "version"
+          ],
+          "properties": {
+            "path": {
+              "const": "banks/index.json"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "schemas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "version"
+          ],
+          "properties": {
+            "path": {
+              "const": "schemas/schema.json"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "courses"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "courses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "title",
+              "level",
+              "path",
+              "version",
+              "order"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "level": {
+                "$ref": "#/$defs/level"
+              },
+              "path": {
+                "type": "string",
+                "pattern": "^courses/[a-z0-9_-]+/course\\.json$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "order": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "description": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "uniqueItems": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "shard_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "level",
+        "path",
+        "version",
+        "item_count"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^[a-z0-9_./-]+\\.json$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "item_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "shard_list": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "shards"
+      ],
+      "properties": {
+        "shards": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/shard_ref"
+          }
+        }
+      }
+    },
+    "bank_index": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "vocabulary",
+        "grammar",
+        "exercises"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "vocabulary": {
+          "$ref": "#/$defs/shard_list"
+        },
+        "grammar": {
+          "$ref": "#/$defs/shard_list"
+        },
+        "exercises": {
+          "$ref": "#/$defs/shard_list"
+        }
+      }
+    },
+    "bank_shard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "bank_type",
+        "level",
+        "items"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "bank_type": {
+          "enum": [
+            "vocabulary",
+            "grammar",
+            "exercises"
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/level"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "vocabulary_sense": {
+      "type": "object",
+      "required": [
+        "id",
+        "meaning_vi"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "meaning_vi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "part_of_speech": {
+          "type": "string"
+        },
+        "usage_note": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "formal",
+            "informal",
+            "written",
+            "spoken",
+            "slang",
+            "technical",
+            "literary",
+            "other"
+          ]
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/vocabulary_example"
+          }
+        },
+        "collocations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "vocabulary_example": {
+      "type": "object",
+      "required": [
+        "jp",
+        "vi"
+      ],
+      "properties": {
+        "jp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reading": {
+          "type": "string"
+        },
+        "romaji": {
+          "type": "string"
+        },
+        "vi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        },
+        "vocabulary_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "vocabulary_master_package": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "package_type",
+        "package_id",
+        "level",
+        "metadata",
+        "items"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "package_type": {
+          "const": "vocabulary_master"
+        },
+        "package_id": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "N5",
+            "N4",
+            "N3",
+            "N2"
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "required": [
+            "title",
+            "language",
+            "target_language"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "type": "string"
+            },
+            "language": {
+              "const": "ja"
+            },
+            "target_language": {
+              "const": "vi"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "batch": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "source_policy": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": true
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/vocabulary_item"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
