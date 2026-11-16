@@ -1075,7 +1075,6 @@
   }
 
   function renderAll() {
-    if (window.KDSPTapTranslate) window.KDSPTapTranslate.setDictionary(content.vocabulary);
     renderHome();
     renderRoadmap();
     renderVocabList();
