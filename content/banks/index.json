@@ -22,6 +22,14 @@
     "shards": []
   },
   "exercises": {
-    "shards": []
+    "shards": [
+      {
+        "id": "exercises-n5-con-nguoi-va-gia-inh-1dgc0dn",
+        "level": "N5",
+        "path": "banks/exercises/exercises-n5-con-nguoi-va-gia-inh-1dgc0dn.json",
+        "version": 1,
+        "item_count": 20
+      }
+    ]
   }
 }

@@ -1,0 +1,421 @@
+{
+  "schema_version": 1,
+  "bank_type": "exercises",
+  "level": "N5",
+  "items": [
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "わたし",
+        "がくせい"
+      ],
+      "prompt_jp": "わたし（　）がくせいです。",
+      "prompt_vi": "Tôi là học sinh/sinh viên.",
+      "options": [
+        "は",
+        "を",
+        "に",
+        "で"
+      ],
+      "answer": "は",
+      "explanation": "は đánh dấu chủ đề của câu. を đánh dấu tân ngữ, に chỉ thời điểm/đích đến, で chỉ địa điểm hoặc phương tiện.",
+      "id": "exercise-n5-0-ixnh5p-1"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "ちち",
+        "かいしゃいん"
+      ],
+      "prompt_jp": "ちち（　）かいしゃいんです。",
+      "prompt_vi": "Bố tôi là nhân viên công ty.",
+      "options": [
+        "は",
+        "を",
+        "へ",
+        "と"
+      ],
+      "answer": "は",
+      "explanation": "は nêu chủ đề là ちち. を đánh dấu tân ngữ, へ chỉ hướng, と chỉ sự cùng nhau hoặc trích dẫn.",
+      "id": "exercise-n5-1-ixnh5p-2"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "はは",
+        "せんせい"
+      ],
+      "prompt_jp": "はは（　）せんせいです。",
+      "prompt_vi": "Mẹ tôi là giáo viên.",
+      "options": [
+        "は",
+        "を",
+        "で",
+        "から"
+      ],
+      "answer": "は",
+      "explanation": "は dùng để giới thiệu chủ đề はは. を là trợ từ tân ngữ, で chỉ địa điểm/phương tiện, から chỉ điểm bắt đầu.",
+      "id": "exercise-n5-2-ixnh5p-3"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "ともだち"
+      ],
+      "prompt_jp": "ともだち（　）いっしょに がっこうへ いきます。",
+      "prompt_vi": "Tôi đi đến trường cùng bạn.",
+      "options": [
+        "と",
+        "を",
+        "が",
+        "に"
+      ],
+      "answer": "と",
+      "explanation": "と diễn tả đi cùng ai. を đánh dấu tân ngữ, が đánh dấu chủ ngữ, に thường chỉ đích đến hoặc thời điểm.",
+      "id": "exercise-n5-3-ixnh5p-4"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "あに",
+        "だいがくせい"
+      ],
+      "prompt_jp": "あに（　）だいがくせいです。",
+      "prompt_vi": "Anh trai tôi là sinh viên đại học.",
+      "options": [
+        "は",
+        "を",
+        "へ",
+        "も"
+      ],
+      "answer": "は",
+      "explanation": "は đánh dấu chủ đề あに. を đánh dấu tân ngữ, へ chỉ hướng, も mang nghĩa cũng và cần ngữ cảnh phù hợp.",
+      "id": "exercise-n5-4-ixnh5p-5"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "あね",
+        "にほんじん"
+      ],
+      "prompt_jp": "あね（　）にほんじんです。",
+      "prompt_vi": "Chị gái tôi là người Nhật.",
+      "options": [
+        "は",
+        "を",
+        "で",
+        "の"
+      ],
+      "answer": "は",
+      "explanation": "は nêu chủ đề của câu. を đánh dấu tân ngữ, で chỉ địa điểm/phương tiện, の biểu thị sở hữu hoặc bổ nghĩa danh từ.",
+      "id": "exercise-n5-5-ixnh5p-6"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "おとうと",
+        "こども"
+      ],
+      "prompt_jp": "おとうとは まだ（　）です。",
+      "prompt_vi": "Em trai tôi vẫn còn là trẻ nhỏ.",
+      "options": [
+        "こども",
+        "せんせい",
+        "かいしゃいん",
+        "いしゃ"
+      ],
+      "answer": "こども",
+      "explanation": "こども nghĩa là trẻ em, phù hợp với まだ (vẫn còn). Các lựa chọn còn lại chỉ nghề nghiệp hoặc vai trò người lớn.",
+      "id": "exercise-n5-6-ixnh5p-7"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "いもうと",
+        "がくせい"
+      ],
+      "prompt_jp": "いもうとは こうこうの（　）です。",
+      "prompt_vi": "Em gái tôi là học sinh trung học.",
+      "options": [
+        "がくせい",
+        "かぞく",
+        "ともだち",
+        "くに"
+      ],
+      "answer": "がくせい",
+      "explanation": "がくせい nghĩa là học sinh/sinh viên. かぞく là gia đình, ともだち là bạn bè, くに là đất nước.",
+      "id": "exercise-n5-7-ixnh5p-8"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "かぞく"
+      ],
+      "prompt_jp": "わたしの（　）は よにんです。",
+      "prompt_vi": "Gia đình tôi có bốn người.",
+      "options": [
+        "かぞく",
+        "なまえ",
+        "くに",
+        "ともだち"
+      ],
+      "answer": "かぞく",
+      "explanation": "かぞく nghĩa là gia đình, phù hợp với cách đếm số người trong nhà. なまえ là tên, くに là đất nước, ともだち là bạn bè.",
+      "id": "exercise-n5-8-ixnh5p-9"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "なまえ"
+      ],
+      "prompt_jp": "あなたの（　）は なんですか。",
+      "prompt_vi": "Tên của bạn là gì?",
+      "options": [
+        "なまえ",
+        "かぞく",
+        "くに",
+        "ひと"
+      ],
+      "answer": "なまえ",
+      "explanation": "なまえ nghĩa là tên. かぞく là gia đình, くに là đất nước, ひと là người.",
+      "id": "exercise-n5-9-ixnh5p-a"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "くに",
+        "がいこくじん"
+      ],
+      "prompt_jp": "あのひとは（　）です。にほんじんではありません。",
+      "prompt_vi": "Người kia là người nước ngoài, không phải người Nhật.",
+      "options": [
+        "がいこくじん",
+        "せんせい",
+        "こども",
+        "ともだち"
+      ],
+      "answer": "がいこくじん",
+      "explanation": "がいこくじん nghĩa là người nước ngoài, đối lập với にほんじん trong ngữ cảnh này. Các lựa chọn khác không biểu thị quốc tịch.",
+      "id": "exercise-n5-10-ixnh5p-b"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "いしゃ"
+      ],
+      "prompt_jp": "びょういんで はたらくひとは（　）です。",
+      "prompt_vi": "Người làm việc ở bệnh viện là bác sĩ.",
+      "options": [
+        "いしゃ",
+        "がくせい",
+        "かいしゃいん",
+        "ともだち"
+      ],
+      "answer": "いしゃ",
+      "explanation": "いしゃ nghĩa là bác sĩ. がくせい là học sinh/sinh viên, かいしゃいん là nhân viên công ty, ともだち là bạn.",
+      "id": "exercise-n5-11-ixnh5p-c"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "せんせい",
+        "がくせい"
+      ],
+      "prompt_jp": "せんせいは がくせいに にほんごを（　）。",
+      "prompt_vi": "Giáo viên dạy tiếng Nhật cho học sinh.",
+      "options": [
+        "おしえます",
+        "おぼえます",
+        "わすれます",
+        "わかります"
+      ],
+      "answer": "おしえます",
+      "explanation": "おしえます nghĩa là dạy, phù hợp với chủ thể せんせい và người học がくせいに. おぼえます là ghi nhớ, わすれます là quên, わかります là hiểu.",
+      "id": "exercise-n5-12-ixnh5q-d"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "ともだち"
+      ],
+      "prompt_jp": "わたしは ともだちと にほんごを（　）。",
+      "prompt_vi": "Tôi nói tiếng Nhật với bạn.",
+      "options": [
+        "はなします",
+        "ねます",
+        "おきます",
+        "いきます"
+      ],
+      "answer": "はなします",
+      "explanation": "はなします nghĩa là nói/trò chuyện, phù hợp với にほんごを. ねます là ngủ, おきます là thức dậy, いきます là đi.",
+      "id": "exercise-n5-13-ixnh5q-e"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "わたし",
+        "なまえ"
+      ],
+      "prompt_jp": "わたしの なまえを ここに（　）。",
+      "prompt_vi": "Hãy viết tên tôi ở đây.",
+      "options": [
+        "かきます",
+        "ききます",
+        "みます",
+        "よみます"
+      ],
+      "answer": "かきます",
+      "explanation": "かきます nghĩa là viết, phù hợp với なまえを. ききます là nghe/hỏi, みます là xem, よみます là đọc.",
+      "id": "exercise-n5-14-ixnh5q-f"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "こども"
+      ],
+      "prompt_jp": "こどもは えほんを（　）。",
+      "prompt_vi": "Trẻ em đọc sách tranh.",
+      "options": [
+        "よみます",
+        "はたらきます",
+        "おしえます",
+        "わかります"
+      ],
+      "answer": "よみます",
+      "explanation": "よみます nghĩa là đọc, phù hợp với えほんを. はたらきます là làm việc, おしえます là dạy, わかります là hiểu.",
+      "id": "exercise-n5-15-ixnh5q-g"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "おとうさん",
+        "おかあさん"
+      ],
+      "prompt_jp": "このひとは わたしの（　）です。",
+      "prompt_vi": "Người này là mẹ tôi.",
+      "options": [
+        "おかあさん",
+        "おにいさん",
+        "おとうさん",
+        "おねえさん"
+      ],
+      "answer": "おかあさん",
+      "explanation": "おかあさん nghĩa là mẹ. おにいさん là anh trai, おとうさん là bố, おねえさん là chị gái.",
+      "id": "exercise-n5-16-ixnh5q-h"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "おにいさん",
+        "おねえさん"
+      ],
+      "prompt_jp": "わたしには あにが ひとりいます。こちらは わたしの（　）です。",
+      "prompt_vi": "Tôi có một anh trai. Đây là anh trai tôi.",
+      "options": [
+        "おにいさん",
+        "おねえさん",
+        "おとうと",
+        "いもうと"
+      ],
+      "answer": "おにいさん",
+      "explanation": "おにいさん là cách gọi lịch sự/thân mật dành cho anh trai. おねえさん là chị gái, おとうと là em trai, いもうと là em gái.",
+      "id": "exercise-n5-17-ixnh5q-i"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "みんな",
+        "ともだち"
+      ],
+      "prompt_jp": "（　）、こちらは わたしの ともだちです。",
+      "prompt_vi": "Mọi người ơi, đây là bạn của tôi.",
+      "options": [
+        "みんな",
+        "ひと",
+        "くに",
+        "かぞく"
+      ],
+      "answer": "みんな",
+      "explanation": "みんな dùng để gọi hoặc chỉ mọi người, phù hợp khi giới thiệu bạn với cả nhóm. ひと là một người, くに là đất nước, かぞく là gia đình.",
+      "id": "exercise-n5-18-ixnh5q-j"
+    },
+    {
+      "type": "exercise",
+      "kind": "cloze",
+      "level": "N5",
+      "topic": "Con người và gia đình",
+      "refs": [
+        "ひと",
+        "にほんじん"
+      ],
+      "prompt_jp": "あの（　）は にほんじんです。",
+      "prompt_vi": "Người kia là người Nhật.",
+      "options": [
+        "ひと",
+        "くに",
+        "なまえ",
+        "かぞく"
+      ],
+      "answer": "ひと",
+      "explanation": "ひと nghĩa là người, tạo thành あのひと (người kia). くに là đất nước, なまえ là tên, かぞく là gia đình.",
+      "id": "exercise-n5-19-ixnh5q-k"
+    }
+  ]
+}
