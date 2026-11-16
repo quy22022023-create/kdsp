@@ -1,7 +1,15 @@
 {
   "schema_version": 1,
   "vocabulary": {
-    "shards": []
+    "shards": [
+      {
+        "id": "vocabulary-n5-con-nguoi-va-gia-inh-1dgc0dn",
+        "level": "N5",
+        "path": "banks/vocabulary/vocabulary-n5-con-nguoi-va-gia-inh-1dgc0dn.json",
+        "version": 1,
+        "item_count": 30
+      }
+    ]
   },
   "grammar": {
     "shards": []
