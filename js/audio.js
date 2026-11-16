@@ -4,7 +4,7 @@
 
   if (window.KDSPAudio) return;
   const SETTINGS_KEY = 'jp_app_speech_settings_v1';
-  const DEFAULTS = { voiceURI: '', rate: 0.92, pitch: 1.0 };
+  const DEFAULTS = { voiceURI: '', rate: 0.92, pitch: 1.04 };
   const listeners = new Set();
   const patchedFields = new Set();
   let settings = { ...DEFAULTS };
@@ -22,25 +22,6 @@
   let revision = 0;
   let writtenRevision = 0;
   let settingsReadFailed = false;
-
-  // Bang anh xa am tiet don le (Hiragana / Katakana) bang ma Unicode an toan
-  const ISOLATED_KANA_MAP = {
-    '\u3092': '\u3092\u3002', // を -> を。
-    '\u30F2': '\u30F2\u3002', // ヲ -> ヲ。
-    '\u3093': '\u3093\u3002', // ん -> ん。
-    '\u30F3': '\u30F3\u3002', // ン -> ン。
-    '\u3063': '\u3063\u3001\u3064\u3002', // っ -> っ、つ。
-    '\u30C3': '\u30C3\u3001\u30C4\u3002', // ッ -> ッ、ツ。
-    '\u30FC': '\u3042\u30FC\u3002', // ー -> あー。
-    '\u3041': '\u3042\u3002', '\u3043': '\u3044\u3002', '\u3045': '\u3046\u3002', '\u3047': '\u3048\u3002', '\u3049': '\u304A\u3002',
-    '\u30A1': '\u30A2\u3002', '\u30A3': '\u30A4\u3002', '\u30A5': '\u30A6\u3002', '\u30A7': '\u30A8\u3002', '\u30A9': '\u30AA\u3002',
-    '\u3083': '\u3084\u3002', '\u3085': '\u3086\u3002', '\u3087': '\u3088\u3002',
-    '\u30E3': '\u30E4\u3002', '\u30E5': '\u30E6\u3002', '\u30E7': '\u30E8\u3002',
-    '\u308E': '\u308F\u3002', '\u30EE': '\u30EF\u3002'
-  };
-
-  const KANA_ONLY_RE = /^[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\u30FB\u3001\u3002\uFF0F/\-]+$/;
-  const SINGLE_MORA_RE = /^[\u3041-\u3096\u30A1-\u30FA][\u3099\u309A\u3041\u3043\u3045\u3047\u3049\u3083\u3085\u3087\u308E\u30A1\u30A3\u30A5\u30A7\u30A9\u30E3\u30E5\u30E7\u30EE]?$/;
 
   const isObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
   function numberInRange(value, fallback, min, max) {
@@ -77,6 +58,7 @@
     };
   }
   function emit(type) {
+    // A subscriber may stop speech or start another request; it cannot corrupt later snapshots.
     for (const listener of Array.from(listeners)) {
       try { listener(getState(type)); } catch (_) { /* UI listeners must not break speech. */ }
     }
@@ -90,23 +72,14 @@
     }
     emit('error');
   }
-  function isNeuralVoice(voice) {
-    if (!voice) return false;
-    const identity = `${voice.name || ''} ${voice.voiceURI || ''}`.toLowerCase();
-    return /natural|neural|online|siri|enhanced|premium|o-ren|nanami|mayu|shiori|wavenet/i.test(identity);
-  }
   function scoreVoice(voice) {
     const identity = `${voice.name || ''} ${voice.voiceURI || ''}`.toLowerCase();
     let score = 0;
-    if (/natural|neural|siri|o-ren|nanami|mayu|shiori|enhanced|premium/i.test(identity)) score += 20;
-    if (/online|wavenet|network/i.test(identity)) score += 6;
-    if (/kyoko|haruka|mizuki|sayaka|sakura|hikari|yui|aoi|hina|ayumi|female|woman/i.test(identity)) score += 10;
-    if (/google|microsoft|apple/i.test(identity)) score += 3;
-    if (/compact|espeak|festival/i.test(identity)) score -= 10;
-    if (/otoya|ichiro|keita|daichi|naoki|male|man/i.test(identity)) score -= 5;
-    if (/^ja-jp$/i.test(String(voice.lang || ''))) score += 3;
-    else if (/^ja/i.test(String(voice.lang || ''))) score += 1;
-    if (voice.localService === false) score += 2;
+    if (/nanami|kyoko|haruka|mizuki|sayaka|sakura|hikari|yui|aoi|hina|female|woman/i.test(identity)) score += 8;
+    if (/google|microsoft|siri|apple|enhanced|premium|neural|online/i.test(identity)) score += 2;
+    if (/otoya|ichiro|male|man/i.test(identity)) score -= 3;
+    if (/^ja-jp$/i.test(String(voice.lang || ''))) score += 2;
+    if (voice.localService === false) score += 1;
     if (voice.default) score += 0.5;
     return score;
   }
@@ -114,68 +87,6 @@
     return voices.find((voice) => voice.voiceURI === settings.voiceURI) ||
       voices.reduce((best, voice) => !best || scoreVoice(voice) > scoreVoice(best) ? voice : best, null);
   }
-
-  function formatSpeechText(rawText) {
-    let text = String(rawText || '').trim();
-    if (!text) return { text: '', mode: 'word' };
-
-    text = text.replace(/[\r\n]+/g, '\u3002').replace(/\u3000+/g, ' ');
-
-    // Loai bo chu thich Romaji / Tieng Viet trong ngoac khi di kem chu Nhat
-    if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text)) {
-      text = text.replace(/\s*[\(\[\uFF08\u3010][a-zA-Z\u00C0-\u1EF90-9\s,\-\/\.]+[\)\]\uFF09\u3011]/g, '');
-      text = text.trim();
-    }
-
-    // Thay o trong bai tap (___, [ ]) bang dau phay ngat nhip
-    text = text.replace(/[_\uFF3F]{2,}|\[\s*\]|\uFF08\s*\uFF09|\(\s*\)|[\u2605\u2606]+/g, '\u3001');
-
-    // Xu ly doc tung chu cai Kana don le trong bang chu cai
-    const cleanKana = text.replace(/[\u3002\u3001\u30FB\s]/g, '');
-    if (ISOLATED_KANA_MAP[cleanKana] && text.length <= 2) {
-      return { text: ISOLATED_KANA_MAP[cleanKana], mode: 'kana' };
-    }
-    if (SINGLE_MORA_RE.test(cleanKana) && text.length <= 3) {
-      return { text: cleanKana + '\u3002', mode: 'kana' };
-    }
-
-    // Xu ly doc mot day bang chu cai (VD: あ い う え お)
-    if (KANA_ONLY_RE.test(text)) {
-      const parts = text.split(/[\s\u30FB\uFF0F/\-,\u3001]+/).filter(Boolean);
-      if (parts.length > 1 && parts.every((p) => SINGLE_MORA_RE.test(p) || ISOLATED_KANA_MAP[p])) {
-        const mapped = parts.map((p) => (ISOLATED_KANA_MAP[p] ? ISOLATED_KANA_MAP[p].replace(/\u3002$/, '') : p));
-        return { text: mapped.join('\u3001') + '\u3002', mode: 'kana' };
-      }
-    }
-
-    // Chuyen cac dau gach cheo, dau cham giua, ngoac don thanh nhip lay hoi tu nhien
-    text = text
-      .replace(/[\/\uFF0F|\uFF5C\u30FB\u2022]+/g, '\u3001')
-      .replace(/\s*[~\u301C\uFF5E]+\s*/g, '\u3001')
-      .replace(/[\uFF08\(]([^\uFF09\)]+)[\uFF09\)]/g, '\u3001$1\u3001')
-      .replace(/[\u3001,\s]*\u3001[\u3001,\s]*/g, '\u3001')
-      .replace(/\u3002+/g, '\u3002')
-      .replace(/^\u3001+|\u3001+$/g, '')
-      .trim();
-
-    const isSentence = text.length > 8 || /[\u3002\uFF1F\uFF01?!\u3001]/.test(text);
-    const politeQuestionRe = /(\u307E\u3059\u304B|\u3067\u3059\u304B|\u307E\u3057\u305F\u304B|\u3067\u3057\u305F\u304B|\u307E\u305B\u3093\u304B|\u3067\u3057\u3087\u3046\u304B)\u3002?$/;
-
-    if (isSentence) {
-      if (politeQuestionRe.test(text)) {
-        text = text.replace(/\u3002?$/, '\uFF1F');
-      } else if (/[^\u3002\uFF1F\uFF01?!]$/.test(text)) {
-        text += '\u3002';
-      }
-      return { text, mode: 'sentence' };
-    }
-
-    if (/[^\u3002\uFF1F\uFF01?!]$/.test(text)) {
-      text += '\u3002';
-    }
-    return { text, mode: 'word' };
-  }
-
   function refreshVoices(finalAttempt = false, owner, context) {
     const synth = engine();
     let all;
@@ -185,9 +96,7 @@
       reportError('voices-unavailable', 'Không thể đọc danh sách giọng trên thiết bị. Hãy chạm nút nghe để thử lại.', owner, context);
       return false;
     }
-    const next = all
-      .filter((voice) => voice && /^ja(?:-|_|$)/i.test(String(voice.lang || '')))
-      .sort((a, b) => scoreVoice(b) - scoreVoice(a));
+    const next = all.filter((voice) => voice && /^ja(?:-|$)/i.test(String(voice.lang || '')));
     const nextStatus = next.length ? 'ready' : all.length || finalAttempt || !supported(synth) ? 'unavailable' : 'waiting';
     const changed = nextStatus !== voiceStatus || next.length !== voices.length || next.some((voice, index) => {
       const old = voices[index];
@@ -214,6 +123,7 @@
 
   function init() {
     if (initPromise) return initPromise;
+    // Promise assignment precedes storage work, including reentrant UI callbacks.
     initPromise = Promise.resolve().then(async () => {
       try {
         const saved = window.AppStore && typeof window.AppStore.get === 'function'
@@ -238,6 +148,7 @@
         }
       } catch (_) { /* Some older engines expose an unusable EventTarget method. */ }
       if (!attached) {
+        // Older engines expose only the property. Preserve the existing listener.
         try {
           const previous = synth.onvoiceschanged;
           synth.onvoiceschanged = function (event) {
@@ -260,6 +171,7 @@
     if (writePromise) return writePromise;
     writePromise = (async () => {
       if (settingsReadFailed) {
+        // One retry per user persistence attempt; never overwrite preferences we could not read.
         try {
           const store = window.AppStore;
           if (!store || typeof store.get !== 'function') throw new Error('Settings storage unavailable');
@@ -283,6 +195,7 @@
           saved = false;
           reportError('settings-write', 'Chưa lưu được cài đặt giọng đọc trên thiết bị. Hãy kiểm tra dung lượng lưu trữ.');
         }
+        // One failed attempt must not loop forever; a later user edit can try again.
         writtenRevision = writingRevision;
       }
       return saved;
@@ -299,6 +212,7 @@
     }
     revision += 1;
     emit('settings');
+    // Never persist defaults over saved fields that have not finished loading yet.
     return ready.then(persistSettings);
   }
 
@@ -307,7 +221,7 @@
     if (!request || (match.owner !== undefined && request.owner !== match.owner) ||
       (match.context !== undefined && request.context !== match.context)) return false;
     if (invalidate) requestId += 1;
-    active = null;
+    active = null; // Cancel callbacks from this request are now obsolete.
     try { request.engine.cancel(); }
     catch (_) {
       if (!active) active = request;
@@ -336,17 +250,13 @@
     return { code, message };
   }
   function speak(text, options = {}) {
-    let rawSpoken;
-    try { rawSpoken = text === null || text === undefined ? '' : String(text); }
+    let spoken;
+    try { spoken = text === null || text === undefined ? '' : String(text); }
     catch (_) { return false; }
-    if (!rawSpoken.trim()) return false;
+    if (!spoken.trim()) return false;
     options = isObject(options) ? options : {};
-    init();
+    init(); // Do not await: native speech must stay in the user's click call stack.
     if (document.hidden) return false;
-
-    const { text: spoken, mode } = formatSpeechText(rawSpoken);
-    if (!spoken) return false;
-
     const id = ++requestId;
     const owner = typeof options.owner === 'string' ? options.owner : null;
     const context = typeof options.context === 'string' ? options.context : null;
@@ -361,22 +271,8 @@
       utterance = new window.SpeechSynthesisUtterance(spoken);
       const voice = getPreferredVoice();
       utterance.lang = voice && voice.lang ? voice.lang : 'ja-JP';
-
-      const baseRate = numberInRange(options.rate, settings.rate, 0.70, 1.15);
-      utterance.rate = options.rate !== undefined
-        ? baseRate
-        : mode === 'kana'
-          ? Math.max(0.75, Number((baseRate * 0.90).toFixed(2)))
-          : mode === 'word'
-            ? Math.max(0.80, Number((baseRate * 0.96).toFixed(2)))
-            : baseRate;
-
-      utterance.pitch = options.pitch !== undefined
-        ? numberInRange(options.pitch, 1.0, 0.85, 1.30)
-        : isNeuralVoice(voice)
-          ? 1.0
-          : numberInRange(settings.pitch, 1.0, 0.85, 1.30);
-
+      utterance.rate = numberInRange(options.rate, settings.rate, 0.70, 1.15);
+      utterance.pitch = numberInRange(options.pitch, settings.pitch, 0.85, 1.30);
       utterance.volume = numberInRange(options.volume, 1, 0, 1);
       if (voice) utterance.voice = voice;
     } catch (_) {
@@ -386,7 +282,7 @@
     if (active && !cancelCurrent({}, false)) return false;
     if (id !== requestId) return false;
     const request = { id, owner, context, engine: synth, utterance };
-    active = request;
+    active = request; // Strong reference until end/error/explicit stop (important on Safari).
     status = 'pending';
     lastError = null;
     stateOwner = owner;
