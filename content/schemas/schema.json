@@ -336,6 +336,110 @@
         },
         "mnemonic": {
           "type": "string"
+        },
+        "reading": {
+          "type": "string",
+          "description": "Cách đọc chính bằng kana; giữ tương thích với jp hiện tại."
+        },
+        "part_of_speech": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "dictionary_form": {
+          "type": "string"
+        },
+        "verb_group": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "godan",
+            "ichidan",
+            "irregular",
+            null
+          ]
+        },
+        "adjective_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "i",
+            "na",
+            null
+          ]
+        },
+        "senses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/vocabulary_sense"
+          }
+        },
+        "common_collocations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "synonyms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "antonyms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_vocabulary_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "uniqueItems": true
+        },
+        "kanji_components": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "jlpt_confidence": {
+          "type": "string",
+          "enum": [
+            "official_source",
+            "reference_based",
+            "editorial_estimate"
+          ]
+        },
+        "source_notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "reviewed",
+            "approved"
+          ],
+          "default": "draft"
+        },
+        "updated_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
         }
       },
       "additionalProperties": true
@@ -693,6 +797,176 @@
           }
         }
       }
+    },
+    "vocabulary_sense": {
+      "type": "object",
+      "required": [
+        "id",
+        "meaning_vi"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "meaning_vi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "part_of_speech": {
+          "type": "string"
+        },
+        "usage_note": {
+          "type": "string"
+        },
+        "register": {
+          "type": "string",
+          "enum": [
+            "neutral",
+            "formal",
+            "informal",
+            "written",
+            "spoken",
+            "slang",
+            "technical",
+            "literary",
+            "other"
+          ]
+        },
+        "examples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/vocabulary_example"
+          }
+        },
+        "collocations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "vocabulary_example": {
+      "type": "object",
+      "required": [
+        "jp",
+        "vi"
+      ],
+      "properties": {
+        "jp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reading": {
+          "type": "string"
+        },
+        "romaji": {
+          "type": "string"
+        },
+        "vi": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string"
+        },
+        "vocabulary_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "vocabulary_master_package": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "package_type",
+        "package_id",
+        "level",
+        "metadata",
+        "items"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "package_type": {
+          "const": "vocabulary_master"
+        },
+        "package_id": {
+          "$ref": "#/$defs/id"
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "N5",
+            "N4",
+            "N3",
+            "N2"
+          ]
+        },
+        "metadata": {
+          "type": "object",
+          "required": [
+            "title",
+            "language",
+            "target_language"
+          ],
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": {
+              "type": "string"
+            },
+            "language": {
+              "const": "ja"
+            },
+            "target_language": {
+              "const": "vi"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "batch": {
+              "type": "string"
+            },
+            "created_by": {
+              "type": "string"
+            },
+            "source_policy": {
+              "type": "string"
+            },
+            "generated_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": true
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/vocabulary_item"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
