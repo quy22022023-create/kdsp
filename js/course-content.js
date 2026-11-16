@@ -10,11 +10,10 @@
   const MAX_JSON_BYTES = 3 * 1024 * 1024;
   const BANK_TYPES = ['vocabulary', 'grammar', 'exercises'];
   const memory = new Map();
+  const pendingFetches = new Map();
   let dbPromise = null;
   let manifest = null;
   let manifestPromise = null;
-  let cataloguePromise = null;
-  let bankIndexPromise = null;
   let currentMode = 'loading';
   let storageAvailable = true;
   const listeners = new Set();
@@ -110,21 +109,29 @@
     relative = validatePath(relative);
     const url = new URL(relative, BASE);
     url.searchParams.set('v', String(version));
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 13000);
-    try {
-      const result = await fetch(url.toString(), { cache: 'no-store', signal: controller.signal, credentials: 'same-origin' });
-      if (!result.ok) throw new Error('Không tải được ' + relative + ' (HTTP ' + result.status + ').');
-      const contentLength = Number(result.headers.get('content-length') || 0);
-      if (contentLength > MAX_JSON_BYTES) throw new Error('Tệp học liệu quá lớn: ' + relative);
-      const body = await result.text();
-      if (body.length > MAX_JSON_BYTES) throw new Error('Tệp học liệu vượt giới hạn: ' + relative);
-      let payload;
-      try { payload = JSON.parse(body); }
-      catch (_) { throw new Error('Máy chủ trả về dữ liệu không phải JSON cho ' + relative + '.'); }
-      if (!isObject(payload)) throw new Error('Dữ liệu JSON không phải object: ' + relative);
-      return payload;
-    } finally { clearTimeout(timeout); }
+    const key = url.toString();
+    if (pendingFetches.has(key)) return pendingFetches.get(key);
+    // Share only the network result; each asset caller still runs its own validator.
+    const work = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 13000);
+      try {
+        const result = await fetch(url.toString(), { cache: 'no-store', signal: controller.signal, credentials: 'same-origin' });
+        if (!result.ok) throw new Error('Không tải được ' + relative + ' (HTTP ' + result.status + ').');
+        const contentLength = Number(result.headers.get('content-length') || 0);
+        if (contentLength > MAX_JSON_BYTES) throw new Error('Tệp học liệu quá lớn: ' + relative);
+        const body = await result.text();
+        if (body.length > MAX_JSON_BYTES) throw new Error('Tệp học liệu vượt giới hạn: ' + relative);
+        let payload;
+        try { payload = JSON.parse(body); }
+        catch (_) { throw new Error('Máy chủ trả về dữ liệu không phải JSON cho ' + relative + '.'); }
+        if (!isObject(payload)) throw new Error('Dữ liệu JSON không phải object: ' + relative);
+        return payload;
+      } finally { clearTimeout(timeout); }
+    })();
+    pendingFetches.set(key, work);
+    try { return await work; }
+    finally { if (pendingFetches.get(key) === work) pendingFetches.delete(key); }
   }
 
   async function asset(relative, version, validator, options = {}) {
@@ -311,8 +318,6 @@
   async function refresh() {
     // Promoting a new manifest should invalidate only in-memory lookups; IDB is version keyed.
     manifest = null;
-    cataloguePromise = null;
-    bankIndexPromise = null;
     return getManifest({ refresh: true });
   }
 
