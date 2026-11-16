@@ -45,3 +45,10 @@ Ví dụ:
 Admin tạo hoặc nhập JSON → kiểm tra schema/ID/tham chiếu → xem trước → Edge Function dùng GitHub token phía máy chủ để tạo commit → app kiểm tra manifest và tải file có version mới.
 
 Không đặt GitHub token trong JavaScript trình duyệt. CMS quản lý nội dung qua `course-admin.html`. Bản nháp được lưu riêng trong Supabase; nội dung đã xuất bản được ghi vào GitHub bằng Edge Function. Ứng dụng học sẽ được kết nối đọc các khóa học từ GitHub ở giai đoạn tích hợp tiếp theo.
+
+
+## Vocabulary Master v1 – nhập gói từ vựng N5–N2
+
+Admin hỗ trợ gói JSON có `schema_version: 1`, `package_type: "vocabulary_master"`, `package_id`, `level`, `metadata` và `items`. Mỗi item bắt buộc có `id`, `level`, `jp`, `vi`; các trường mở rộng như `reading`, `dictionary_form`, `part_of_speech`, `senses`, `common_collocations`, `synonyms`, `antonyms`, `related_vocabulary_ids`, `jlpt_confidence`, `source_notes` và `review_status` được giữ nguyên trong payload.
+
+Để nhập cấp độ N2 trên dự án Supabase đã triển khai trước đây, chạy `supabase/migrations/20261116_enable_n2_import.sql` một lần trước khi nhập. Migration cập nhật CHECK constraints và RPC `j_import_batch`; không xóa hoặc chuyển đổi bản ghi hiện có. Các gói vẫn được kiểm tra ở giao diện và máy chủ trước khi xuất bản.
