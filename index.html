@@ -8,15 +8,88 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Nhật Ngữ">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
-  <meta name="description" content="Ứng dụng học tiếng Nhật JLPT N5–N3 theo lộ trình, có từ vựng, ngữ pháp, luyện tập và ôn tập thông minh.">
-  <title>Nhật Ngữ — Lộ trình N5–N3</title>
+  <meta name="description" content="Ứng dụng học tiếng Nhật JLPT N5–N2 theo lộ trình, có từ vựng, ngữ pháp, luyện tập và ôn tập thông minh.">
+  <title>Nhật Ngữ — Lộ trình N5–N2</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./tap-translate.css">
+  <script>
+    // Recover a blocked startup script only after the complete shell release is active.
+    (function () {
+      if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+      const expected = 'jp-learning-shell-v15-step-c';
+      const recoveryKey = 'kdsp_shell_recovery_v15_step_c';
+      let failed = false;
+      let ready = false;
+      let checking = false;
+      let reloading = false;
+      function explainFailure() {
+        if (!failed || ready || reloading) return;
+        const status = document.getElementById('connection-state') || document.getElementById('course-network-status');
+        const message = 'Bản cập nhật chưa tải đầy đủ. Hãy kết nối mạng và tải lại trang.';
+        if (status) status.textContent = message;
+        const toast = document.getElementById('toast') || document.getElementById('course-toast');
+        if (toast) {
+          toast.textContent = message;
+          toast.hidden = false;
+          if (toast.id === 'toast') toast.classList.add('show');
+        }
+      }
+      async function recover() {
+        const controller = navigator.serviceWorker.controller;
+        if (!failed || ready || checking || reloading || !controller) return;
+        checking = true;
+        const version = await new Promise((resolve) => {
+          const channel = new MessageChannel();
+          const timeout = setTimeout(() => { channel.port1.close(); resolve(null); }, 1200);
+          channel.port1.onmessage = (event) => {
+            clearTimeout(timeout);
+            channel.port1.close();
+            resolve(event.data && event.data.shellVersion);
+          };
+          try { controller.postMessage({ type: 'KDSP_SHELL_VERSION' }, [channel.port2]); }
+          catch (_) { clearTimeout(timeout); channel.port1.close(); resolve(null); }
+        });
+        checking = false;
+        if (navigator.serviceWorker.controller !== controller) { recover(); return; }
+        if (version !== expected || ready || reloading) return;
+        // If storage is unavailable, require an explicit reload rather than risk a loop.
+        try {
+          if (sessionStorage.getItem(recoveryKey)) { explainFailure(); return; }
+          sessionStorage.setItem(recoveryKey, '1');
+        } catch (_) { explainFailure(); return; }
+        reloading = true;
+        location.reload();
+      }
+      window.addEventListener('kdsp:consumer-ready', () => {
+        ready = true;
+        try { sessionStorage.removeItem(recoveryKey); } catch (_) { /* Recovery remains optional. */ }
+      }, { once: true });
+      window.addEventListener('error', (event) => {
+        const script = event.target;
+        if (!script || script.tagName !== 'SCRIPT' || !script.hasAttribute('data-kdsp-shell')) return;
+        failed = true;
+        explainFailure();
+        recover();
+        setTimeout(explainFailure, 12000);
+      }, true);
+      navigator.serviceWorker.addEventListener('controllerchange', recover);
+      window.addEventListener('load', () => {
+        explainFailure();
+        navigator.serviceWorker.register('./sw.js').then((registration) => {
+          recover();
+          return registration.update();
+        }).catch(explainFailure);
+      }, { once: true });
+    })();
+  </script>
   <script defer src="./config.js"></script>
   <script defer src="./js/store.js"></script>
+  <script defer src="./js/audio.js" data-kdsp-shell="audio" integrity="sha256-+gjSPYfjcuYw8JDBrb/I+w8hrRTgNA9MC/ARvLZJdIY="></script>
   <script defer src="./js/db.js"></script>
   <script defer src="./js/course-content.js"></script>
-  <script defer src="./js/app.js"></script>
+  <script defer src="./js/tap-translate.js"></script>
+  <script defer src="./js/app.js" data-kdsp-shell="consumer" integrity="sha256-calYgXza0yqGTcx4qNeR3yQu3oUfGOLADPd3LdswqBw="></script>
 </head>
 <body>
   <div class="app-frame">
@@ -96,7 +169,7 @@
 
         <section id="page-roadmap" class="page" aria-labelledby="roadmap-title" hidden>
           <div class="page-heading"><div><p class="eyebrow">LỘ TRÌNH HỌC</p><h1 id="roadmap-title">Chọn điểm bắt đầu</h1><p class="muted">Đi từ nền tảng đến nâng cao. Bạn có thể chuyển cấp độ bất cứ lúc nào.</p></div></div>
-          <div class="level-tabs" id="roadmap-level-tabs"><button class="level-tab active" data-level="N5">N5 · Sơ cấp 1</button><button class="level-tab" data-level="N4">N4 · Sơ cấp 2</button><button class="level-tab" data-level="N3">N3 · Trung cấp</button></div>
+          <div class="level-tabs" id="roadmap-level-tabs"><button class="level-tab active" data-level="N5">N5 · Sơ cấp 1</button><button class="level-tab" data-level="N4">N4 · Sơ cấp 2</button><button class="level-tab" data-level="N3">N3 · Trung cấp</button><button class="level-tab" data-level="N2">N2 · Trung cao cấp</button></div>
           <p style="margin:0 0 15px"><a class="button button-outline" href="./courses.html">Khám phá khóa học đã xuất bản →</a></p>
           <div id="roadmap-summary" class="roadmap-summary"></div>
           <div id="roadmap-lessons" class="lesson-list"></div>
@@ -104,14 +177,14 @@
 
         <section id="page-vocab" class="page" aria-labelledby="vocab-title" hidden>
           <div class="page-heading"><div><p class="eyebrow">KHO TỪ VỰNG</p><h1 id="vocab-title">Từ vựng & Kanji</h1><p class="muted">Học theo chủ đề, lọc cấp độ hoặc tìm nhanh một từ.</p></div><button id="start-vocab-session" class="button button-primary" type="button">Học một phiên →</button></div>
-          <div class="filter-bar panel"><label class="search-field"><span>⌕</span><input id="vocab-search" type="search" placeholder="Tìm từ Nhật, Romaji hoặc nghĩa Việt…" autocomplete="off"></label><select id="vocab-level-filter" aria-label="Lọc cấp độ"><option value="ALL">Tất cả cấp độ</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select><select id="vocab-topic-filter" aria-label="Lọc chủ đề"><option value="ALL">Tất cả chủ đề</option></select></div>
+          <div class="filter-bar panel"><label class="search-field"><span>⌕</span><input id="vocab-search" type="search" placeholder="Tìm từ Nhật, Romaji hoặc nghĩa Việt…" autocomplete="off"></label><select id="vocab-level-filter" aria-label="Lọc cấp độ"><option value="ALL">Tất cả cấp độ</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option><option value="N2">N2</option></select><select id="vocab-topic-filter" aria-label="Lọc chủ đề"><option value="ALL">Tất cả chủ đề</option></select></div>
           <div class="list-meta"><span id="vocab-count-label">0 từ</span><span>Chạm vào một từ để xem chi tiết</span></div>
           <div id="vocab-list" class="vocab-list"></div>
         </section>
 
         <section id="page-grammar" class="page" aria-labelledby="grammar-title" hidden>
           <div class="page-heading"><div><p class="eyebrow">NGỮ PHÁP</p><h1 id="grammar-title">Cấu trúc và cách dùng</h1><p class="muted">Mỗi điểm ngữ pháp gồm ý nghĩa, cấu trúc, ví dụ và lỗi thường gặp.</p></div></div>
-          <div class="filter-bar panel"><select id="grammar-level-filter" aria-label="Lọc cấp độ ngữ pháp"><option value="ALL">Tất cả cấp độ</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select><input id="grammar-search" type="search" placeholder="Tìm cấu trúc hoặc ý nghĩa…"></div>
+          <div class="filter-bar panel"><select id="grammar-level-filter" aria-label="Lọc cấp độ ngữ pháp"><option value="ALL">Tất cả cấp độ</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option><option value="N2">N2</option></select><input id="grammar-search" type="search" placeholder="Tìm cấu trúc hoặc ý nghĩa…"></div>
           <div id="grammar-list" class="grammar-list"></div>
         </section>
 
@@ -158,13 +231,13 @@
 
         <section id="page-practice" class="page" aria-labelledby="practice-title" hidden>
           <div class="page-heading"><div><p class="eyebrow">KIỂM TRA KIẾN THỨC</p><h1 id="practice-title">Luyện tập phản xạ</h1><p class="muted">Câu hỏi lấy từ kho bài tập; nếu chưa có, ứng dụng tạo câu hỏi ôn từ vựng.</p></div></div>
-          <div id="practice-start-panel" class="panel practice-start"><div class="practice-illustration">問</div><div><h2>Một phiên luyện tập ngắn</h2><p id="practice-source-note">Tối đa 10 câu, có giải thích sau mỗi câu.</p><div class="practice-options"><label>Cấp độ<select id="practice-level"><option value="ALL">Tất cả</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select></label><label>Số câu<select id="practice-count"><option value="10">10 câu</option><option value="5">5 câu</option><option value="20">20 câu</option></select></label></div><button id="start-practice-button" class="button button-primary" type="button">Bắt đầu luyện tập →</button></div></div>
+          <div id="practice-start-panel" class="panel practice-start"><div class="practice-illustration">問</div><div><h2>Một phiên luyện tập ngắn</h2><p id="practice-source-note">Tối đa 10 câu, có giải thích sau mỗi câu.</p><div class="practice-options"><label>Cấp độ<select id="practice-level"><option value="ALL">Tất cả</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option><option value="N2">N2</option></select></label><label>Số câu<select id="practice-count"><option value="10">10 câu</option><option value="5">5 câu</option><option value="20">20 câu</option></select></label></div><button id="start-practice-button" class="button button-primary" type="button">Bắt đầu luyện tập →</button></div></div>
           <div id="practice-session" class="panel practice-session" hidden></div>
         </section>
 
         <section id="page-review" class="page" aria-labelledby="review-title" hidden>
           <div class="page-heading"><div><p class="eyebrow">ÔN TẬP CÁ NHÂN</p><h1 id="review-title">Ôn đúng lúc, nhớ lâu hơn</h1><p class="muted">Từ sai được gặp lại sớm; từ đã nhớ được giãn khoảng cách ôn dần.</p></div></div>
-          <div class="review-hero panel"><div><span class="eyebrow">HÀNG ĐỢI ÔN TẬP</span><label class="review-level-select">Phạm vi<select id="review-level-filter"><option value="ALL">Tất cả N5–N3</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option></select></label><strong id="review-due-count">0</strong><p id="review-description">Chưa có từ đến hạn ôn.</p><button id="start-review-button" class="button button-primary" type="button">Bắt đầu ôn tập →</button></div><div class="review-clock" aria-hidden="true">↻</div></div>
+          <div class="review-hero panel"><div><span class="eyebrow">HÀNG ĐỢI ÔN TẬP</span><label class="review-level-select">Phạm vi<select id="review-level-filter"><option value="ALL">Tất cả N5–N2</option><option value="N5">N5</option><option value="N4">N4</option><option value="N3">N3</option><option value="N2">N2</option></select></label><strong id="review-due-count">0</strong><p id="review-description">Chưa có từ đến hạn ôn.</p><button id="start-review-button" class="button button-primary" type="button">Bắt đầu ôn tập →</button></div><div class="review-clock" aria-hidden="true">↻</div></div>
           <div class="review-columns"><section class="panel"><div class="panel-heading"><div><p class="eyebrow">CẦN CHÚ Ý</p><h2>Từ chưa vững</h2></div></div><div id="review-weak-list" class="compact-list"></div></section><section class="panel"><div class="panel-heading"><div><p class="eyebrow">TIẾN ĐỘ</p><h2>Trạng thái ghi nhớ</h2></div></div><div id="review-breakdown" class="review-breakdown"></div></section></div>
         </section>
 
@@ -219,10 +292,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-  <script>
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-    }
-  </script>
+
 </body>
 </html>
