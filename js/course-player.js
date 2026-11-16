@@ -13,6 +13,7 @@
   let toastTimeout = null;
   let activityState = {};
   let release = null;
+  let audioRoute = null;
 
   const refHash = (id) => encodeURIComponent(id);
   const urlCourse = (courseId) => '#/c/' + refHash(courseId);
@@ -83,6 +84,9 @@
   async function navigate() {
     const token = ++navigationCount;
     const route = parseRoute();
+    const nextAudioRoute = [route.page, route.courseId || '', route.moduleId || '', route.lessonId || '', route.index || 0].join('/');
+    if (audioRoute !== nextAudioRoute) stopCourseAudio();
+    audioRoute = nextAudioRoute;
     $('course-network-status').textContent = 'Đang tải…';
     try {
       if (route.page === 'catalog') {
@@ -162,9 +166,17 @@
   }
 
   async function renderLesson(course, module, lesson, index) {
+    const previousAudioContext = audioContext();
+    const audioNavigation = navigationCount;
     const progress = await CourseProgress.getLesson(lesson);
+    if (audioNavigation !== navigationCount) return;
     const total = lesson.activities.length;
     const current = Math.min(Math.max(0, index), Math.max(total - 1, 0));
+    const nextAudioContext = [course.id, module.id, lesson.id, lesson.activities[current]?.id || current, 0].join('/');
+    // A same-route refresh can reset the question; only stop the context it replaced.
+    if (audioNavigation === navigationCount && previousAudioContext && previousAudioContext !== nextAudioContext) {
+      stopCourseAudio(previousAudioContext);
+    }
     session = { course, module, lesson, index: current, progress };
     activityState = { questionIndex: 0, matched: new Set(), left: null, tiles: [], visited: new Set() };
     breadcrumb([{ title: 'Khóa học', url: '#/' }, { title: course.title, url: urlCourse(course.id) },
@@ -343,15 +355,21 @@
   }
 
   async function markCurrent() {
-    if (!session || !session.lesson.activities.length) return;
-    const { lesson, index } = session;
+    if (!session || !session.lesson.activities.length) return false;
+    const currentSession = session;
+    const currentNavigation = navigationCount;
+    const { lesson, index } = currentSession;
     const id = lesson.activities[index].id;
+    const stillCurrent = () => session === currentSession && session.index === index && navigationCount === currentNavigation;
     try {
-      session.progress = await CourseProgress.completeActivity(lesson, id);
+      currentSession.progress = await CourseProgress.completeActivity(lesson, id);
+      if (!stillCurrent()) return false;
       progressSummary();
       setFeedback('Đã ghi nhận hoạt động này.', 'success');
+      return true;
     } catch (error) {
-      setFeedback(error.message || 'Chưa lưu được tiến độ.', 'error');
+      if (stillCurrent()) setFeedback(error.message || 'Chưa lưu được tiến độ.', 'error');
+      return false;
     }
   }
 
@@ -368,28 +386,37 @@
     if (!correct) { setFeedback('Chưa đúng, hãy thử lại.', 'error'); return; }
     const total = questionCount(activity);
     if ((activityState.questionIndex || 0) + 1 < total) {
+      stopCourseAudio(audioContext());
       activityState.questionIndex += 1;
       activityState.tiles = [];
       await renderActivity();
       setFeedback('Đúng. Chuyển sang câu tiếp theo.', 'success');
     } else {
-      await markCurrent();
-      if (question.explanation) setFeedback('Đúng. ' + question.explanation, 'success');
+      const marked = await markCurrent();
+      if (marked && question.explanation) setFeedback('Đúng. ' + question.explanation, 'success');
+    }
+  }
+
+  function audioContext() {
+    if (!session) return '';
+    const activity = session.lesson.activities[session.index];
+    return [session.course.id, session.module.id, session.lesson.id,
+      activity?.id || session.index, activityState.questionIndex || 0].join('/');
+  }
+
+  function stopCourseAudio(context) {
+    if (window.KDSPAudio) {
+      window.KDSPAudio.stop({ owner: 'course', ...(context ? { context } : {}) });
     }
   }
 
   function speak(text) {
-    if (!text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+    if (!window.KDSPAudio) {
       showToast('Thiết bị hiện không hỗ trợ giọng đọc Nhật.');
       return;
     }
-    try {
-      speechSynthesis.cancel();
-      const speech = new SpeechSynthesisUtterance(String(text));
-      speech.lang = 'ja-JP';
-      speech.rate = 0.88;
-      speechSynthesis.speak(speech);
-    } catch (_) { showToast('Không thể phát âm thanh trên thiết bị này.'); }
+    // Keep native speech in this user gesture; settings are owned by KDSPAudio.
+    window.KDSPAudio.speak(text, { owner: 'course', context: audioContext() });
   }
 
   async function handleActivityClick(event) {
@@ -406,8 +433,8 @@
       if (!token) return;
       activityState.visited.add(index);
       setFeedback((token.reading || token.text || '') + ' — ' + (token.meaning_vi || ''), 'success');
-      if (activityState.visited.size >= (activity.data.tokens || []).length) await markCurrent();
       speak(token.reading || token.text);
+      if (activityState.visited.size >= (activity.data.tokens || []).length) await markCurrent();
       return;
     }
     if (target.dataset.matchSide) {
@@ -510,6 +537,14 @@
 
   async function begin() {
     if (!window.CourseContent || !window.CourseProgress) throw new Error('Thiếu mô-đun học liệu hoặc tiến độ.');
+    if (window.KDSPAudio) {
+      window.KDSPAudio.subscribe((event) => {
+        if (event.type === 'error' && event.error && (!event.owner || event.owner === 'course')) {
+          showToast(event.error.message);
+        }
+      });
+      window.KDSPAudio.init().catch(() => showToast('Không thể khởi tạo âm thanh trên thiết bị này.'));
+    }
     CourseContent.onChange(setNetworkStatus);
     CourseProgress.onChange(setNetworkStatus);
     $('course-refresh').addEventListener('click', async () => {
@@ -579,5 +614,12 @@
     }
   }
 
-  document.addEventListener('DOMContentLoaded', () => begin().catch(renderError));
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!window.KDSPAudio) {
+      showToast('Không tải được bộ phát âm thanh. Hãy tải lại trang.');
+      return;
+    }
+    window.dispatchEvent(new Event('kdsp:consumer-ready'));
+    begin().catch(renderError);
+  });
 })();
