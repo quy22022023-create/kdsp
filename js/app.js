@@ -4,7 +4,7 @@
   const CONTENT_CACHE_KEY = 'jp_app_content_cache_v1';
   const PROGRESS_KEY = 'jp_app_progress_v1';
   const META_KEY = 'jp_app_meta_v1';
-  const SPEECH_SETTINGS_KEY = 'jp_app_speech_settings_v1';
+  const audio = window.KDSPAudio;
   const SESSION_SIZE = 12;
   const $ = (id) => document.getElementById(id);
 
@@ -49,15 +49,12 @@
   let studyTitle = 'Phiên học';
   let studyRated = new Set();
   let practiceSession = null;
-  let practiceTimer = null;
   let toastTimer = null;
   let authMode = 'signin';
   let kanaScript = 'hiragana';
   let kanaGroup = 'basic';
   let selectedKana = null;
   let kanaQuiz = null;
-  let speechVoices = [];
-  let speechSettings = { voiceURI: '', rate: 0.92, pitch: 1.04 };
   let studyPointer = null;
   let suppressStudyClick = false;
   let studyAdvanceLocked = false;
@@ -145,7 +142,7 @@
 
   function normalizeLevel(value) {
     const level = String(value || 'N5').toUpperCase();
-    return ['N5', 'N4', 'N3'].includes(level) ? level : 'N5';
+    return ['N5', 'N4', 'N3', 'N2'].includes(level) ? level : 'N5';
   }
 
   function normalizeContent(raw) {
@@ -307,7 +304,9 @@
 
   function setPage(page) {
     const valid = ['home', 'roadmap', 'vocab', 'grammar', 'kana', 'practice', 'review', 'learn'];
-    currentPage = valid.includes(page) ? page : 'home';
+    const nextPage = valid.includes(page) ? page : 'home';
+    if (nextPage !== currentPage && audio) audio.stop({ owner: 'app' });
+    currentPage = nextPage;
     document.querySelectorAll('.page').forEach((node) => {
       const active = node.id === `page-${currentPage}`;
       node.classList.toggle('active', active);
@@ -343,12 +342,12 @@
 
   function renderHomeLevels() {
     const host = $('home-levels');
-    const levels = ['N5', 'N4', 'N3'];
+    const levels = ['N5', 'N4', 'N3', 'N2'];
     host.innerHTML = levels.map((level) => {
       const cards = content.vocabulary.filter((card) => card.level === level);
       const known = cards.filter((card) => getVocabStatus(card) === 'known').length;
       const pct = cards.length ? Math.round((known / cards.length) * 100) : 0;
-      return `<div class="level-progress-item"><span class="level-square">${level}</span><div class="level-progress-copy"><strong>${level === 'N5' ? 'Sơ cấp 1' : level === 'N4' ? 'Sơ cấp 2' : 'Trung cấp'}</strong><div class="progress-track"><span style="width:${pct}%"></span></div><small>${known}/${cards.length} từ đã nhớ</small></div><span class="progress-percent">${pct}%</span></div>`;
+      return `<div class="level-progress-item"><span class="level-square">${level}</span><div class="level-progress-copy"><strong>${level === 'N5' ? 'Sơ cấp 1' : level === 'N4' ? 'Sơ cấp 2' : level === 'N3' ? 'Trung cấp' : 'Trung cao cấp'}</strong><div class="progress-track"><span style="width:${pct}%"></span></div><small>${known}/${cards.length} từ đã nhớ</small></div><span class="progress-percent">${pct}%</span></div>`;
     }).join('');
   }
 
@@ -440,85 +439,61 @@
     if (kanaQuiz) renderKanaQuiz();
   }
 
-  function getJapaneseVoices() {
-    if (!('speechSynthesis' in window)) return [];
-    return window.speechSynthesis.getVoices().filter((voice) => /^ja(?:-|$)/i.test(String(voice.lang || '')));
-  }
-
-  function scoreJapaneseVoice(voice) {
-    const identity = `${voice.name || ''} ${voice.voiceURI || ''}`.toLowerCase();
-    let score = 0;
-    if (/nanami|kyoko|haruka|mizuki|sayaka|sakura|hikari|yui|aoi|hina|female|woman/i.test(identity)) score += 8;
-    if (/google|microsoft|siri|apple|enhanced|premium|neural|online/i.test(identity)) score += 2;
-    if (/otoya|ichiro|male|man/i.test(identity)) score -= 3;
-    if (/^ja-jp$/i.test(String(voice.lang || ''))) score += 2;
-    if (voice.localService === false) score += 1;
-    if (voice.default) score += 0.5;
-    return score;
-  }
-
-  function getPreferredJapaneseVoice(voices) {
-    if (!voices.length) return null;
-    const saved = voices.find((voice) => voice.voiceURI === speechSettings.voiceURI);
-    if (saved) return saved;
-    return [...voices].sort((a, b) => scoreJapaneseVoice(b) - scoreJapaneseVoice(a))[0];
-  }
-
   function renderVoiceOptions() {
     const select = $('speech-voice-select');
     if (!select) return;
-    speechVoices = getJapaneseVoices();
-    if (!speechVoices.length) {
-      select.innerHTML = '<option value="">Đang chờ giọng tiếng Nhật từ thiết bị…</option>';
+    if (!audio) {
+      select.disabled = true;
+      return;
+    }
+    const voices = audio.getVoices();
+    const settings = audio.getSettings();
+    const preferred = audio.getPreferredVoice();
+    if (!voices.length) {
+      const waiting = audio.getState().voiceStatus === 'waiting';
+      const label = waiting ? 'Đang chờ giọng tiếng Nhật từ thiết bị…' : 'Thiết bị chưa cung cấp danh sách giọng tiếng Nhật.';
+      select.innerHTML = `<option value="${escapeHtml(settings.voiceURI)}">${label}</option>`;
       select.disabled = true;
     } else {
-      const preferred = getPreferredJapaneseVoice(speechVoices);
-      if (!speechSettings.voiceURI || !speechVoices.some((voice) => voice.voiceURI === speechSettings.voiceURI)) {
-        speechSettings.voiceURI = preferred ? preferred.voiceURI : '';
-        saveSpeechSettings();
-      }
+      const missingSavedVoice = settings.voiceURI && !voices.some((voice) => voice.voiceURI === settings.voiceURI);
+      const pendingOption = missingSavedVoice
+        ? `<option value="${escapeHtml(settings.voiceURI)}">Giọng đã chọn chưa có trên thiết bị này</option>` : '';
       select.disabled = false;
-      select.innerHTML = speechVoices.map((voice) => {
+      select.innerHTML = pendingOption + voices.map((voice) => {
         const recommended = preferred && preferred.voiceURI === voice.voiceURI ? ' · Gợi ý' : '';
         return `<option value="${escapeHtml(voice.voiceURI)}">${escapeHtml(voice.name)} · ${escapeHtml(voice.lang)}${recommended}</option>`;
       }).join('');
-      select.value = speechSettings.voiceURI;
     }
-    $('speech-rate').value = String(speechSettings.rate);
-    $('speech-rate-value').textContent = `${Number(speechSettings.rate).toFixed(2)}×`;
-    $('speech-pitch').value = String(speechSettings.pitch);
-    $('speech-pitch-value').textContent = Number(speechSettings.pitch).toFixed(2);
+    select.value = settings.voiceURI || (preferred ? preferred.voiceURI : '');
+    $('speech-rate').value = String(settings.rate);
+    $('speech-rate-value').textContent = `${Number(settings.rate).toFixed(2)}×`;
+    $('speech-pitch').value = String(settings.pitch);
+    $('speech-pitch-value').textContent = Number(settings.pitch).toFixed(2);
   }
 
-  function saveSpeechSettings() {
-    AppStore.set(SPEECH_SETTINGS_KEY, speechSettings);
+  function saveSpeechSettings(patch) {
+    if (audio) return audio.setSettings(patch);
   }
 
   function speakJapanese(text, options = {}) {
-    if (!text || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+    if (!audio) {
       showToast('Trình duyệt này chưa hỗ trợ phát âm tự động.');
       return;
     }
-    speechVoices = getJapaneseVoices();
-    if (!speechVoices.length) renderVoiceOptions();
-    const utterance = new SpeechSynthesisUtterance(String(text));
-    const voice = getPreferredJapaneseVoice(speechVoices.length ? speechVoices : getJapaneseVoices());
-    utterance.lang = voice && voice.lang ? voice.lang : 'ja-JP';
-    utterance.rate = Math.max(0.70, Math.min(1.15, Number(options.rate ?? speechSettings.rate) || 0.92));
-    utterance.pitch = Math.max(0.85, Math.min(1.30, Number(options.pitch ?? speechSettings.pitch) || 1.04));
-    utterance.volume = 1;
-    if (voice) utterance.voice = voice;
-    utterance.onerror = (event) => {
-      if (event && event.error === 'not-allowed') showToast('Thiết bị chưa cho phép phát âm. Hãy chạm nút nghe một lần nữa.');
-    };
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
+    return audio.speak(text, { ...options, owner: 'app', context: options.context || currentPage });
   }
 
-  function speakKana(row) {
+  function speakKana(row, context = 'kana') {
     if (!row) return;
+    const settings = audio ? audio.getSettings() : {};
     const spoken = row[3] || row[0];
-    speakJapanese(spoken, { rate: Math.min(Number(speechSettings.rate) || 0.92, 0.86), pitch: speechSettings.pitch });
+    speakJapanese(spoken, { context, rate: Math.min(Number(settings.rate) || 0.92, 0.86), pitch: settings.pitch });
+  }
+
+  function stopKanaAudio() {
+    if (!audio) return;
+    audio.stop({ owner: 'app', context: 'kana' });
+    audio.stop({ owner: 'app', context: 'kana-quiz' });
   }
 
   function startKanaQuiz(mode) {
@@ -527,6 +502,7 @@
       showToast('Nhóm chữ này chưa đủ dữ liệu để tạo câu hỏi.');
       return;
     }
+    stopKanaAudio();
     kanaQuiz = { mode: mode === 'listen' ? 'listen' : 'read', total: 0, correct: 0, answered: false, complete: false, answer: null, options: [] };
     $('kana-quiz-panel').hidden = false;
     nextKanaQuizQuestion();
@@ -535,6 +511,7 @@
 
   function nextKanaQuizQuestion() {
     if (!kanaQuiz) return;
+    stopKanaAudio();
     if (kanaQuiz.total >= 10) {
       kanaQuiz.complete = true;
       renderKanaQuiz();
@@ -548,7 +525,7 @@
     kanaQuiz.options = options;
     kanaQuiz.answered = false;
     renderKanaQuiz();
-    if (kanaQuiz.mode === 'listen') speakKana(answer);
+    if (kanaQuiz.mode === 'listen') speakKana(answer, 'kana-quiz');
   }
 
   function renderKanaQuiz() {
@@ -565,7 +542,6 @@
       return `<button class="kana-quiz-option ${correct ? 'correct' : ''} ${wrong ? 'wrong' : ''}" data-kana-quiz-option="${index}" type="button" ${kanaQuiz.answered ? 'disabled' : ''}>${escapeHtml(label)}</button>`;
     }).join('');
     $('kana-quiz-feedback').textContent = kanaQuiz.complete ? `Bạn trả lời đúng ${kanaQuiz.correct}/10 câu. Cứ luyện từng chút một nhé!` : kanaQuiz.answered ? (kanaQuiz.lastCorrect ? 'Chính xác! すごい！' : `Đáp án đúng là ${kanaQuiz.answer[0]} · ${kanaQuiz.answer[1]}. Hãy thử lại nhé!`) : '';
-    $('kana-quiz-next').hidden = !kanaQuiz.answered;
     $('kana-quiz-next').textContent = kanaQuiz.complete ? 'Luyện lại từ đầu ↻' : kanaQuiz.total >= 10 ? 'Xem kết quả' : 'Câu tiếp theo →';
     $('kana-quiz-next').hidden = !kanaQuiz.answered && !kanaQuiz.complete;
   }
@@ -716,6 +692,7 @@
   }
 
   function startStudy(cards, title) {
+    if (audio) audio.stop({ owner: 'app' });
     const unique = [];
     const seen = new Set();
     (cards || []).forEach((card) => {
@@ -764,6 +741,7 @@
     const card = studyCards[studyIndex];
     if (!card || studyRated.has(card.id) || studyAdvanceLocked) return;
     studyAdvanceLocked = true;
+    if (audio) audio.stop({ owner: 'app', context: 'study' });
     recordVocabReview(card, correct);
     studyRated.add(card.id);
     const advance = () => {
@@ -784,7 +762,9 @@
 
   function moveStudy(delta) {
     if (!studyCards.length) return;
-    studyIndex = Math.max(0, Math.min(studyCards.length, studyIndex + delta));
+    const nextIndex = Math.max(0, Math.min(studyCards.length, studyIndex + delta));
+    if (nextIndex !== studyIndex && audio) audio.stop({ owner: 'app', context: 'study' });
+    studyIndex = nextIndex;
     renderStudyCard();
   }
 
@@ -819,6 +799,7 @@
   function openVocabDetail(cardId) {
     const card = content.vocabulary.find((item) => item.id === cardId);
     if (!card) return;
+    if (audio && ($('vocab-modal').hidden || selectedVocab !== card)) audio.stop({ owner: 'app' });
     selectedVocab = card;
     $('detail-level').textContent = card.level;
     $('detail-topic').textContent = card.topic;
@@ -831,7 +812,10 @@
 
   function closeModal(id) {
     const modal = $(id);
-    if (modal) modal.hidden = true;
+    if (modal) {
+      if (id === 'vocab-modal' && audio) audio.stop({ owner: 'app', context: 'vocab-detail' });
+      modal.hidden = true;
+    }
   }
 
   async function loadDemoData() {
@@ -862,8 +846,8 @@
         CourseContent.getBank('grammar'),
         CourseContent.getBank('exercises')
       ]);
-      // Giao diện flashcard cũ chỉ hỗ trợ N5–N3. N2/N1 có trình khóa học riêng.
-      const keepOldLevel = (item) => ['N5', 'N4', 'N3'].includes(String(item.level || '').toUpperCase());
+      // Giao diện học từ vựng hỗ trợ N5–N2; N1 vẫn dành cho luồng khóa học riêng.
+      const keepOldLevel = (item) => ['N5', 'N4', 'N3', 'N2'].includes(String(item.level || '').toUpperCase());
       const remote = normalizeContent({
         vocabulary: vocabulary.filter(keepOldLevel),
         grammar: grammar.filter(keepOldLevel),
@@ -1128,20 +1112,19 @@
   }
 
   async function initialize() {
+    if (audio) {
+      audio.subscribe((event) => {
+        if (event.type === 'voices' || event.type === 'settings') renderVoiceOptions();
+        if (event.type === 'error' && event.error) showToast(event.error.message);
+      });
+      audio.init();
+    }
     try {
       const savedProgress = await AppStore.get(PROGRESS_KEY, {});
       progress = normalizeProgressMap(savedProgress);
       activeProgressUserId = null;
       const savedMeta = await AppStore.get(META_KEY, null);
       if (savedMeta && typeof savedMeta === 'object') meta = { ...meta, ...savedMeta };
-      const savedSpeech = await AppStore.get(SPEECH_SETTINGS_KEY, null);
-      if (savedSpeech && typeof savedSpeech === 'object') {
-        speechSettings = { ...speechSettings, ...savedSpeech };
-        if (Number(savedSpeech.rate) === 0.84 && Number(savedSpeech.pitch) === 1.10) {
-          speechSettings.rate = 0.92;
-          speechSettings.pitch = 1.04;
-        }
-      }
       const cached = await AppStore.get(CONTENT_CACHE_KEY, null);
       if (cached) content = normalizeContent(cached);
     } catch (error) {
@@ -1150,10 +1133,6 @@
 
     renderAll();
     renderVoiceOptions();
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.onvoiceschanged = renderVoiceOptions;
-      window.setTimeout(renderVoiceOptions, 350);
-    }
     // Nguồn học liệu công khai hoạt động độc lập với trạng thái đăng nhập Supabase.
     refreshPublicContent(false);
     if (AppDB.isConfigured()) connectSupabaseInBackground();
@@ -1190,9 +1169,9 @@
         return;
       }
       const kanaScriptButton = event.target.closest('[data-kana-script]');
-      if (kanaScriptButton) { kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      if (kanaScriptButton) { stopKanaAudio(); kanaScript = kanaScriptButton.dataset.kanaScript; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
       const kanaGroupButton = event.target.closest('[data-kana-group]');
-      if (kanaGroupButton) { kanaGroup = kanaGroupButton.dataset.kanaGroup; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
+      if (kanaGroupButton) { stopKanaAudio(); kanaGroup = kanaGroupButton.dataset.kanaGroup; selectedKana = null; kanaQuiz = null; $('kana-quiz-panel').hidden = true; renderKana(); return; }
       const kanaQuizModeButton = event.target.closest('[data-kana-quiz-mode]');
       if (kanaQuizModeButton) { startKanaQuiz(kanaQuizModeButton.dataset.kanaQuizMode); return; }
       const kanaQuizOption = event.target.closest('[data-kana-quiz-option]');
@@ -1280,7 +1259,7 @@
       studyCardElement.classList.toggle('flipped');
       studyCardElement.setAttribute('aria-pressed', studyCardElement.classList.contains('flipped') ? 'true' : 'false');
     });
-    $('study-audio').addEventListener('click', () => { const card = studyCards[studyIndex]; if (card) speakJapanese(card.jp); });
+    $('study-audio').addEventListener('click', () => { const card = studyCards[studyIndex]; if (card && !studyAdvanceLocked) speakJapanese(card.jp, { context: 'study' }); });
     $('study-again').addEventListener('click', () => rateCurrentCard(false));
     $('study-known').addEventListener('click', () => rateCurrentCard(true));
     $('study-prev').addEventListener('click', () => moveStudy(-1));
@@ -1292,26 +1271,34 @@
       const fallback = content.vocabulary.filter((card) => !excluded.has(card.id));
       startStudy((next.length ? next : fallback).slice(0, SESSION_SIZE), 'Học tiếp từ vựng');
     });
-    $('detail-audio').addEventListener('click', () => selectedVocab && speakJapanese(selectedVocab.jp));
+    $('detail-audio').addEventListener('click', () => selectedVocab && speakJapanese(selectedVocab.jp, { context: 'vocab-detail' }));
     $('detail-study').addEventListener('click', () => {
       if (!selectedVocab) return;
       closeModal('vocab-modal');
       startStudy([selectedVocab], 'Học một từ');
     });
     $('kana-audio-button').addEventListener('click', () => selectedKana && speakKana(selectedKana));
-    $('kana-quiz-audio').addEventListener('click', () => kanaQuiz && kanaQuiz.answer && speakKana(kanaQuiz.answer));
+    $('kana-quiz-audio').addEventListener('click', () => kanaQuiz && kanaQuiz.answer && speakKana(kanaQuiz.answer, 'kana-quiz'));
     $('kana-quiz-next').addEventListener('click', () => { if (kanaQuiz && kanaQuiz.complete) startKanaQuiz(kanaQuiz.mode); else nextKanaQuizQuestion(); });
-    $('speech-voice-select').addEventListener('change', () => { speechSettings.voiceURI = $('speech-voice-select').value; saveSpeechSettings(); });
-    $('speech-rate').addEventListener('input', () => { speechSettings.rate = Number($('speech-rate').value); $('speech-rate-value').textContent = `${speechSettings.rate.toFixed(2)}×`; saveSpeechSettings(); });
-    $('speech-pitch').addEventListener('input', () => { speechSettings.pitch = Number($('speech-pitch').value); $('speech-pitch-value').textContent = speechSettings.pitch.toFixed(2); saveSpeechSettings(); });
-    $('speech-preview-button').addEventListener('click', () => speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { rate: Math.min(Number(speechSettings.rate) || 0.92, 0.90), pitch: speechSettings.pitch }));
+    $('speech-voice-select').addEventListener('change', () => saveSpeechSettings({ voiceURI: $('speech-voice-select').value }));
+    $('speech-rate').addEventListener('input', () => saveSpeechSettings({ rate: Number($('speech-rate').value) }));
+    $('speech-pitch').addEventListener('input', () => saveSpeechSettings({ pitch: Number($('speech-pitch').value) }));
+    $('speech-preview-button').addEventListener('click', () => {
+      const settings = audio ? audio.getSettings() : {};
+      speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { context: 'voice-preview', rate: Math.min(Number(settings.rate) || 0.92, 0.90), pitch: settings.pitch });
+    });
     document.querySelectorAll('.modal-backdrop').forEach((modal) => modal.addEventListener('click', (event) => {
-      if (event.target === modal) modal.hidden = true;
+      if (event.target === modal) closeModal(modal.id);
     }));
     window.addEventListener('online', () => refreshPublicContent(true));
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    if (!audio) {
+      showToast('Không tải được bộ phát âm thanh. Hãy tải lại trang.');
+      return;
+    }
+    window.dispatchEvent(new Event('kdsp:consumer-ready'));
     bindEvents();
     initialize();
   });
