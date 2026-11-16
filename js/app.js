@@ -4,7 +4,8 @@
   const CONTENT_CACHE_KEY = 'jp_app_content_cache_v1';
   const PROGRESS_KEY = 'jp_app_progress_v1';
   const META_KEY = 'jp_app_meta_v1';
-  const audio = window.KDSPAudio;
+  // Keep the existing shared player, with a native fallback for static hosting.
+  const audio = createJapaneseAudio(window.KDSPAudio);
   const SESSION_SIZE = 12;
   const $ = (id) => document.getElementById(id);
 
@@ -126,6 +127,298 @@
       ]
     }
   };
+
+  function createJapaneseAudio(existing) {
+    const SETTINGS_KEY = 'jp_app_speech_settings_v2';
+    const defaults = { voiceURI: '', rate: 0.94, pitch: 1, volume: 1 };
+    const listeners = new Set();
+    const methods = ['init', 'subscribe', 'getVoices', 'getSettings', 'getPreferredVoice', 'getState', 'setSettings', 'speak', 'stop'];
+    const driver = existing && methods.every((name) => typeof existing[name] === 'function')
+      ? existing : createBrowserSpeechDriver();
+    let initialized = false;
+    let settings = { ...defaults };
+
+    function clamp(value, min, max, fallback) {
+      const number = Number(value);
+      return value == null || value === '' || !Number.isFinite(number) ? fallback : Math.min(max, Math.max(min, number));
+    }
+
+    function normalizeSettings(value) {
+      const source = value && typeof value === 'object' ? value : {};
+      return {
+        voiceURI: typeof source.voiceURI === 'string' ? source.voiceURI : '',
+        rate: clamp(source.rate, 0.5, 1.5, defaults.rate),
+        pitch: clamp(source.pitch, 0.5, 1.5, defaults.pitch),
+        volume: clamp(source.volume, 0, 1, defaults.volume)
+      };
+    }
+
+    try {
+      const saved = window.localStorage.getItem(SETTINGS_KEY);
+      settings = normalizeSettings(saved ? JSON.parse(saved) : driver.getSettings());
+    } catch (_) { /* Storage can be blocked in private browsing. */ }
+
+    function emit(event) {
+      listeners.forEach((listener) => {
+        try { listener(event); } catch (error) { console.warn('Lỗi cập nhật bộ đọc:', error); }
+      });
+    }
+
+    function voiceScore(voice) {
+      const name = String(voice.name || '');
+      let score = 0;
+      if (/neural|natural|premium|enhanced/i.test(name)) score += 100;
+      if (/google.*(日本語|japanese)|microsoft.*(nanami|keita|ayumi|haruka)|kyoko|otoya|o-ren/i.test(name)) score += 30;
+      if (/^ja[-_]jp$/i.test(voice.lang)) score += 10;
+      if (voice.localService) score += window.navigator.onLine === false ? 200 : 5;
+      return score;
+    }
+
+    function getVoices() {
+      const seen = new Set();
+      return (driver.getVoices() || []).filter((voice) => {
+        if (!voice || !/^ja(?:[-_]|$)/i.test(voice.lang) || seen.has(voice.voiceURI)) return false;
+        seen.add(voice.voiceURI);
+        return true;
+      }).sort((a, b) => voiceScore(b) - voiceScore(a) || String(a.name).localeCompare(String(b.name)));
+    }
+
+    function getPreferredVoice() {
+      return getVoices()[0] || null;
+    }
+
+    function applySettings() {
+      const voices = getVoices();
+      const selected = voices.find((voice) => voice.voiceURI === settings.voiceURI) || voices[0];
+      // A voice saved on another device may not exist here. Keep the preference,
+      // but pass an available Japanese voice to the underlying player.
+      driver.setSettings({ ...settings, voiceURI: selected ? selected.voiceURI : '' });
+    }
+
+    return {
+      init() {
+        if (initialized) return;
+        initialized = true;
+        driver.subscribe((event) => {
+          if (!event) return;
+          if (event.type === 'voices') applySettings();
+          if (event.type !== 'settings') emit(event);
+        });
+        driver.init();
+        applySettings();
+      },
+      subscribe(listener) {
+        if (typeof listener !== 'function') return () => {};
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getVoices,
+      getPreferredVoice,
+      getSettings: () => ({ ...settings }),
+      getState: () => driver.getState(),
+      setSettings(patch) {
+        settings = normalizeSettings({ ...settings, ...patch });
+        try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (_) { /* Optional persistence. */ }
+        applySettings();
+        emit({ type: 'settings', settings: { ...settings } });
+        return { ...settings };
+      },
+      speak(text, options = {}) {
+        // Preserve Japanese punctuation, particles and long vowels. Do not guess
+        // pronunciations by replacing kana or stripping punctuation.
+        const spoken = String(text == null ? '' : text).normalize('NFC')
+          .replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+        if (!spoken) return false;
+        applySettings();
+        try {
+          const result = driver.speak(spoken, {
+            ...options,
+            rate: clamp(options.rate, 0.5, 1.5, settings.rate),
+            pitch: clamp(options.pitch, 0.5, 1.5, settings.pitch),
+            volume: clamp(options.volume, 0, 1, settings.volume)
+          });
+          if (result && typeof result.catch === 'function') {
+            return result.catch((error) => { emit({ type: 'error', error }); return false; });
+          }
+          return result;
+        } catch (error) {
+          emit({ type: 'error', error });
+          return false;
+        }
+      },
+      stop: (options) => driver.stop(options)
+    };
+  }
+
+  function createBrowserSpeechDriver() {
+    const synth = window.speechSynthesis;
+    const supported = Boolean(synth && typeof window.SpeechSynthesisUtterance === 'function');
+    const listeners = new Set();
+    let settings = { voiceURI: '', rate: 0.94, pitch: 1, volume: 1 };
+    let voices = [];
+    let voiceStatus = supported ? 'waiting' : 'unsupported';
+    let initialized = false;
+    let active = null;
+    let sequence = 0;
+    let pollTimer = null;
+    let pollCount = 0;
+
+    function emit(event) {
+      listeners.forEach((listener) => listener(event));
+    }
+
+    function refreshVoices() {
+      if (!supported) return;
+      try {
+        voices = synth.getVoices().filter((voice) => /^ja(?:[-_]|$)/i.test(voice.lang));
+      } catch (_) { voices = []; }
+      voiceStatus = voices.length ? 'ready' : pollCount >= 20 ? 'unavailable' : 'waiting';
+      emit({ type: 'voices' });
+      if (voices.length && active && active.waiting) startChunk(active);
+    }
+
+    function splitText(text) {
+      const chunks = [];
+      let chunk = '';
+      let size = 0;
+      // Keep Japanese words and small kana together when splitting long text.
+      // Older browsers use phrase boundaries rather than cutting arbitrary kana.
+      const units = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
+        ? Array.from(new Intl.Segmenter('ja', { granularity: 'word' }).segment(text), (part) => part.segment)
+        : (text.match(/[^。！？!?\s]+[。！？!?\s]*|[。！？!?\s]+/gu) || [text]);
+      for (const unit of units) {
+        const length = Array.from(unit).length;
+        if (chunk && size + length > 180) {
+          chunks.push(chunk);
+          chunk = '';
+          size = 0;
+        }
+        chunk += unit;
+        size += length;
+        if (size >= 60 && /[。！？!?\n]$/.test(unit)) {
+          chunks.push(chunk);
+          chunk = '';
+          size = 0;
+        }
+      }
+      if (chunk) chunks.push(chunk);
+      return chunks;
+    }
+
+    function stop(filter = {}) {
+      if (!active) return false;
+      if (filter.owner && filter.owner !== active.owner) return false;
+      if (filter.context && filter.context !== active.context) return false;
+      const previous = active;
+      active = null;
+      sequence += 1;
+      window.clearTimeout(previous.waitTimer);
+      window.clearTimeout(previous.watchdog);
+      previous.utterance = null;
+      if (supported) synth.cancel();
+      emit({ type: 'stop', owner: previous.owner, context: previous.context });
+      return true;
+    }
+
+    function fail(session, message) {
+      if (active !== session) return;
+      stop();
+      emit({ type: 'error', error: new Error(message) });
+    }
+
+    function startChunk(session) {
+      if (active !== session || session.id !== sequence) return;
+      window.clearTimeout(session.waitTimer);
+      session.waiting = false;
+      const voice = voices.find((item) => item.voiceURI === session.settings.voiceURI)
+        || voices.find((item) => item.voiceURI === settings.voiceURI) || voices[0];
+      if (!voice) {
+        session.waiting = true;
+        session.waitTimer = window.setTimeout(() => {
+          fail(session, 'Chưa có giọng tiếng Nhật. Hãy cài hoặc bật giọng Nhật trong cài đặt thiết bị, rồi tải lại trang.');
+        }, 2000);
+        return;
+      }
+      const utterance = new window.SpeechSynthesisUtterance(session.chunks[session.index]);
+      // Keep a reference until completion (required by some mobile browsers).
+      session.utterance = utterance;
+      utterance.voice = voice;
+      utterance.lang = 'ja-JP';
+      utterance.rate = session.settings.rate;
+      utterance.pitch = session.settings.pitch;
+      utterance.volume = session.settings.volume;
+      utterance.onstart = () => {
+        if (active === session) emit({ type: 'start', owner: session.owner, context: session.context });
+      };
+      utterance.onend = () => {
+        if (active !== session || session.utterance !== utterance) return;
+        window.clearTimeout(session.watchdog);
+        session.utterance = null;
+        session.index += 1;
+        if (session.index < session.chunks.length) startChunk(session);
+        else {
+          active = null;
+          emit({ type: 'end', owner: session.owner, context: session.context });
+        }
+      };
+      utterance.onerror = (event) => {
+        if (active !== session || session.utterance !== utterance) return;
+        if (event.error === 'canceled' || event.error === 'interrupted') { stop(); return; }
+        const message = event.error === 'not-allowed'
+          ? 'Trình duyệt đang chặn âm thanh. Hãy chạm nút nghe để phát lại.'
+          : 'Không phát được giọng đọc. Hãy thử giọng tiếng Nhật khác hoặc kiểm tra kết nối nếu dùng giọng trực tuyến.';
+        fail(session, message);
+      };
+      // Bound a stalled utterance; never retry after the user stops or changes cards.
+      const timeout = Math.max(15000, Array.from(utterance.text).length * 650 / utterance.rate);
+      session.watchdog = window.setTimeout(() => fail(session, 'Giọng đọc không phản hồi. Hãy nhấn nghe lại hoặc chọn giọng khác.'), timeout);
+      try {
+        if (synth.paused) synth.resume();
+        synth.speak(utterance);
+      } catch (_) { fail(session, 'Trình duyệt không phát được âm thanh. Hãy chạm nút nghe để thử lại.'); }
+    }
+
+    return {
+      init() {
+        if (initialized) return;
+        initialized = true;
+        if (!supported) return;
+        if (typeof synth.addEventListener === 'function') synth.addEventListener('voiceschanged', refreshVoices);
+        refreshVoices();
+        function poll() {
+          pollCount += 1;
+          refreshVoices();
+          if (!voices.length && pollCount < 20) pollTimer = window.setTimeout(poll, 250);
+        }
+        if (!voices.length) pollTimer = window.setTimeout(poll, 250);
+        window.addEventListener('pagehide', () => { window.clearTimeout(pollTimer); stop(); });
+      },
+      subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+      getVoices: () => voices.slice(),
+      getSettings: () => ({ ...settings }),
+      getPreferredVoice: () => voices[0] || null,
+      getState: () => ({ voiceStatus, speaking: Boolean(active) }),
+      setSettings(patch) { settings = { ...settings, ...patch }; },
+      speak(text, options = {}) {
+        if (!supported) {
+          emit({ type: 'error', error: new Error('Trình duyệt này chưa hỗ trợ giọng đọc. Bạn vẫn có thể sử dụng các phần học khác.') });
+          return false;
+        }
+        stop();
+        // Refresh synchronously so a first tap works when voices loaded late.
+        refreshVoices();
+        const session = {
+          id: ++sequence, owner: options.owner, context: options.context,
+          settings: { ...settings, ...options }, chunks: splitText(text), index: 0,
+          waiting: false, utterance: null, waitTimer: null, watchdog: null
+        };
+        active = session;
+        startChunk(session);
+        return true;
+      },
+      stop
+    };
+  }
 
   function escapeHtml(value) {
     return String(value == null ? '' : value)
@@ -457,14 +750,14 @@
     } else {
       const missingSavedVoice = settings.voiceURI && !voices.some((voice) => voice.voiceURI === settings.voiceURI);
       const pendingOption = missingSavedVoice
-        ? `<option value="${escapeHtml(settings.voiceURI)}">Giọng đã chọn chưa có trên thiết bị này</option>` : '';
+        ? `<option value="${escapeHtml(settings.voiceURI)}">Giọng đã lưu chưa có · đang dùng giọng gợi ý</option>` : '';
       select.disabled = false;
-      select.innerHTML = pendingOption + voices.map((voice) => {
+      select.innerHTML = '<option value="">Tự động · ưu tiên giọng Nhật chất lượng cao</option>' + pendingOption + voices.map((voice) => {
         const recommended = preferred && preferred.voiceURI === voice.voiceURI ? ' · Gợi ý' : '';
         return `<option value="${escapeHtml(voice.voiceURI)}">${escapeHtml(voice.name)} · ${escapeHtml(voice.lang)}${recommended}</option>`;
       }).join('');
     }
-    select.value = settings.voiceURI || (preferred ? preferred.voiceURI : '');
+    select.value = settings.voiceURI || '';
     $('speech-rate').value = String(settings.rate);
     $('speech-rate-value').textContent = `${Number(settings.rate).toFixed(2)}×`;
     $('speech-pitch').value = String(settings.pitch);
@@ -487,7 +780,7 @@
     if (!row) return;
     const settings = audio ? audio.getSettings() : {};
     const spoken = row[3] || row[0];
-    speakJapanese(spoken, { context, rate: Math.min(Number(settings.rate) || 0.92, 0.86), pitch: settings.pitch });
+    speakJapanese(spoken, { context, rate: settings.rate, pitch: settings.pitch });
   }
 
   function stopKanaAudio() {
@@ -1285,7 +1578,7 @@
     $('speech-pitch').addEventListener('input', () => saveSpeechSettings({ pitch: Number($('speech-pitch').value) }));
     $('speech-preview-button').addEventListener('click', () => {
       const settings = audio ? audio.getSettings() : {};
-      speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { context: 'voice-preview', rate: Math.min(Number(settings.rate) || 0.92, 0.90), pitch: settings.pitch });
+      speakJapanese('あいうえお。こんにちは。いっしょに日本語を楽しく勉強しましょう。', { context: 'voice-preview', rate: settings.rate, pitch: settings.pitch });
     });
     document.querySelectorAll('.modal-backdrop').forEach((modal) => modal.addEventListener('click', (event) => {
       if (event.target === modal) closeModal(modal.id);
@@ -1294,10 +1587,6 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    if (!audio) {
-      showToast('Không tải được bộ phát âm thanh. Hãy tải lại trang.');
-      return;
-    }
     window.dispatchEvent(new Event('kdsp:consumer-ready'));
     bindEvents();
     initialize();
