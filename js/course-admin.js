@@ -42,7 +42,8 @@
     selectedLessonId: null,
     selectedActivityId: null,
     activeBank: 'vocabulary',
-    pendingBankItems: null
+    pendingBankItems: null,
+    pendingBankInput: null
   };
 
   function escapeHtml(value) {
@@ -63,27 +64,6 @@
     newIdCounter += 1;
     const suffix = `${Date.now().toString(36).slice(-6)}-${newIdCounter.toString(36)}`;
     return `${prefix}-${base.slice(0, 36)}-${suffix}`.slice(0, 64).replace(/-+$/g, '');
-  }
-
-  function makeEmptyWorkspace(baseContentVersion) {
-    return {
-      baseContentVersion: Number(baseContentVersion) || 1,
-      courses: [],
-      banks: { vocabulary: [], grammar: [], exercises: [] },
-      currentPaths: ['content/manifest.json', 'content/catalog.json', 'content/banks/index.json'],
-      versions: {
-        'content/manifest.json': Number(baseContentVersion) || 1,
-        'content/catalog.json': 1,
-        'content/banks/index.json': 1
-      },
-      manifest: {
-        schema_version: 1,
-        content_version: Number(baseContentVersion) || 1,
-        published_at: null,
-        catalog: { path: 'catalog.json', version: 1 },
-        banks_index: { path: 'banks/index.json', version: 1 }
-      }
-    };
   }
 
   function normalizeWorkspace(source) {
@@ -181,6 +161,7 @@
   }
 
   function markAndRender() {
+    invalidateBankPreview();
     setDirty(true);
     renderAll();
   }
@@ -363,6 +344,7 @@
   }
 
   function renderAll() {
+    if (state.pendingBankInput && state.pendingBankInput.workspace !== state.workspace) invalidateBankPreview();
     if (!state.workspace) return;
     renderStatus();
     renderCourseList(); renderCourseForm();
@@ -637,49 +619,86 @@
     return item;
   }
 
+  function invalidateBankPreview() {
+    state.pendingBankItems = null;
+    state.pendingBankInput = null;
+    $('cms-import-bank').disabled = true;
+  }
+
+  function normalizeBankItems(source, bank, defaultLevel) {
+    const items = source.map((item, index) => normalizeBankItem(bank, item, index, defaultLevel));
+    if (!items.length) throw new Error('Mảng JSON đang trống.');
+    const ids = new Set();
+    items.forEach((item) => { if (ids.has(item.id)) throw new Error(`ID bị trùng trong tệp: ${item.id}`); ids.add(item.id); });
+    return items;
+  }
+
   function previewBankImport() {
     const text = formValue('cms-bank-json');
-    if (!text) { state.pendingBankItems = null; $('cms-import-bank').disabled = true; setMessage('cms-bank-message', 'Dán dữ liệu JSON trước khi kiểm tra.', 'error'); return; }
+    invalidateBankPreview();
+    if (!text) { setMessage('cms-bank-message', 'Dán dữ liệu JSON trước khi kiểm tra.', 'error'); return; }
     try {
       const parsed = JSON.parse(text);
       if (!Array.isArray(parsed) && (!parsed || typeof parsed !== 'object')) throw new Error('JSON phải là một mảng hoặc object.');
-      const source = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.items) ? parsed.items : parsed[state.activeBank]);
-      if (!Array.isArray(source)) throw new Error(`Cần một mảng JSON hoặc object có khóa ${state.activeBank}.`);
-      const items = source.map((item, index) => normalizeBankItem(state.activeBank, item, index, formValue('cms-bank-default-level')));
-      if (!items.length) throw new Error('Mảng JSON đang trống.');
-      const ids = new Set();
-      items.forEach((item) => { if (ids.has(item.id)) throw new Error(`ID bị trùng trong tệp: ${item.id}`); ids.add(item.id); });
+      const bank = state.activeBank;
+      const defaultLevel = formValue('cms-bank-default-level');
+      const master = parsed.package_type === 'vocabulary_master';
+      if (master && (bank !== 'vocabulary' || parsed.schema_version !== 1 || !['N5', 'N4', 'N3', 'N2'].includes(parsed.level))) {
+        throw new Error('Gói Vocabulary Master cần schema_version 1, cấp độ N5–N2 và ngân hàng từ vựng.');
+      }
+      const source = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.items) ? parsed.items : parsed[bank]);
+      if (!Array.isArray(source)) throw new Error(`Cần một mảng JSON hoặc object có khóa ${bank}.`);
+      if (master && source.some((item) => item && item.level != null && item.level !== parsed.level)) {
+        throw new Error('Cấp độ từng mục phải trùng cấp độ gói Vocabulary Master.');
+      }
+      const items = normalizeBankItems(source, bank, master ? parsed.level : defaultLevel);
       state.pendingBankItems = items;
+      state.pendingBankInput = { text, bank, defaultLevel, workspace: state.workspace };
       $('cms-import-bank').disabled = false;
-      setMessage('cms-bank-message', `Dữ liệu hợp lệ: ${items.length} mục ${state.activeBank}. Nhấn “Thêm vào ngân hàng” để áp dụng vào bản làm việc.`, 'success');
+      setMessage('cms-bank-message', `Dữ liệu hợp lệ: ${items.length} mục ${bank}. Nhấn “Thêm vào ngân hàng” để áp dụng vào bản làm việc.`, 'success');
     } catch (error) {
-      state.pendingBankItems = null; $('cms-import-bank').disabled = true;
+      invalidateBankPreview();
       setMessage('cms-bank-message', error.message, 'error');
     }
   }
 
   function importBankItems() {
-    if (!state.pendingBankItems) return;
-    const bank = state.activeBank;
-    const existing = state.workspace.banks[bank];
-    const replace = $('cms-bank-duplicate-mode').value === 'replace';
-    let added = 0; let updated = 0; let skipped = 0;
-    state.pendingBankItems.forEach((item) => {
-      const index = existing.findIndex((current) => current.id === item.id);
-      if (index < 0) { existing.push(item); added += 1; }
-      else if (replace) { existing[index] = item; updated += 1; }
-      else skipped += 1;
-    });
-    $('cms-bank-json').value = '';
-    state.pendingBankItems = null; $('cms-import-bank').disabled = true;
-    setMessage('cms-bank-message', `Đã áp dụng: thêm ${added}, cập nhật ${updated}, bỏ qua ${skipped}. Chưa xuất bản lên GitHub.`, 'success');
-    markAndRender();
+    const preview = state.pendingBankInput;
+    if (!preview || !state.pendingBankItems) return;
+    if (preview.text !== formValue('cms-bank-json') || preview.defaultLevel !== formValue('cms-bank-default-level') ||
+        preview.bank !== state.activeBank || preview.workspace !== state.workspace) {
+      invalidateBankPreview();
+      setMessage('cms-bank-message', 'Dữ liệu đã thay đổi. Hãy kiểm tra JSON lại trước khi thêm vào ngân hàng.', 'error');
+      return;
+    }
+    try {
+      const bank = state.activeBank;
+      // Revalidate the previewed items, retaining IDs generated during the preview.
+      const items = normalizeBankItems(state.pendingBankItems, bank, preview.defaultLevel);
+      const existing = state.workspace.banks[bank];
+      const replace = $('cms-bank-duplicate-mode').value === 'replace';
+      let added = 0; let updated = 0; let skipped = 0;
+      items.forEach((item) => {
+        const index = existing.findIndex((current) => current.id === item.id);
+        if (index < 0) { existing.push(item); added += 1; }
+        else if (replace) { existing[index] = item; updated += 1; }
+        else skipped += 1;
+      });
+      $('cms-bank-json').value = '';
+      invalidateBankPreview();
+      setMessage('cms-bank-message', `Đã áp dụng: thêm ${added}, cập nhật ${updated}, bỏ qua ${skipped}. Chưa xuất bản lên GitHub.`, 'success');
+      markAndRender();
+    } catch (error) {
+      invalidateBankPreview();
+      setMessage('cms-bank-message', error.message, 'error');
+    }
   }
 
   function switchBank(bank) {
     if (!BANKS.includes(bank)) return;
-    state.activeBank = bank; state.pendingBankItems = null;
-    $('cms-bank-json').value = ''; $('cms-import-bank').disabled = true;
+    invalidateBankPreview();
+    state.activeBank = bank;
+    $('cms-bank-json').value = '';
     setMessage('cms-bank-message', '', 'success');
     renderAll();
   }
@@ -788,23 +807,64 @@
     document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
+  function checkImportPreview(workspace) {
+    // Keep editable draft validation errors; reject shapes that would crash the renderer.
+    validateWorkspace(workspace);
+    BANKS.forEach((bank) => workspace.banks[bank].forEach((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error(`${bank}: mục dữ liệu phải là object.`);
+    }));
+    workspace.courses.forEach((entry) => entry.modules.forEach((module) => module.lessons.forEach((lesson) => {
+      lesson.activities.forEach((activity) => { renderActivityPreview(activity); });
+    })));
+  }
+
   async function importWorkspaceFile(file) {
     if (!file) return;
     if (state.dirty && !window.confirm('Nhập JSON sẽ thay thế thay đổi chưa lưu. Tiếp tục?')) return;
+    const originalWorkspace = state.workspace;
+    const originalContent = JSON.stringify(originalWorkspace);
+    let previous = null;
+    let controls = [];
+    let validationView = null;
     try {
       const parsed = JSON.parse(await file.text());
-      const rawWorkspace = parsed.workspace || parsed;
-      if (rawWorkspace.baseContentVersion == null) rawWorkspace.baseContentVersion = state.workspace.baseContentVersion;
-      if (!rawWorkspace.headSha) rawWorkspace.headSha = state.workspace.headSha;
+      if (state.workspace !== originalWorkspace || JSON.stringify(state.workspace) !== originalContent) {
+        throw new Error('Bản làm việc đã thay đổi trong khi đọc tệp. Hãy nhập lại JSON.');
+      }
+      const rawWorkspace = parsed && (parsed.workspace || parsed);
+      if (!rawWorkspace || typeof rawWorkspace !== 'object' || Array.isArray(rawWorkspace)) throw new Error('Tệp JSON không chứa workspace hợp lệ.');
+      if (rawWorkspace.baseContentVersion == null) rawWorkspace.baseContentVersion = state.workspace?.baseContentVersion;
+      if (!rawWorkspace.headSha) rawWorkspace.headSha = state.workspace?.headSha;
       const workspace = normalizeWorkspace(rawWorkspace);
+      checkImportPreview(workspace);
+      previous = { ...state };
+      const validation = $('cms-validation');
+      validationView = { html: validation.innerHTML, hidden: validation.hidden, className: validation.className };
+      controls = Array.from(document.querySelectorAll('#cms-workspace input, #cms-workspace select, #cms-workspace textarea'))
+        .filter((element) => element.type !== 'file')
+        .map((element) => ({ element, value: element.value, checked: element.checked }));
       state.workspace = workspace; state.draftId = null;
       state.selectedCourseId = workspace.courses[0]?.course.id || null;
       state.selectedModuleId = selectedCourseEntry()?.modules[0]?.module.id || null;
       state.selectedLessonId = selectedModuleEntry()?.lessons[0]?.id || null;
       state.selectedActivityId = selectedLesson()?.activities[0]?.id || null;
+      invalidateBankPreview();
       setDirty(true); renderAll(); renderValidation();
       setMessage('cms-global-message', 'Đã nhập JSON vào bản làm việc. Hãy kiểm tra và lưu bản nháp trước khi xuất bản.', 'success');
-    } catch (error) { setMessage('cms-global-message', `Không thể nhập JSON: ${error.message}`, 'error'); }
+    } catch (error) {
+      if (previous) {
+        Object.assign(state, previous);
+        try { setDirty(previous.dirty); renderAll(); renderValidation(); }
+        catch (_) { /* The original workspace remains intact even if the DOM is unavailable. */ }
+        controls.forEach(({ element, value, checked }) => { element.value = value; element.checked = checked; });
+        $('cms-import-bank').disabled = !state.pendingBankItems;
+        if (validationView) {
+          const validation = $('cms-validation');
+          validation.innerHTML = validationView.html; validation.hidden = validationView.hidden; validation.className = validationView.className;
+        }
+      }
+      setMessage('cms-global-message', `Không thể nhập JSON: ${error.message}`, 'error');
+    }
     $('cms-import-file').value = '';
   }
 
@@ -900,6 +960,8 @@
     const button = event.target.closest('[data-bank]');
     if (button) switchBank(button.dataset.bank);
   });
+  $('cms-bank-json').addEventListener('input', invalidateBankPreview);
+  $('cms-bank-default-level').addEventListener('change', invalidateBankPreview);
   $('cms-preview-bank').addEventListener('click', previewBankImport);
   $('cms-import-bank').addEventListener('click', importBankItems);
   $('cms-run-validation').addEventListener('click', renderValidation);
