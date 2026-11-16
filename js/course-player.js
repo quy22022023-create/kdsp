@@ -318,6 +318,10 @@
       return;
     }
     const activity = lesson.activities[index];
+    if (window.KDSPTapTranslate) {
+      const tokens = Array.isArray(activity.data?.tokens) ? activity.data.tokens : [];
+      window.KDSPTapTranslate.setDictionary(tokens.map((token) => ({ jp: token.text, vi: token.meaning_vi, romaji: token.reading })));
+    }
     if (!TYPES.has(activity.type)) {
       host.innerHTML = commonHeader(activity) + '<div class="course-notice">Dạng hoạt động này chưa được hỗ trợ trong phiên bản hiện tại.</div>';
       return;
