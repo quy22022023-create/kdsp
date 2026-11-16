@@ -47,39 +47,8 @@ Admin tạo hoặc nhập JSON → kiểm tra schema/ID/tham chiếu → xem tr�
 Không đặt GitHub token trong JavaScript trình duyệt. CMS quản lý nội dung qua `course-admin.html`. Bản nháp được lưu riêng trong Supabase; nội dung đã xuất bản được ghi vào GitHub bằng Edge Function. Ứng dụng học sẽ được kết nối đọc các khóa học từ GitHub ở giai đoạn tích hợp tiếp theo.
 
 
-## Vocabulary Master Schema v1 (N5–N2)
+## Vocabulary Master v1 – nhập gói từ vựng N5–N2
 
-`$defs.vocabulary_item` là bản ghi từ vựng chuẩn. Schema giữ nguyên các trường tương thích hiện tại (`id`, `level`, `topic`, `tag`, `jp`, `kanji`, `romaji`, `vi`, `mnemonic`) và bổ sung các trường mở rộng tùy chọn. Dữ liệu cũ không cần chuyển đổi ngay.
+Admin hỗ trợ gói JSON có `schema_version: 1`, `package_type: "vocabulary_master"`, `package_id`, `level`, `metadata` và `items`. Mỗi item bắt buộc có `id`, `level`, `jp`, `vi`; các trường mở rộng như `reading`, `dictionary_form`, `part_of_speech`, `senses`, `common_collocations`, `synonyms`, `antonyms`, `related_vocabulary_ids`, `jlpt_confidence`, `source_notes` và `review_status` được giữ nguyên trong payload.
 
-### Quy tắc bản ghi
-- `id` là định danh ổn định, duy nhất toàn kho; không đổi ID khi sửa nghĩa, cách đọc hoặc cấp độ.
-- `jp` giữ vai trò trường hiển thị/cách đọc tương thích ứng dụng cũ; `reading` là trường đọc chuẩn hóa bổ sung. Không tự suy ra reading khi chưa kiểm chứng.
-- `kanji` có thể rỗng; từ chỉ viết kana không bị loại. `romaji` là trường hỗ trợ, không bắt buộc.
-- `vi` là nghĩa tóm tắt tương thích cũ; `senses[]` lưu từng nghĩa và ví dụ theo từng nghĩa.
-- Các trường từ loại, thể từ điển, nhóm động từ, loại tính từ, kết hợp từ, đồng/trái nghĩa và liên kết đều tùy chọn theo tính chất từ.
-- `jlpt_confidence` phân biệt nguồn chính thức, nguồn tham khảo và ước lượng biên tập. JLPT không công bố danh sách từ vựng chính thức đầy đủ theo từng cấp; không gắn nhãn “chính thức” nếu không có nguồn xác minh.
-- `review_status` theo luồng `draft` → `reviewed` → `approved`. Chỉ nội dung đã được duyệt mới xuất bản.
-
-### Gói JSON cho AI bên ngoài
-Dùng `$defs.vocabulary_master_package` trong `schemas/schema.json`. Mỗi gói chỉ chứa một cấp độ và một nhóm/chủ đề phù hợp; có thể nhập từng phần. Mẫu đầy đủ nằm trong `templates/templates.json` tại khóa `vocabulary_master_package` và `vocabulary_master_item`.
-
-Ví dụ cấu trúc gói:
-```json
-{
-  "schema_version": 1,
-  "package_type": "vocabulary_master",
-  "package_id": "n5-daily-life-001",
-  "level": "N5",
-  "metadata": {
-    "title": "Đời sống hằng ngày N5",
-    "language": "ja",
-    "target_language": "vi"
-  },
-  "items": []
-}
-```
-
-### Tương thích và giới hạn triển khai
-- Schema v1 mở rộng tương thích theo hướng cộng thêm trường, không đổi tên hoặc xóa trường cũ.
-- Đây mới là chuẩn dữ liệu và mẫu JSON; importer hiện tại chưa được nâng cấp để đọc toàn bộ `vocabulary_master_package` hoặc lưu đầy đủ các trường mở rộng. Cần triển khai riêng bước Import Engine và kiểm định trước khi nạp gói vào kho đang chạy.
-- Không thay thế `vocabulary_shard` hiện tại. Khi tích hợp, cần chuyển gói master thành shard theo cơ chế đã có, đồng thời giữ ID và sao lưu dữ liệu trước khi ghi.
+Để nhập cấp độ N2 trên dự án Supabase đã triển khai trước đây, chạy `supabase/migrations/20261116_enable_n2_import.sql` một lần trước khi nhập. Migration cập nhật CHECK constraints và RPC `j_import_batch`; không xóa hoặc chuyển đổi bản ghi hiện có. Các gói vẫn được kiểm tra ở giao diện và máy chủ trước khi xuất bản.
