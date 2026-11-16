@@ -1,6 +1,4 @@
-/* Shared Japanese speech. Settings stay in the existing AppStore key; no DOM or backend dependency.
- * Upgraded: Smart Neural Voice selection, Kana Alphabet articulation, and Natural Prosody/Intonation.
- */
+/* Shared Japanese speech. Settings stay in the existing AppStore key; no DOM or backend dependency. */
 (function () {
   'use strict';
 
@@ -25,23 +23,23 @@
   let writtenRevision = 0;
   let settingsReadFailed = false;
 
-  // Phonetic fallback map for isolated special Kana / symbols in alphabet tables
+  // Bang anh xa am tiet don le (Hiragana / Katakana) bang ma Unicode an toan
   const ISOLATED_KANA_MAP = {
-    'を': 'を。',
-    'ヲ': 'ヲ。',
-    'ん': 'ん。',
-    'ン': 'ン。',
-    'っ': 'っ、つ。',
-    'ッ': 'ッ、ツ。',
-    'ー': 'あー。',
-    'ぁ': 'あ。', 'ぃ': 'い。', 'ぅ': 'う。', 'ぇ': 'え。', 'ぉ': 'お。',
-    'ァ': 'ア。', 'ィ': 'イ。', 'ゥ': 'ウ。', 'ェ': 'エ。', 'ォ': 'オ。',
-    'ゃ': 'や。', 'ゅ': 'ゆ。', 'ょ': 'よ。',
-    'ャ': 'ヤ。', 'ュ': 'ユ。', 'ョ': 'ヨ。',
-    'ゎ': 'わ。', 'ヮ': 'ワ。'
+    '\u3092': '\u3092\u3002', // を -> を。
+    '\u30F2': '\u30F2\u3002', // ヲ -> ヲ。
+    '\u3093': '\u3093\u3002', // ん -> ん。
+    '\u30F3': '\u30F3\u3002', // ン -> ン。
+    '\u3063': '\u3063\u3001\u3064\u3002', // っ -> っ、つ。
+    '\u30C3': '\u30C3\u3001\u30C4\u3002', // ッ -> ッ、ツ。
+    '\u30FC': '\u3042\u30FC\u3002', // ー -> あー。
+    '\u3041': '\u3042\u3002', '\u3043': '\u3044\u3002', '\u3045': '\u3046\u3002', '\u3047': '\u3048\u3002', '\u3049': '\u304A\u3002',
+    '\u30A1': '\u30A2\u3002', '\u30A3': '\u30A4\u3002', '\u30A5': '\u30A6\u3002', '\u30A7': '\u30A8\u3002', '\u30A9': '\u30AA\u3002',
+    '\u3083': '\u3084\u3002', '\u3085': '\u3086\u3002', '\u3087': '\u3088\u3002',
+    '\u30E3': '\u30E4\u3002', '\u30E5': '\u30E6\u3002', '\u30E7': '\u30E8\u3002',
+    '\u308E': '\u308F\u3002', '\u30EE': '\u30EF\u3002'
   };
 
-  const KANA_ONLY_RE = /^[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s・、。／/\-]+$/;
+  const KANA_ONLY_RE = /^[\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\uFF65-\uFF9F\s\u30FB\u3001\u3002\uFF0F/\-]+$/;
   const SINGLE_MORA_RE = /^[\u3041-\u3096\u30A1-\u30FA][\u3099\u309A\u3041\u3043\u3045\u3047\u3049\u3083\u3085\u3087\u308E\u30A1\u30A3\u30A5\u30A7\u30A9\u30E3\u30E5\u30E7\u30EE]?$/;
 
   const isObject = (value) => Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -92,120 +90,90 @@
     }
     emit('error');
   }
-
-  function isNeuralOrPremiumVoice(voice) {
+  function isNeuralVoice(voice) {
     if (!voice) return false;
     const identity = `${voice.name || ''} ${voice.voiceURI || ''}`.toLowerCase();
-    return /natural|neural|online|siri|enhanced|premium|o-ren|kyoko.*enhanced|kyoko.*premium|nanami|mayu|shiori|wavenet|htm-network|jab-network/i.test(identity);
+    return /natural|neural|online|siri|enhanced|premium|o-ren|nanami|mayu|shiori|wavenet/i.test(identity);
   }
-
   function scoreVoice(voice) {
     const identity = `${voice.name || ''} ${voice.voiceURI || ''}`.toLowerCase();
     let score = 0;
-
-    // Tier 1: Top Neural / Natural / Siri / Enhanced voices (iOS, macOS, Edge, Chrome)
     if (/natural|neural|siri|o-ren|nanami|mayu|shiori|enhanced|premium/i.test(identity)) score += 20;
     if (/online|wavenet|network/i.test(identity)) score += 6;
-
-    // Tier 2: High-clarity female Japanese voices
     if (/kyoko|haruka|mizuki|sayaka|sakura|hikari|yui|aoi|hina|ayumi|female|woman/i.test(identity)) score += 10;
-
-    // Tier 3: Trusted platform engines
     if (/google|microsoft|apple/i.test(identity)) score += 3;
-
-    // Deprioritize robotic/compact/male voices unless explicitly chosen
     if (/compact|espeak|festival/i.test(identity)) score -= 10;
     if (/otoya|ichiro|keita|daichi|naoki|male|man/i.test(identity)) score -= 5;
-
     if (/^ja-jp$/i.test(String(voice.lang || ''))) score += 3;
     else if (/^ja/i.test(String(voice.lang || ''))) score += 1;
-
     if (voice.localService === false) score += 2;
     if (voice.default) score += 0.5;
     return score;
   }
-
   function getPreferredVoice() {
     return voices.find((voice) => voice.voiceURI === settings.voiceURI) ||
       voices.reduce((best, voice) => !best || scoreVoice(voice) > scoreVoice(best) ? voice : best, null);
   }
 
-  /**
-   * Preprocess Japanese text for natural prosody, pauses, and alphabet reading.
-   * Returns { text, mode } where mode is 'kana' | 'word' | 'sentence'.
-   */
-  function preprocessJapaneseText(rawText, options = {}) {
+  function formatSpeechText(rawText) {
     let text = String(rawText || '').trim();
     if (!text) return { text: '', mode: 'word' };
 
-    // 1. Normalize full-width spaces and line breaks
-    text = text.replace(/[\r\n]+/g, '。').replace(/\u3000+/g, ' ');
+    text = text.replace(/[\r\n]+/g, '\u3002').replace(/\u3000+/g, ' ');
 
-    // 2. Strip trailing/parenthetical Romaji or Vietnamese notes if mixed with Japanese
-    // e.g. "あ (a)" -> "あ", "食べる (taberu)" -> "食べる"
+    // Loai bo chu thich Romaji / Tieng Viet trong ngoac khi di kem chu Nhat
     if (/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text)) {
-      text = text.replace(/\s*[\(\[（【][a-zA-ZÀ-ỹ0-9\s,\-\/\.]+[\)\]）】]/g, '');
-      text = text.replace(/\s+[-–—:]\s*[a-zA-ZÀ-ỹ].*$/, '');
+      text = text.replace(/\s*[\(\[\uFF08\u3010][a-zA-Z\u00C0-\u1EF90-9\s,\-\/\.]+[\)\]\uFF09\u3011]/g, '');
       text = text.trim();
     }
 
-    // 3. Replace quiz blanks (e.g. ___, ＿＿, [  ], （　）) with natural pause so TTS doesn't read "underscore"
-    text = text.replace(/[_＿]{2,}|\[\s*\]|（\s*）|\(\s*\)|★+|☆+/g, '、');
+    // Thay o trong bai tap (___, [ ]) bang dau phay ngat nhip
+    text = text.replace(/[_\uFF3F]{2,}|\[\s*\]|\uFF08\s*\uFF09|\(\s*\)|[\u2605\u2606]+/g, '\u3001');
 
-    // 4. Check for isolated single Kana / Mora (Alphabet learning: Hiragana & Katakana)
-    const cleanKana = text.replace(/[。、・\s]/g, '');
+    // Xu ly doc tung chu cai Kana don le trong bang chu cai
+    const cleanKana = text.replace(/[\u3002\u3001\u30FB\s]/g, '');
     if (ISOLATED_KANA_MAP[cleanKana] && text.length <= 2) {
       return { text: ISOLATED_KANA_MAP[cleanKana], mode: 'kana' };
     }
     if (SINGLE_MORA_RE.test(cleanKana) && text.length <= 3) {
-      return { text: `${cleanKana}。`, mode: 'kana' };
+      return { text: cleanKana + '\u3002', mode: 'kana' };
     }
 
-    // 5. Check for Kana Alphabet sequence (e.g., "あ い う え お" or "あ・い・う・え・お" or "か / き / く / け / こ")
+    // Xu ly doc mot day bang chu cai (VD: あ い う え お)
     if (KANA_ONLY_RE.test(text)) {
-      const parts = text.split(/[\s・／/\-,、]+/).filter(Boolean);
+      const parts = text.split(/[\s\u30FB\uFF0F/\-,\u3001]+/).filter(Boolean);
       if (parts.length > 1 && parts.every((p) => SINGLE_MORA_RE.test(p) || ISOLATED_KANA_MAP[p])) {
-        const mapped = parts.map((p) => (ISOLATED_KANA_MAP[p] ? ISOLATED_KANA_MAP[p].replace(/。$/, '') : p));
-        return { text: `${mapped.join('、')}。`, mode: 'kana' };
+        const mapped = parts.map((p) => (ISOLATED_KANA_MAP[p] ? ISOLATED_KANA_MAP[p].replace(/\u3002$/, '') : p));
+        return { text: mapped.join('\u3001') + '\u3002', mode: 'kana' };
       }
     }
 
-    // 6. Natural intonation & pause formatting for vocabulary and sentences
+    // Chuyen cac dau gach cheo, dau cham giua, ngoac don thanh nhip lay hoi tu nhien
     text = text
-      // Convert slashes, pipes, bullets, and middots into gentle breath pauses
-      .replace(/[\/／|｜・•]+/g, '、')
-      // Convert wave dashes used as ranges into pause
-      .replace(/\s*[~〜～]+\s*/g, '、')
-      // Convert parenthetical Japanese notes into natural comma-separated asides
-      .replace(/[（\(]([^）\)]+)[）\)]/g, '、$1、')
-      // Clean up repeated commas/periods
-      .replace(/[、,\s]*、[、,\s]*/g, '、')
-      .replace(/。+/g, '。')
-      .replace(/^、+|、+$/g, '')
+      .replace(/[\/\uFF0F|\uFF5C\u30FB\u2022]+/g, '\u3001')
+      .replace(/\s*[~\u301C\uFF5E]+\s*/g, '\u3001')
+      .replace(/[\uFF08\(]([^\uFF09\)]+)[\uFF09\)]/g, '\u3001$1\u3001')
+      .replace(/[\u3001,\s]*\u3001[\u3001,\s]*/g, '\u3001')
+      .replace(/\u3002+/g, '\u3002')
+      .replace(/^\u3001+|\u3001+$/g, '')
       .trim();
 
-    // 7. Determine if short vocabulary word or full sentence
-    const isSentence = text.length > 8 || /[。？！?!、]/.test(text) || /(ます|です|ました|でした|ません|だ|である|よう|かな|かしら)$/.test(text);
+    const isSentence = text.length > 8 || /[\u3002\uFF1F\uFF01?!\u3001]/.test(text);
+    const politeQuestionRe = /(\u307E\u3059\u304B|\u3067\u3059\u304B|\u307E\u3057\u305F\u304B|\u3067\u3057\u305F\u304B|\u307E\u305B\u3093\u304B|\u3067\u3057\u3087\u3046\u304B)\u3002?$/;
 
     if (isSentence) {
-      // Auto-convert polite questions ending in か (without punctuation) to rising question intonation
-      if (/[^。？！?!]$/.test(text)) {
-        if (/(ますか|ですか|ましたか|でしたか|ませんか|でしょうか|かな|っけ)$/.test(text)) {
-          text += '？';
-        } else {
-          text += '。';
-        }
-      } else if (/(ますか|ですか|ましたか|でしたか|ませんか|でしょうか)。$/.test(text)) {
-        text = text.replace(/。$/, '？');
+      if (politeQuestionRe.test(text)) {
+        text = text.replace(/\u3002?$/, '\uFF1F');
+      } else if (/[^\u3002\uFF1F\uFF01?!]$/.test(text)) {
+        text += '\u3002';
       }
-      return { text, mode: options.mode || 'sentence' };
+      return { text, mode: 'sentence' };
     }
 
-    // Short vocabulary word: append period to prevent iOS Safari from clipping the final vowel
-    if (/[^。？！?!]$/.test(text)) {
-      text += '。';
+    if (/[^\u3002\uFF1F\uFF01?!]$/.test(text)) {
+      text += '\u3002';
     }
-    return { text, mode: options.mode || 'word' };
+    return { text, mode: 'word' };
   }
 
   function refreshVoices(finalAttempt = false, owner, context) {
@@ -220,7 +188,6 @@
     const next = all
       .filter((voice) => voice && /^ja(?:-|_|$)/i.test(String(voice.lang || '')))
       .sort((a, b) => scoreVoice(b) - scoreVoice(a));
-
     const nextStatus = next.length ? 'ready' : all.length || finalAttempt || !supported(synth) ? 'unavailable' : 'waiting';
     const changed = nextStatus !== voiceStatus || next.length !== voices.length || next.some((voice, index) => {
       const old = voices[index];
@@ -231,7 +198,6 @@
     if (changed) emit('voices');
     return true;
   }
-
   function subscribe(listener) {
     if (typeof listener !== 'function') return () => {};
     listeners.add(listener);
@@ -323,7 +289,6 @@
     })().finally(() => { writePromise = null; });
     return writePromise;
   }
-
   function setSettings(patch) {
     const ready = init();
     const next = validPatch(patch);
@@ -358,11 +323,9 @@
     }
     return true;
   }
-
   function stop(options = {}) {
     return cancelCurrent(isObject(options) ? options : {}, true);
   }
-
   function speechError(event) {
     const code = event && event.error ? String(event.error) : 'speech-failed';
     const message = code === 'not-allowed'
@@ -372,17 +335,16 @@
         : 'Không thể phát âm thanh trên thiết bị này. Hãy chạm nút nghe để thử lại.';
     return { code, message };
   }
-
   function speak(text, options = {}) {
     let rawSpoken;
     try { rawSpoken = text === null || text === undefined ? '' : String(text); }
     catch (_) { return false; }
     if (!rawSpoken.trim()) return false;
     options = isObject(options) ? options : {};
-    init(); // Keep inside user gesture call stack for iOS Safari
+    init();
     if (document.hidden) return false;
 
-    const { text: spoken, mode } = preprocessJapaneseText(rawSpoken, options);
+    const { text: spoken, mode } = formatSpeechText(rawSpoken);
     if (!spoken) return false;
 
     const id = ++requestId;
@@ -394,16 +356,14 @@
       return false;
     }
     if (!refreshVoices(false, owner, context) || id !== requestId) return false;
-
     let utterance;
     try {
       utterance = new window.SpeechSynthesisUtterance(spoken);
       const voice = getPreferredVoice();
       utterance.lang = voice && voice.lang ? voice.lang : 'ja-JP';
 
-      // Dynamic rate adjustment for clear Kana & vocabulary pronunciation
       const baseRate = numberInRange(options.rate, settings.rate, 0.70, 1.15);
-      const effectiveRate = options.rate !== undefined
+      utterance.rate = options.rate !== undefined
         ? baseRate
         : mode === 'kana'
           ? Math.max(0.75, Number((baseRate * 0.90).toFixed(2)))
@@ -411,13 +371,9 @@
             ? Math.max(0.80, Number((baseRate * 0.96).toFixed(2)))
             : baseRate;
 
-      utterance.rate = effectiveRate;
-
-      // Keep pitch at 1.0 for Neural/Enhanced voices unless user explicitly overrides options.pitch
-      const neural = isNeuralOrPremiumVoice(voice);
       utterance.pitch = options.pitch !== undefined
         ? numberInRange(options.pitch, 1.0, 0.85, 1.30)
-        : neural
+        : isNeuralVoice(voice)
           ? 1.0
           : numberInRange(settings.pitch, 1.0, 0.85, 1.30);
 
@@ -427,11 +383,10 @@
       reportError('speech-failed', 'Không thể phát âm thanh trên thiết bị này. Hãy chạm nút nghe để thử lại.', owner, context);
       return false;
     }
-
     if (active && !cancelCurrent({}, false)) return false;
     if (id !== requestId) return false;
     const request = { id, owner, context, engine: synth, utterance };
-    active = request; // Strong reference until end/error/explicit stop (important on Safari).
+    active = request;
     status = 'pending';
     lastError = null;
     stateOwner = owner;
@@ -468,16 +423,5 @@
     return true;
   }
 
-  window.KDSPAudio = {
-    init,
-    speak,
-    stop,
-    getVoices,
-    getPreferredVoice,
-    getSettings,
-    setSettings,
-    subscribe,
-    getState,
-    preprocessJapaneseText
-  };
+  window.KDSPAudio = { init, speak, stop, getVoices, getPreferredVoice, getSettings, setSettings, subscribe, getState };
 })();
