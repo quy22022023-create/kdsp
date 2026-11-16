@@ -64,6 +64,17 @@
     catch (_) { return parseLegacyJs(trimmed); }
     if (Array.isArray(parsed)) return classifyArray(parsed);
     if (!parsed || typeof parsed !== 'object') throw new Error('Dữ liệu phải là mảng hoặc object JSON.');
+    if (parsed.package_type === 'vocabulary_master') {
+      if (parsed.schema_version !== 1) throw new Error('Vocabulary Master chỉ hỗ trợ schema_version = 1.');
+      if (!Array.isArray(parsed.items) || !parsed.items.length) throw new Error('Gói vocabulary_master cần có mảng items không rỗng.');
+      const packageLevel = String(parsed.level || '').toUpperCase();
+      if (!['N5', 'N4', 'N3', 'N2'].includes(packageLevel)) throw new Error('Gói Vocabulary Master cần level thuộc N5, N4, N3 hoặc N2.');
+      const mismatchedLevel = parsed.items.find((item) => item && item.level && String(item.level).toUpperCase() !== packageLevel);
+      if (mismatchedLevel) throw new Error(`Từ ${mismatchedLevel.jp || mismatchedLevel.id || '(không rõ ID)'} có level khác cấp độ của package (${packageLevel}). Hãy tách thành gói riêng.`);
+      const title = String(parsed.metadata && parsed.metadata.title || '').trim();
+      if (title && !$('batch-label').value.trim()) $('batch-label').value = title.slice(0, 100);
+      return { vocabulary: parsed.items.map((item) => ({ ...item, level: String(item && item.level || packageLevel).toUpperCase() })), grammar: [], exercises: [] };
+    }
     const vocabulary = parsed.vocabulary || parsed.vocab || parsed.VOCAB_DATA || [];
     const grammar = parsed.grammar || parsed.GRAMMAR_DATA || [];
     const exercises = parsed.exercises || parsed.exercise || parsed.EXERCISE_DATA || [];
@@ -90,7 +101,7 @@
     const result = { vocabulary: [], grammar: [], exercises: [] };
     const errors = [];
     let duplicates = 0;
-    const levels = ['N5', 'N4', 'N3'];
+    const levels = ['N5', 'N4', 'N3', 'N2'];
 
     const vocabSeen = new Set();
     source.vocabulary.forEach((raw, index) => {
@@ -102,10 +113,21 @@
       if (!levels.includes(level)) { errors.push(`Từ vựng ${raw.jp}: cấp độ ${level} không hợp lệ.`); return; }
       const jp = String(raw.jp).trim();
       const kanji = String(raw.kanji || '').trim();
-      const key = `${jp.toLocaleLowerCase()}|${kanji.toLocaleLowerCase()}`;
-      if (vocabSeen.has(key)) { duplicates += 1; return; }
-      vocabSeen.add(key);
+      if (raw.id && !/^[a-z0-9][a-z0-9_-]{1,63}$/.test(String(raw.id))) { errors.push(`Từ vựng ${jp}: ID chỉ được gồm chữ thường, số, _ hoặc -, dài 2–64 ký tự.`); return; }
+      if (raw.senses != null && !Array.isArray(raw.senses)) { errors.push(`Từ vựng ${jp}: senses phải là mảng.`); return; }
+      if (Array.isArray(raw.senses)) {
+        raw.senses.forEach((sense, senseIndex) => {
+          if (!sense || typeof sense !== 'object' || !String(sense.meaning_vi || '').trim()) errors.push(`Từ vựng ${jp}: nghĩa senses ${senseIndex + 1} thiếu meaning_vi.`);
+          if (sense && sense.examples != null && !Array.isArray(sense.examples)) errors.push(`Từ vựng ${jp}: examples của nghĩa ${senseIndex + 1} phải là mảng.`);
+        });
+      }
+      if (raw.related_vocabulary_ids != null && !Array.isArray(raw.related_vocabulary_ids)) { errors.push(`Từ vựng ${jp}: related_vocabulary_ids phải là mảng.`); return; }
       const id = String(raw.id || `vc_${hashId(`${level}|${jp}|${kanji}`)}`);
+      const key = `${jp.toLocaleLowerCase()}|${kanji.toLocaleLowerCase()}`;
+      const idKey = `id:${id}`;
+      if (vocabSeen.has(idKey) || vocabSeen.has(key)) { duplicates += 1; return; }
+      vocabSeen.add(idKey);
+      vocabSeen.add(key);
       result.vocabulary.push({ ...raw, id, level, topic: String(raw.topic || 'Tổng hợp'), jp, kanji, vi: String(raw.vi).trim(), romaji: String(raw.romaji || ''), mnemonic: String(raw.mnemonic || '') });
     });
 
@@ -147,7 +169,7 @@
       pendingData = checked.errors.length ? null : checked.data;
       const preview = $('admin-preview');
       preview.hidden = false;
-      preview.innerHTML = `<strong>${checked.errors.length ? 'Có lỗi cần sửa' : 'Dữ liệu hợp lệ để nạp'}</strong><ul><li>${checked.data.vocabulary.length} từ vựng</li><li>${checked.data.grammar.length} mục ngữ pháp</li><li>${checked.data.exercises.length} bài tập</li><li>${checked.duplicates} mục trùng trong chính đợt này sẽ được bỏ qua</li>${checked.errors.slice(0, 8).map((error) => `<li style="color:#a74b60">${escapeHtml(error)}</li>`).join('')}</ul>`;
+      preview.innerHTML = `<strong>${checked.errors.length ? 'Có lỗi cần sửa' : 'Dữ liệu hợp lệ để nạp'}</strong><ul><li>${checked.data.vocabulary.length} từ vựng (N2 được hỗ trợ)</li><li>${checked.data.grammar.length} mục ngữ pháp</li><li>${checked.data.exercises.length} bài tập</li><li>${checked.duplicates} mục trùng trong chính đợt này sẽ được bỏ qua</li>${checked.errors.slice(0, 8).map((error) => `<li style="color:#a74b60">${escapeHtml(error)}</li>`).join('')}</ul>`;
       $('admin-import-button').disabled = !pendingData;
       if (checked.errors.length) setMessage(`Phát hiện ${checked.errors.length} lỗi. Chưa thể nạp dữ liệu.`, 'error');
       else setMessage('Kiểm tra thành công. Nhấn “Nạp và xuất bản” để gửi dữ liệu lên Supabase.', 'success');
