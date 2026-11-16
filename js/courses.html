@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fff8fc">
+  <meta name="description" content="Khóa học tiếng Nhật theo chương và bài học, luyện tập và theo dõi tiến độ.">
+  <title>Khóa học tiếng Nhật — Nhật Ngữ</title>
+  <link rel="stylesheet" href="./course-learning.css">
+  <script>
+    // Recover a blocked startup script only after the complete shell release is active.
+    (function () {
+      if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+      const expected = 'jp-learning-shell-v15-step-c';
+      const recoveryKey = 'kdsp_shell_recovery_v15_step_c';
+      let failed = false;
+      let ready = false;
+      let checking = false;
+      let reloading = false;
+      function explainFailure() {
+        if (!failed || ready || reloading) return;
+        const status = document.getElementById('connection-state') || document.getElementById('course-network-status');
+        const message = 'Bản cập nhật chưa tải đầy đủ. Hãy kết nối mạng và tải lại trang.';
+        if (status) status.textContent = message;
+        const toast = document.getElementById('toast') || document.getElementById('course-toast');
+        if (toast) {
+          toast.textContent = message;
+          toast.hidden = false;
+          if (toast.id === 'toast') toast.classList.add('show');
+        }
+      }
+      async function recover() {
+        const controller = navigator.serviceWorker.controller;
+        if (!failed || ready || checking || reloading || !controller) return;
+        checking = true;
+        const version = await new Promise((resolve) => {
+          const channel = new MessageChannel();
+          const timeout = setTimeout(() => { channel.port1.close(); resolve(null); }, 1200);
+          channel.port1.onmessage = (event) => {
+            clearTimeout(timeout);
+            channel.port1.close();
+            resolve(event.data && event.data.shellVersion);
+          };
+          try { controller.postMessage({ type: 'KDSP_SHELL_VERSION' }, [channel.port2]); }
+          catch (_) { clearTimeout(timeout); channel.port1.close(); resolve(null); }
+        });
+        checking = false;
+        if (navigator.serviceWorker.controller !== controller) { recover(); return; }
+        if (version !== expected || ready || reloading) return;
+        // If storage is unavailable, require an explicit reload rather than risk a loop.
+        try {
+          if (sessionStorage.getItem(recoveryKey)) { explainFailure(); return; }
+          sessionStorage.setItem(recoveryKey, '1');
+        } catch (_) { explainFailure(); return; }
+        reloading = true;
+        location.reload();
+      }
+      window.addEventListener('kdsp:consumer-ready', () => {
+        ready = true;
+        try { sessionStorage.removeItem(recoveryKey); } catch (_) { /* Recovery remains optional. */ }
+      }, { once: true });
+      window.addEventListener('error', (event) => {
+        const script = event.target;
+        if (!script || script.tagName !== 'SCRIPT' || !script.hasAttribute('data-kdsp-shell')) return;
+        failed = true;
+        explainFailure();
+        recover();
+        setTimeout(explainFailure, 12000);
+      }, true);
+      navigator.serviceWorker.addEventListener('controllerchange', recover);
+      window.addEventListener('load', () => {
+        explainFailure();
+        navigator.serviceWorker.register('./sw.js').then((registration) => {
+          recover();
+          return registration.update();
+        }).catch(explainFailure);
+      }, { once: true });
+    })();
+  </script>
+  <script defer src="./config.js"></script>
+  <script defer src="./js/store.js"></script>
+  <script defer src="./js/audio.js" data-kdsp-shell="audio" integrity="sha256-+gjSPYfjcuYw8JDBrb/I+w8hrRTgNA9MC/ARvLZJdIY="></script>
+  <script defer src="./js/db.js"></script>
+  <script defer src="./js/course-content.js"></script>
+  <script defer src="./js/course-progress.js"></script>
+  <script defer src="./js/course-player.js" data-kdsp-shell="consumer" integrity="sha256-PK71VcrV4LpGWIDQBqX36T3LifyFikd8SyOY5gBw++o="></script>
+</head>
+<body class="course-body">
+  <div class="course-shell">
+    <header class="course-header">
+      <a class="course-brand" href="./index.html" aria-label="Về Nhật Ngữ">
+        <span class="course-brand-mark">文</span>
+        <span><strong>Nhật Ngữ</strong><small>Khóa học theo lộ trình</small></span>
+      </a>
+      <div class="course-header-actions">
+        <span id="course-network-status" class="course-status" role="status">Đang tải…</span>
+        <button id="course-refresh" class="course-button course-button-light" type="button">Cập nhật</button>
+        <a id="course-account-link" class="course-button course-button-light" href="./index.html">Tài khoản</a>
+      </div>
+    </header>
+
+    <main id="course-main" class="course-main">
+      <nav id="course-breadcrumb" class="course-breadcrumb" aria-label="Đường dẫn học tập">
+        <a href="#/">Khóa học</a>
+      </nav>
+
+      <section id="course-catalog-panel" class="course-screen" aria-labelledby="course-catalog-heading">
+        <div class="course-hero">
+          <p class="course-kicker">HỌC TỪNG BƯỚC</p>
+          <h1 id="course-catalog-heading">Khóa học tiếng Nhật</h1>
+          <p>Chọn khóa học, theo chương và hoàn thành từng hoạt động. Tiến độ được lưu trên thiết bị và có thể đồng bộ khi đăng nhập.</p>
+        </div>
+        <div id="course-catalog-items" class="course-card-grid" aria-live="polite">
+          <div class="course-empty">Đang tải danh mục khóa học…</div>
+        </div>
+      </section>
+
+      <section id="course-detail-panel" class="course-screen" aria-labelledby="course-detail-heading" hidden>
+        <div class="course-heading">
+          <p id="course-detail-level" class="course-kicker"></p>
+          <h1 id="course-detail-heading">Khóa học</h1>
+          <p id="course-detail-description" class="course-muted"></p>
+          <div id="course-detail-meta" class="course-meta"></div>
+        </div>
+        <h2 class="course-section-title">Danh sách chương</h2>
+        <div id="course-module-items" class="course-stack" aria-live="polite"></div>
+      </section>
+
+      <section id="course-module-panel" class="course-screen" aria-labelledby="course-module-heading" hidden>
+        <div class="course-heading">
+          <p class="course-kicker">CHƯƠNG HỌC</p>
+          <h1 id="course-module-heading">Chương học</h1>
+          <p id="course-module-description" class="course-muted"></p>
+          <div id="course-module-meta" class="course-meta"></div>
+        </div>
+        <h2 class="course-section-title">Các bài học</h2>
+        <div id="course-lesson-items" class="course-stack" aria-live="polite"></div>
+      </section>
+
+      <section id="course-lesson-panel" class="course-screen" aria-labelledby="course-lesson-heading" hidden>
+        <div class="course-lesson-heading">
+          <p class="course-kicker">BÀI HỌC</p>
+          <h1 id="course-lesson-heading">Bài học</h1>
+          <p id="course-lesson-description" class="course-muted"></p>
+          <div class="course-progress-row">
+            <span id="course-activity-count">0 / 0 hoạt động</span>
+            <div class="course-progress-track" aria-hidden="true"><span id="course-progress-fill"></span></div>
+            <span id="course-progress-percent">0%</span>
+          </div>
+          <div id="course-activity-steps" class="course-activity-steps" aria-label="Tiến độ các hoạt động"></div>
+        </div>
+
+        <article id="course-activity-panel" class="course-activity-card" aria-live="polite">
+          <div id="course-activity-content"></div>
+          <p id="course-activity-feedback" class="course-feedback" role="status" hidden></p>
+        </article>
+
+        <div id="course-activity-controls" class="course-activity-controls">
+          <button id="course-prev-activity" class="course-button course-button-light" type="button">Trước</button>
+          <button id="course-skip-activity" class="course-button course-button-ghost" type="button">Bỏ qua</button>
+          <button id="course-next-activity" class="course-button course-button-primary" type="button">Tiếp theo</button>
+        </div>
+        <p class="course-footnote">Để tránh ghi nhận sai tiến độ, hoạt động luyện tập chỉ hoàn thành sau khi bạn trả lời hoặc xác nhận đã luyện.</p>
+      </section>
+
+      <section id="course-error-panel" class="course-screen" hidden>
+        <div class="course-empty">
+          <h1>Không thể mở học liệu</h1>
+          <p id="course-error-message">Dữ liệu chưa có sẵn.</p>
+          <button id="course-retry" class="course-button course-button-primary" type="button">Thử tải lại</button>
+          <a class="course-button course-button-light" href="#/">Về danh mục</a>
+        </div>
+      </section>
+    </main>
+    <footer class="course-footer"><span>Nhật Ngữ · Học theo khóa</span><a href="./index.html">Về ứng dụng học</a></footer>
+  </div>
+  <div id="course-toast" class="course-toast" role="status" hidden></div>
+
+</body>
+</html>
